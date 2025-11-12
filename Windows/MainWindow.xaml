@@ -2050,6 +2050,29 @@ Off: Single selection, hide incompatible options"
                             </Button.Style>
                         </Button>
                         
+                        <Button Name="HideToggleButton" Grid.Column="1"
+                                Click="HideToggleButton_Click"
+                                PreviewMouseRightButtonDown="HideToggleButton_PreviewMouseRightButtonDown"
+                                ToolTip="Left-click: Hide selected scenes | Right-click: Unhide selected scenes"
+                                Padding="3,3"
+                                FontSize="12"
+                                Margin="3,0,3,0"
+                                VerticalAlignment="Stretch"
+                                HorizontalContentAlignment="Center"
+                                VerticalContentAlignment="Center"
+                                Visibility="Collapsed">
+                            <Button.Content>
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="👁️ " FontSize="14" FontWeight="Bold" Foreground="{DynamicResource {x:Static SystemColors.ControlTextBrushKey}}" VerticalAlignment="Center"/>
+                                    <TextBlock Text="Hide" VerticalAlignment="Center"/>
+                                </StackPanel>
+                            </Button.Content>
+                            <Button.Style>
+                                <Style TargetType="Button" BasedOn="{StaticResource BlueHoverButtonStyle}">
+                                </Style>
+                            </Button.Style>
+                        </Button>
+                        
                         <Button Name="OptimizeToggleButton" Grid.Column="2"
                                 Click="OptimizeToggleButton_Click"
                                 ToolTip="Optimize selected packages"
@@ -2335,6 +2358,7 @@ Off: Single selection, hide incompatible options"
                                         <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
                                             <TextBlock FontSize="14" FontWeight="Bold" Text="{Binding DisplayName}" Foreground="{DynamicResource {x:Static SystemColors.ControlTextBrushKey}}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center"/>
                                             <TextBlock FontSize="14" FontWeight="Bold" Text="❤️" Foreground="#FF6B6B" Margin="6,0,0,0" VerticalAlignment="Center" ToolTip="Marked as favorite" Visibility="{Binding IsFavorite, Converter={StaticResource BoolToVis}}"/>
+                                            <TextBlock FontSize="14" FontWeight="Bold" Text="👁️" Foreground="#6B9EFF" Margin="6,0,0,0" VerticalAlignment="Center" ToolTip="Hidden" Visibility="{Binding IsHidden, Converter={StaticResource BoolToVis}}"/>
                                             <TextBlock FontSize="14" FontWeight="Bold" Text="{Binding OptimizationIcon}" Foreground="#FFD700" Margin="6,0,0,0" VerticalAlignment="Center" ToolTip="Scene has been optimized"/>
                                             <TextBlock FontSize="11" Foreground="#888888" Text=" • " Margin="6,0" VerticalAlignment="Center"/>
                                             <TextBlock FontSize="11" Foreground="{DynamicResource {x:Static SystemColors.GrayTextBrushKey}}" Text="{Binding SceneType}" VerticalAlignment="Center"/>

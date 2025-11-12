@@ -70,11 +70,13 @@ namespace VPM
                 // Make sorting button context-aware for packages
                 PackageSortButton.IsEnabled = true;
                 
-                // Enable Favorite and AutoInstall buttons in packages mode
+                // Enable Favorite and AutoInstall buttons in packages mode, hide Hide button
                 if (FavoriteToggleButton != null)
                     FavoriteToggleButton.IsEnabled = true;
                 if (AutoInstallToggleButton != null)
-                    AutoInstallToggleButton.IsEnabled = true;
+                    AutoInstallToggleButton.Visibility = Visibility.Visible;
+                if (HideToggleButton != null)
+                    HideToggleButton.Visibility = Visibility.Collapsed;
                 
                 // Show both dependencies and dependents tabs in packages mode
                 DependenciesTabsContainer.Visibility = Visibility.Visible;
@@ -113,11 +115,16 @@ namespace VPM
                 PackageSortButton.IsEnabled = true;
                 PackageSortButton.ToolTip = "Sort scenes";
 
-                // Enable Favorite button in scene mode, disable AutoInstall button
+                // Enable Favorite button in scene mode, hide AutoInstall button and show Hide button
                 if (FavoriteToggleButton != null)
                     FavoriteToggleButton.IsEnabled = true;
                 if (AutoInstallToggleButton != null)
-                    AutoInstallToggleButton.IsEnabled = false;
+                    AutoInstallToggleButton.Visibility = Visibility.Collapsed;
+                if (HideToggleButton != null)
+                {
+                    HideToggleButton.Visibility = Visibility.Visible;
+                    HideToggleButton.IsEnabled = true;
+                }
 
                 // Show dependencies tabs but hide Dependents tab in scenes mode
                 DependenciesTabsContainer.Visibility = Visibility.Visible;

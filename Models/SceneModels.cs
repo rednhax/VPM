@@ -31,6 +31,7 @@ namespace VPM.Models
         private List<string> _morphItems = new List<string>();
         private bool _isOptimized = false;
         private bool _isFavorite = false;
+        private bool _isHidden = false;
 
         public event PropertyChangedEventHandler PropertyChanged;
 
@@ -274,6 +275,15 @@ namespace VPM.Models
         {
             get => _isFavorite;
             set => SetProperty(ref _isFavorite, value);
+        }
+
+        /// <summary>
+        /// Whether the scene is marked as hidden
+        /// </summary>
+        public bool IsHidden
+        {
+            get => _isHidden;
+            set => SetProperty(ref _isHidden, value);
         }
 
         // Display properties
