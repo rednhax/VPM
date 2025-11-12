@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
@@ -278,7 +278,7 @@ namespace VPM.Models
             _ => "?"
         };
 
-        public string OptimizationIcon => IsOptimized ? "–" : "";
+        public string OptimizationIcon => IsOptimized ? "⚡" : "";
 
         public string AtomCountDisplay => AtomCount > 0 ? $"{AtomCount} atoms" : "Unknown";
 
