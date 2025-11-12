@@ -30,6 +30,7 @@ namespace VPM.Models
         private List<string> _clothingItems = new List<string>();
         private List<string> _morphItems = new List<string>();
         private bool _isOptimized = false;
+        private bool _isFavorite = false;
 
         public event PropertyChangedEventHandler PropertyChanged;
 
@@ -264,6 +265,15 @@ namespace VPM.Models
                     OnPropertyChanged(nameof(OptimizationIcon));
                 }
             }
+        }
+
+        /// <summary>
+        /// Whether the scene is marked as favorite
+        /// </summary>
+        public bool IsFavorite
+        {
+            get => _isFavorite;
+            set => SetProperty(ref _isFavorite, value);
         }
 
         // Display properties

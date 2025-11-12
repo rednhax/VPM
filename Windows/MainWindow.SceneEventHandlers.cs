@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Windows;
@@ -113,9 +113,9 @@ namespace VPM
                 PackageSortButton.IsEnabled = true;
                 PackageSortButton.ToolTip = "Sort scenes";
 
-                // Disable Favorite and AutoInstall buttons in scene mode
+                // Enable Favorite button in scene mode, disable AutoInstall button
                 if (FavoriteToggleButton != null)
-                    FavoriteToggleButton.IsEnabled = false;
+                    FavoriteToggleButton.IsEnabled = true;
                 if (AutoInstallToggleButton != null)
                     AutoInstallToggleButton.IsEnabled = false;
 

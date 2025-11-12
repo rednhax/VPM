@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
@@ -14,6 +14,7 @@ namespace VPM
     public partial class MainWindow
     {
         private FavoritesManager _favoritesManager;
+        private SceneFavoritesManager _sceneFavoritesManager;
 
         private void InitializeFavoritesManager()
         {
@@ -29,6 +30,11 @@ namespace VPM
                 {
                     _filterManager.FavoritesManager = _favoritesManager;
                 }
+                
+                // Initialize scene favorites manager
+                string savesPath = Path.Combine(_settingsManager.Settings.SelectedFolder, "Saves");
+                _sceneFavoritesManager = new SceneFavoritesManager(savesPath);
+                _sceneFavoritesManager.LoadFavorites();
                 
                 UpdateFavoritesInPackages();
             }
@@ -59,6 +65,34 @@ namespace VPM
 
         private void FavoriteToggleButton_Click(object sender, RoutedEventArgs e)
         {
+            // Handle scene favorites
+            if (_currentContentMode == "Scenes")
+            {
+                if (_sceneFavoritesManager == null)
+                    return;
+
+                var selectedScenes = ScenesDataGrid.SelectedItems.Cast<SceneItem>().ToList();
+                if (selectedScenes.Count == 0)
+                    return;
+
+                if (Keyboard.IsKeyDown(Key.LeftCtrl) || Keyboard.IsKeyDown(Key.RightCtrl))
+                {
+                    // Could open a favorites folder for scenes if needed
+                    return;
+                }
+
+                _sceneFavoritesManager.AddFavoriteBatch(selectedScenes.Select(s => s.FilePath));
+                
+                foreach (var scene in selectedScenes)
+                {
+                    scene.IsFavorite = true;
+                }
+
+                SetStatus($"Added {selectedScenes.Count} scene(s) to favorites");
+                return;
+            }
+
+            // Handle package favorites
             if (_favoritesManager == null)
             {
                 return;
@@ -104,6 +138,29 @@ namespace VPM
 
         private void FavoriteToggleButton_PreviewMouseRightButtonDown(object sender, MouseButtonEventArgs e)
         {
+            // Handle scene favorites removal
+            if (_currentContentMode == "Scenes")
+            {
+                if (_sceneFavoritesManager == null)
+                    return;
+
+                var selectedScenes = ScenesDataGrid.SelectedItems.Cast<SceneItem>().ToList();
+                if (selectedScenes.Count == 0)
+                    return;
+
+                _sceneFavoritesManager.RemoveFavoriteBatch(selectedScenes.Select(s => s.FilePath));
+                
+                foreach (var scene in selectedScenes)
+                {
+                    scene.IsFavorite = false;
+                }
+
+                SetStatus($"Removed {selectedScenes.Count} scene(s) from favorites");
+                e.Handled = true;
+                return;
+            }
+
+            // Handle package favorites removal
             if (_favoritesManager == null)
             {
                 return;
