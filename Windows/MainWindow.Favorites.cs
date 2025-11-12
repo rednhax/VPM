@@ -15,6 +15,7 @@ namespace VPM
     {
         private FavoritesManager _favoritesManager;
         private SceneFavoritesManager _sceneFavoritesManager;
+        private SceneHideManager _sceneHideManager;
 
         private void InitializeFavoritesManager()
         {
@@ -35,6 +36,10 @@ namespace VPM
                 string savesPath = Path.Combine(_settingsManager.Settings.SelectedFolder, "Saves");
                 _sceneFavoritesManager = new SceneFavoritesManager(savesPath);
                 _sceneFavoritesManager.LoadFavorites();
+                
+                // Initialize scene hide manager
+                _sceneHideManager = new SceneHideManager(savesPath);
+                _sceneHideManager.LoadHidden();
                 
                 UpdateFavoritesInPackages();
             }
@@ -65,6 +70,27 @@ namespace VPM
 
         private void FavoriteToggleButton_Click(object sender, RoutedEventArgs e)
         {
+            // Handle presets favorites
+            if (_currentContentMode == "Presets")
+            {
+                var selectedItems = CustomAtomDataGrid?.SelectedItems?.Cast<CustomAtomItem>()?.ToList() ?? new List<CustomAtomItem>();
+                if (selectedItems.Count == 0)
+                    return;
+
+                foreach (var item in selectedItems)
+                {
+                    var favPath = item.FilePath + ".fav";
+                    if (!File.Exists(favPath))
+                    {
+                        File.Create(favPath).Dispose();
+                        item.IsFavorite = true;
+                    }
+                }
+
+                SetStatus($"Added {selectedItems.Count} custom atom item(s) to favorites");
+                return;
+            }
+
             // Handle scene favorites
             if (_currentContentMode == "Scenes")
             {
@@ -138,6 +164,28 @@ namespace VPM
 
         private void FavoriteToggleButton_PreviewMouseRightButtonDown(object sender, MouseButtonEventArgs e)
         {
+            // Handle presets favorites removal
+            if (_currentContentMode == "Presets")
+            {
+                var selectedItems = CustomAtomDataGrid?.SelectedItems?.Cast<CustomAtomItem>()?.ToList() ?? new List<CustomAtomItem>();
+                if (selectedItems.Count == 0)
+                    return;
+
+                foreach (var item in selectedItems)
+                {
+                    var favPath = item.FilePath + ".fav";
+                    if (File.Exists(favPath))
+                    {
+                        File.Delete(favPath);
+                        item.IsFavorite = false;
+                    }
+                }
+
+                SetStatus($"Removed {selectedItems.Count} custom atom item(s) from favorites");
+                e.Handled = true;
+                return;
+            }
+
             // Handle scene favorites removal
             if (_currentContentMode == "Scenes")
             {
@@ -198,6 +246,98 @@ namespace VPM
             });
 
             e.Handled = true;
+        }
+
+        private void HideToggleButton_Click(object sender, RoutedEventArgs e)
+        {
+            // Handle presets hide
+            if (_currentContentMode == "Presets")
+            {
+                var selectedItems = CustomAtomDataGrid?.SelectedItems?.Cast<CustomAtomItem>()?.ToList() ?? new List<CustomAtomItem>();
+                if (selectedItems.Count == 0)
+                    return;
+
+                foreach (var item in selectedItems)
+                {
+                    var hidePath = item.FilePath + ".hide";
+                    if (!File.Exists(hidePath))
+                    {
+                        File.Create(hidePath).Dispose();
+                        item.IsHidden = true;
+                    }
+                }
+
+                SetStatus($"Hidden {selectedItems.Count} custom atom item(s)");
+                return;
+            }
+
+            // Handle scene hide
+            if (_currentContentMode == "Scenes")
+            {
+                if (_sceneHideManager == null)
+                    return;
+
+                var selectedScenes = ScenesDataGrid.SelectedItems.Cast<SceneItem>().ToList();
+                if (selectedScenes.Count == 0)
+                    return;
+
+                _sceneHideManager.AddHiddenBatch(selectedScenes.Select(s => s.FilePath));
+                
+                foreach (var scene in selectedScenes)
+                {
+                    scene.IsHidden = true;
+                }
+
+                SetStatus($"Hidden {selectedScenes.Count} scene(s)");
+                return;
+            }
+        }
+
+        private void HideToggleButton_PreviewMouseRightButtonDown(object sender, MouseButtonEventArgs e)
+        {
+            // Handle presets hide removal
+            if (_currentContentMode == "Presets")
+            {
+                var selectedItems = CustomAtomDataGrid?.SelectedItems?.Cast<CustomAtomItem>()?.ToList() ?? new List<CustomAtomItem>();
+                if (selectedItems.Count == 0)
+                    return;
+
+                foreach (var item in selectedItems)
+                {
+                    var hidePath = item.FilePath + ".hide";
+                    if (File.Exists(hidePath))
+                    {
+                        File.Delete(hidePath);
+                        item.IsHidden = false;
+                    }
+                }
+
+                SetStatus($"Unhidden {selectedItems.Count} custom atom item(s)");
+                e.Handled = true;
+                return;
+            }
+
+            // Handle scene hide removal
+            if (_currentContentMode == "Scenes")
+            {
+                if (_sceneHideManager == null)
+                    return;
+
+                var selectedScenes = ScenesDataGrid.SelectedItems.Cast<SceneItem>().ToList();
+                if (selectedScenes.Count == 0)
+                    return;
+
+                _sceneHideManager.RemoveHiddenBatch(selectedScenes.Select(s => s.FilePath));
+                
+                foreach (var scene in selectedScenes)
+                {
+                    scene.IsHidden = false;
+                }
+
+                SetStatus($"Unhidden {selectedScenes.Count} scene(s)");
+                e.Handled = true;
+                return;
+            }
         }
 
         private void OpenFavoritesFile()
