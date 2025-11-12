@@ -2334,6 +2334,7 @@ Off: Single selection, hide incompatible options"
                                     <StackPanel Margin="8" Orientation="Vertical">
                                         <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
                                             <TextBlock FontSize="14" FontWeight="Bold" Text="{Binding DisplayName}" Foreground="{DynamicResource {x:Static SystemColors.ControlTextBrushKey}}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center"/>
+                                            <TextBlock FontSize="14" FontWeight="Bold" Text="❤️" Foreground="#FF6B6B" Margin="6,0,0,0" VerticalAlignment="Center" ToolTip="Marked as favorite" Visibility="{Binding IsFavorite, Converter={StaticResource BoolToVis}}"/>
                                             <TextBlock FontSize="14" FontWeight="Bold" Text="{Binding OptimizationIcon}" Foreground="#FFD700" Margin="6,0,0,0" VerticalAlignment="Center" ToolTip="Scene has been optimized"/>
                                             <TextBlock FontSize="11" Foreground="#888888" Text=" • " Margin="6,0" VerticalAlignment="Center"/>
                                             <TextBlock FontSize="11" Foreground="{DynamicResource {x:Static SystemColors.GrayTextBrushKey}}" Text="{Binding SceneType}" VerticalAlignment="Center"/>

@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
@@ -27,10 +27,14 @@ namespace VPM
                 {
                     var scenes = _sceneScanner.ScanLocalScenes();
                     
-                    // Check if each scene has been optimized
+                    // Check if each scene has been optimized and if it's marked as favorite
                     foreach (var scene in scenes)
                     {
                         scene.IsOptimized = IsSceneOptimized(scene.FilePath);
+                        if (_sceneFavoritesManager != null)
+                        {
+                            scene.IsFavorite = _sceneFavoritesManager.IsFavorite(scene.FilePath);
+                        }
                     }
                     
                     Application.Current.Dispatcher.Invoke(() =>

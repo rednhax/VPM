@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
@@ -30,6 +30,7 @@ namespace VPM.Models
         private List<string> _clothingItems = new List<string>();
         private List<string> _morphItems = new List<string>();
         private bool _isOptimized = false;
+        private bool _isFavorite = false;
 
         public event PropertyChangedEventHandler PropertyChanged;
 
@@ -266,6 +267,15 @@ namespace VPM.Models
             }
         }
 
+        /// <summary>
+        /// Whether the scene is marked as favorite
+        /// </summary>
+        public bool IsFavorite
+        {
+            get => _isFavorite;
+            set => SetProperty(ref _isFavorite, value);
+        }
+
         // Display properties
         public string FileSizeFormatted => FormatFileSize(FileSize);
         public string DateFormatted => ModifiedDate?.ToString("MMM dd, yyyy") ?? "Unknown";
@@ -278,7 +288,7 @@ namespace VPM.Models
             _ => "?"
         };
 
-        public string OptimizationIcon => IsOptimized ? "–" : "";
+        public string OptimizationIcon => IsOptimized ? "⚡" : "";
 
         public string AtomCountDisplay => AtomCount > 0 ? $"{AtomCount} atoms" : "Unknown";
 
