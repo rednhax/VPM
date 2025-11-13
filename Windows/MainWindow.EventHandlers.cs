@@ -4085,16 +4085,20 @@ namespace VPM
                 return false;
             }
         }
-        
+
         /// <summary>
         /// Handles the Optimize Selected toolbar button click
         /// </summary>
         private void OptimizeSelectedToolbar_Click(object sender, RoutedEventArgs e)
         {
-            // Check if we're in scene mode
+            // Check current content mode
             if (_currentContentMode == "Scenes")
             {
                 OptimizeSelectedScenes_Click(sender, e);
+            }
+            else if (_currentContentMode == "Presets")
+            {
+                OptimizeSelectedPresets_Click(sender, e);
             }
             else
             {
@@ -4103,9 +4107,6 @@ namespace VPM
             }
         }
         
-        /// <summary>
-        /// Handles the Download Missing toolbar button click
-        /// </summary>
         private async void DownloadMissingToolbar_Click(object sender, RoutedEventArgs e)
         {
             try

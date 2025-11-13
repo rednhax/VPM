@@ -356,12 +356,12 @@ namespace VPM
                     ApplyFilterPositions();
                 }
                 
-                // Grey out optimize button in presets mode (not applicable)
+                // Enable optimize button in presets mode
                 if (OptimizeToggleButton != null)
                 {
-                    OptimizeToggleButton.IsEnabled = false;
-                    OptimizeToggleButton.Opacity = 0.5;
-                    OptimizeToggleButton.ToolTip = "Optimization not available for presets";
+                    OptimizeToggleButton.IsEnabled = true;
+                    OptimizeToggleButton.Opacity = 1.0;
+                    OptimizeToggleButton.ToolTip = "Optimize selected presets";
                 }
             }
         }

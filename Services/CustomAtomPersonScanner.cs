@@ -75,10 +75,17 @@ namespace VPM.Services
             // Extract category from subfolder (e.g., "Hair", "Clothing", "Morphs")
             var category = ExtractCategoryFromPath(vapPath, customPersonDir);
 
+            // Strip "Preset_" prefix from display name for cleaner UI
+            var displayName = fileName;
+            if (fileName.StartsWith("Preset_", StringComparison.OrdinalIgnoreCase))
+            {
+                displayName = fileName.Substring(7); // Remove "Preset_" prefix
+            }
+
             var item = new CustomAtomItem
             {
                 Name = fileInfo.Name,
-                DisplayName = fileName,
+                DisplayName = displayName,
                 FilePath = vapPath,
                 ThumbnailPath = FindThumbnail(vapPath),
                 Category = category,
@@ -89,6 +96,9 @@ namespace VPM.Services
 
             // Parse dependencies from the .vap file
             PresetScanner.ParsePresetDependencies(item);
+
+            // Check if the preset has been optimized
+            item.IsOptimized = IsPresetOptimized(vapPath);
 
             return item;
         }
@@ -144,6 +154,35 @@ namespace VPM.Services
             }
 
             return "";
+        }
+
+        /// <summary>
+        /// Checks if a preset .vap file has been optimized by looking for the optimization flag
+        /// </summary>
+        private bool IsPresetOptimized(string filePath)
+        {
+            try
+            {
+                if (string.IsNullOrEmpty(filePath) || !File.Exists(filePath))
+                    return false;
+
+                string jsonContent = File.ReadAllText(filePath);
+                using var doc = System.Text.Json.JsonDocument.Parse(jsonContent);
+                
+                if (doc.RootElement.ValueKind == System.Text.Json.JsonValueKind.Object)
+                {
+                    if (doc.RootElement.TryGetProperty("_VPM_Optimized", out var optimizedProp))
+                    {
+                        return optimizedProp.ValueKind == System.Text.Json.JsonValueKind.True;
+                    }
+                }
+                
+                return false;
+            }
+            catch
+            {
+                return false;
+            }
         }
     }
 }

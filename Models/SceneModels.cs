@@ -368,6 +368,9 @@ namespace VPM.Models
         private long _fileSize = 0;
         private bool _isFavorite = false;
         private bool _isHidden = false;
+        private bool _isOptimized = false;
+        private string _status = "";
+        private string _statusIcon = "";
 
         public event PropertyChangedEventHandler PropertyChanged;
 
@@ -488,6 +491,39 @@ namespace VPM.Models
         }
 
         /// <summary>
+        /// Whether the preset has been optimized
+        /// </summary>
+        public bool IsOptimized
+        {
+            get => _isOptimized;
+            set
+            {
+                if (SetProperty(ref _isOptimized, value))
+                {
+                    OnPropertyChanged(nameof(OptimizationIcon));
+                }
+            }
+        }
+
+        /// <summary>
+        /// Optimization status of the preset
+        /// </summary>
+        public string Status
+        {
+            get => _status;
+            set => SetProperty(ref _status, value);
+        }
+
+        /// <summary>
+        /// Status icon for the preset
+        /// </summary>
+        public string StatusIcon
+        {
+            get => _statusIcon;
+            set => SetProperty(ref _statusIcon, value);
+        }
+
+        /// <summary>
         /// List of package dependencies found in the preset
         /// </summary>
         public List<string> Dependencies { get; set; } = new List<string>();
@@ -516,6 +552,7 @@ namespace VPM.Models
         public int DependencyCount => Dependencies?.Count ?? 0;
         public string FileSizeFormatted => SceneItem.FormatFileSize(FileSize);
         public string DateFormatted => ModifiedDate?.ToString("MMM dd, yyyy") ?? "Unknown";
+        public string OptimizationIcon => IsOptimized ? "⚡" : "";
 
         protected virtual bool SetProperty<T>(ref T backingStore, T value, [CallerMemberName] string propertyName = "")
         {

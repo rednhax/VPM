@@ -114,8 +114,8 @@ namespace VPM.Services
         /// <summary>
         /// Renames a preset file (.vap) and all its related files
         /// </summary>
-        /// <param name="originalFilePath">Original preset file path (e.g., Preset1.vap)</param>
-        /// <param name="newName">New name without extension (e.g., "preset2")</param>
+        /// <param name="originalFilePath">Original preset file path (e.g., Preset_MyPreset.vap)</param>
+        /// <param name="newName">New display name without prefix or extension (e.g., "NewPreset")</param>
         /// <returns>New file path if successful, null if failed</returns>
         public async Task<string> RenamePresetAsync(string originalFilePath, string newName)
         {
@@ -127,26 +127,33 @@ namespace VPM.Services
                 if (string.IsNullOrWhiteSpace(newName))
                     throw new ArgumentException("New name cannot be empty");
 
-                // Validate new name
-                if (!IsValidFileName(newName))
+                // Intelligently add "Preset_" prefix if not already present
+                var actualNewName = newName;
+                if (!newName.StartsWith("Preset_", StringComparison.OrdinalIgnoreCase))
+                {
+                    actualNewName = "Preset_" + newName;
+                }
+
+                // Validate new name (check the actual filename that will be used)
+                if (!IsValidFileName(actualNewName))
                     throw new ArgumentException("Invalid file name. File names cannot contain: \\ / : * ? \" < > |");
 
                 var directory = Path.GetDirectoryName(originalFilePath);
                 var extension = Path.GetExtension(originalFilePath);
                 var originalNameWithoutExtension = Path.GetFileNameWithoutExtension(originalFilePath);
                 
-                // Create new file path
-                var newFilePath = Path.Combine(directory, newName + extension);
+                // Create new file path with the actual filename (including Preset_ prefix)
+                var newFilePath = Path.Combine(directory, actualNewName + extension);
                 
                 // Check if target file already exists
                 if (File.Exists(newFilePath))
-                    throw new InvalidOperationException($"A preset with the name '{newName}{extension}' already exists");
+                    throw new InvalidOperationException($"A preset with the name '{actualNewName}{extension}' already exists");
 
                 // Rename the main file
                 File.Move(originalFilePath, newFilePath);
 
                 // Rename related files (for presets, this includes .vap.fav, .vap.hide, and image previews)
-                await RenameRelatedFilesAsync(directory, originalNameWithoutExtension, newName);
+                await RenameRelatedFilesAsync(directory, originalNameWithoutExtension, actualNewName);
 
                 return newFilePath;
             }

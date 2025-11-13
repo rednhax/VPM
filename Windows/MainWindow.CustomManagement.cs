@@ -157,6 +157,7 @@ namespace VPM
 
             // Update the details area
             UpdatePackageButtonBar();
+            UpdateOptimizeCounter();
 
             SetStatus($"Selected {selectedItems.Count} custom atom item(s)");
         }

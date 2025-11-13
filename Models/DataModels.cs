@@ -438,6 +438,8 @@ namespace VPM.Models
         private string _name = "";
         private string _status = "";
         private string _version = "";
+        private bool _isEnabled = true;
+        private bool _forceLatest = false;
 
         public event PropertyChangedEventHandler PropertyChanged;
 
@@ -471,6 +473,18 @@ namespace VPM.Models
                     OnPropertyChanged(nameof(DisplayName));
                 }
             }
+        }
+
+        public bool IsEnabled
+        {
+            get => _isEnabled;
+            set => SetProperty(ref _isEnabled, value);
+        }
+
+        public bool ForceLatest
+        {
+            get => _forceLatest;
+            set => SetProperty(ref _forceLatest, value);
         }
         
         // Display properties for the modern UI

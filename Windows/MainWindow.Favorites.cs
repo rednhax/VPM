@@ -396,7 +396,7 @@ namespace VPM
 
             int optimizeableCount = 0;
             
-            // Check if we're in scene mode or package mode
+            // Check current content mode
             if (_currentContentMode == "Scenes")
             {
                 // Count selected scenes
@@ -405,6 +405,20 @@ namespace VPM
                     foreach (var item in ScenesDataGrid.SelectedItems)
                     {
                         if (item is SceneItem scene)
+                        {
+                            optimizeableCount++;
+                        }
+                    }
+                }
+            }
+            else if (_currentContentMode == "Presets")
+            {
+                // Count selected presets
+                if (CustomAtomDataGrid?.SelectedItems != null)
+                {
+                    foreach (var item in CustomAtomDataGrid.SelectedItems)
+                    {
+                        if (item is CustomAtomItem preset)
                         {
                             optimizeableCount++;
                         }

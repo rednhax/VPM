@@ -1,5 +1,9 @@
-﻿<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:local="clr-namespace:VPM">
+    
+    <!-- Converters -->
+    <local:DataGridHeadersVisibilityConverter x:Key="DataGridHeadersVisibilityConverter"/>
     
     <!-- Windows 11 Inspired Dark Theme - Neutral Grays -->
     <!-- UI Constants -->
@@ -651,7 +655,7 @@
                                 <RowDefinition Height="*"/>
                             </Grid.RowDefinitions>
                             <DataGridColumnHeadersPresenter Grid.Row="0" 
-                                                           Visibility="{Binding HeadersVisibility, RelativeSource={RelativeSource AncestorType=DataGrid}}"/>
+                                                           Visibility="{Binding HeadersVisibility, RelativeSource={RelativeSource AncestorType=DataGrid}, Converter={StaticResource DataGridHeadersVisibilityConverter}}"/>
                             <ScrollViewer Grid.Row="1" Focusable="false">
                                 <ItemsPresenter SnapsToDevicePixels="{TemplateBinding SnapsToDevicePixels}"/>
                             </ScrollViewer>

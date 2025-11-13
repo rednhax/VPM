@@ -19,6 +19,7 @@
         <CollectionViewSource x:Key="ScenesView" />
         <BooleanToVisibilityConverter x:Key="BoolToVis"/>
         <local:ContentCountsConverter x:Key="ContentCountsConverter"/>
+        <local:ThumbnailPathConverter x:Key="ThumbnailPathConverter"/>
         <System:Double x:Key="FilterToggleButtonSize">27</System:Double>
         <System:Double x:Key="LinkedButtonHeight">36</System:Double>
         
@@ -3479,7 +3480,7 @@ Off: Single selection, hide incompatible options"
                             <DataGridTemplateColumn.CellTemplate>
                                 <DataTemplate>
                                     <Border Background="#1e1e1e" BorderBrush="#444444" BorderThickness="1" CornerRadius="{StaticResource CornerRadiusValue}" Margin="3" Width="60" Height="60" ClipToBounds="True">
-                                        <Image Source="{Binding ThumbnailPath}" Stretch="UniformToFill" StretchDirection="Both"/>
+                                        <Image Source="{Binding ThumbnailPath, Converter={StaticResource ThumbnailPathConverter}}" Stretch="UniformToFill" StretchDirection="Both"/>
                                     </Border>
                                 </DataTemplate>
                             </DataGridTemplateColumn.CellTemplate>
@@ -3561,7 +3562,7 @@ Off: Single selection, hide incompatible options"
                             <DataGridTemplateColumn.CellTemplate>
                                 <DataTemplate>
                                     <Border Background="#1e1e1e" BorderBrush="#444444" BorderThickness="1" CornerRadius="{StaticResource CornerRadiusValue}" Margin="3" Width="60" Height="60" ClipToBounds="True">
-                                        <Image Source="{Binding ThumbnailPath}" Stretch="UniformToFill" StretchDirection="Both"/>
+                                        <Image Source="{Binding ThumbnailPath, Converter={StaticResource ThumbnailPathConverter}}" Stretch="UniformToFill" StretchDirection="Both"/>
                                     </Border>
                                 </DataTemplate>
                             </DataGridTemplateColumn.CellTemplate>
@@ -3583,6 +3584,7 @@ Off: Single selection, hide incompatible options"
                                             </Grid>
                                             <TextBlock FontSize="14" FontWeight="Bold" Text="❤️" Foreground="#FF6B6B" Margin="6,0,0,0" VerticalAlignment="Center" ToolTip="Marked as favorite" Visibility="{Binding IsFavorite, Converter={StaticResource BoolToVis}}"/>
                                             <TextBlock FontSize="14" FontWeight="Bold" Text="🙈" Foreground="#6B9EFF" Margin="6,0,0,0" VerticalAlignment="Center" ToolTip="Hidden" Visibility="{Binding IsHidden, Converter={StaticResource BoolToVis}}"/>
+                                            <TextBlock FontSize="14" FontWeight="Bold" Text="{Binding OptimizationIcon}" Foreground="#FFD700" Margin="6,0,0,0" VerticalAlignment="Center" ToolTip="Preset has been optimized"/>
                                             <TextBlock FontSize="11" Foreground="#888888" Text=" • " Margin="6,0" VerticalAlignment="Center"/>
                                             <TextBlock FontSize="11" Foreground="{DynamicResource {x:Static SystemColors.GrayTextBrushKey}}" Text="{Binding Category}" VerticalAlignment="Center"/>
                                         </StackPanel>
