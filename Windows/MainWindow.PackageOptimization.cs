@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.IO;
 using System.IO.Compression;
 using System.Linq;
@@ -2932,6 +2933,41 @@ namespace VPM
         }
 
         /// <summary>
+        /// Handles preset optimization when Optimize button is clicked in preset mode
+        /// </summary>
+        private void OptimizeSelectedPresets_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                if (CustomAtomDataGrid?.SelectedItems.Count == 0)
+                {
+                    CustomMessageBox.Show("Please select one or more presets to optimize.",
+                        "No Presets Selected", MessageBoxButton.OK, MessageBoxImage.Information);
+                    return;
+                }
+
+                // Get selected presets
+                var selectedPresets = CustomAtomDataGrid.SelectedItems.Cast<CustomAtomItem>().ToList();
+                
+                if (selectedPresets.Count == 0)
+                {
+                    return;
+                }
+
+                SetStatus($"Preparing to optimize {selectedPresets.Count} preset(s)...");
+
+                // Display unified optimization dialog for presets
+                DisplayUnifiedPresetOptimizationDialog(selectedPresets);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Error during preset optimization: {ex.Message}",
+                    "Preset Optimization Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                SetStatus($"Preset optimization failed: {ex.Message}");
+            }
+        }
+
+        /// <summary>
         /// Handles scene optimization when Optimize button is clicked in scene mode
         /// </summary>
         private void OptimizeSelectedScenes_Click(object sender, RoutedEventArgs e)
@@ -3102,6 +3138,146 @@ namespace VPM
             catch (Exception ex)
             {
                 MessageBox.Show($"Error displaying scene optimization dialog: {ex.Message}",
+                    "Display Error", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
+        /// <summary>
+        /// Displays unified optimization dialog for presets
+        /// </summary>
+        private void DisplayUnifiedPresetOptimizationDialog(List<CustomAtomItem> presets)
+        {
+            try
+            {
+                SetStatus($"Preparing preset optimization for {presets.Count} preset(s)...");
+
+                // Create dialog matching package optimizer style
+                var dialog = new Window
+                {
+                    Title = presets.Count == 1 ? $"Optimize Preset - {presets[0].DisplayName}" : $"Optimize {presets.Count} Presets",
+                    Width = 1200,
+                    Height = 700,
+                    WindowStartupLocation = WindowStartupLocation.CenterOwner,
+                    Owner = this,
+                    ResizeMode = ResizeMode.CanResize,
+                    Background = new SolidColorBrush(Color.FromRgb(30, 30, 30))
+                };
+
+                // Apply dark theme
+                try
+                {
+                    var hwnd = new System.Windows.Interop.WindowInteropHelper(dialog).EnsureHandle();
+                    int useImmersiveDarkMode = 1;
+                    if (DwmSetWindowAttribute(hwnd, 20, ref useImmersiveDarkMode, sizeof(int)) != 0)
+                    {
+                        DwmSetWindowAttribute(hwnd, 19, ref useImmersiveDarkMode, sizeof(int));
+                    }
+                }
+                catch { }
+
+                var mainGrid = new Grid { Margin = new Thickness(15) };
+                mainGrid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
+
+                // Create TabControl with styling matching package optimizer
+                var tabControl = new TabControl
+                {
+                    Background = new SolidColorBrush(Color.FromRgb(30, 30, 30)),
+                    BorderThickness = new Thickness(0)
+                };
+
+                // Create custom template for TabItem to match package optimizer dark theme
+                var tabItemStyle = new Style(typeof(TabItem));
+                
+                // Create control template for TabItem
+                var tabTemplate = new ControlTemplate(typeof(TabItem));
+                var tabBorderFactory = new FrameworkElementFactory(typeof(Border));
+                tabBorderFactory.Name = "Border";
+                tabBorderFactory.SetValue(Border.BackgroundProperty, new SolidColorBrush(Color.FromRgb(45, 45, 45)));
+                tabBorderFactory.SetValue(Border.BorderThicknessProperty, new Thickness(0, 0, 0, 2));
+                tabBorderFactory.SetValue(Border.BorderBrushProperty, new SolidColorBrush(Colors.Transparent));
+                tabBorderFactory.SetValue(Border.PaddingProperty, new Thickness(20, 10, 20, 10));
+                tabBorderFactory.SetValue(Border.MarginProperty, new Thickness(0, 0, 2, 0));
+                
+                var tabContentPresenterFactory = new FrameworkElementFactory(typeof(ContentPresenter));
+                tabContentPresenterFactory.SetValue(ContentPresenter.ContentSourceProperty, "Header");
+                tabContentPresenterFactory.SetValue(ContentPresenter.HorizontalAlignmentProperty, HorizontalAlignment.Center);
+                tabContentPresenterFactory.SetValue(ContentPresenter.VerticalAlignmentProperty, VerticalAlignment.Center);
+                
+                tabBorderFactory.AppendChild(tabContentPresenterFactory);
+                tabTemplate.VisualTree = tabBorderFactory;
+                
+                // Trigger for selected state
+                var selectedTrigger = new Trigger { Property = TabItem.IsSelectedProperty, Value = true };
+                selectedTrigger.Setters.Add(new Setter(Border.BackgroundProperty, new SolidColorBrush(Color.FromRgb(60, 60, 60)), "Border"));
+                selectedTrigger.Setters.Add(new Setter(Border.BorderBrushProperty, new SolidColorBrush(Color.FromRgb(76, 175, 80)), "Border"));
+                selectedTrigger.Setters.Add(new Setter(TabItem.ForegroundProperty, new SolidColorBrush(Color.FromRgb(76, 175, 80))));
+                tabTemplate.Triggers.Add(selectedTrigger);
+                
+                // Trigger for hover state
+                var tabHoverTrigger = new Trigger { Property = TabItem.IsMouseOverProperty, Value = true };
+                tabHoverTrigger.Setters.Add(new Setter(Border.BackgroundProperty, new SolidColorBrush(Color.FromRgb(55, 55, 55)), "Border"));
+                tabTemplate.Triggers.Add(tabHoverTrigger);
+                
+                tabItemStyle.Setters.Add(new Setter(TabItem.TemplateProperty, tabTemplate));
+                tabItemStyle.Setters.Add(new Setter(TabItem.ForegroundProperty, new SolidColorBrush(Color.FromRgb(200, 200, 200))));
+                tabItemStyle.Setters.Add(new Setter(TabItem.FontSizeProperty, 14.0));
+                tabItemStyle.Setters.Add(new Setter(TabItem.FontWeightProperty, FontWeights.SemiBold));
+                
+                tabControl.Resources.Add(typeof(TabItem), tabItemStyle);
+
+                // Add tabs: Dependencies, Misc, and Summary
+                var depsTab = CreatePresetDependenciesTab(presets);
+                tabControl.Items.Add(depsTab);
+
+                var miscTab = CreatePresetMiscTab(presets);
+                tabControl.Items.Add(miscTab);
+
+                var summaryTab = CreatePresetSummaryTab(presets);
+                tabControl.Items.Add(summaryTab);
+
+                Grid.SetRow(tabControl, 0);
+                mainGrid.Children.Add(tabControl);
+
+                // Create Optimize button overlaid on top right of tab area
+                var optimizeButton = new Button
+                {
+                    Content = "Optimize",
+                    MinWidth = 140,
+                    Height = 42,
+                    FontSize = 14,
+                    FontWeight = FontWeights.SemiBold,
+                    Background = new SolidColorBrush(Color.FromRgb(76, 175, 80)),
+                    Foreground = new SolidColorBrush(Colors.White),
+                    BorderThickness = new Thickness(0),
+                    Cursor = System.Windows.Input.Cursors.Hand,
+                    HorizontalAlignment = HorizontalAlignment.Right,
+                    VerticalAlignment = VerticalAlignment.Top,
+                    Margin = new Thickness(0, 0, 0, 0)
+                };
+
+                // Add hover effect
+                optimizeButton.MouseEnter += (s, e) => optimizeButton.Background = new SolidColorBrush(Color.FromRgb(56, 142, 60));
+                optimizeButton.MouseLeave += (s, e) => optimizeButton.Background = new SolidColorBrush(Color.FromRgb(76, 175, 80));
+
+                // Store reference to tabControl for accessing dependency data later
+                var tabControlRef = tabControl;
+                
+                optimizeButton.Click += async (s, e) =>
+                {
+                    await ApplyPresetOptimizations(presets, dialog, tabControlRef);
+                };
+
+                // Place button on top of TabControl with higher ZIndex
+                Panel.SetZIndex(optimizeButton, 1000);
+                Grid.SetRow(optimizeButton, 0);
+                mainGrid.Children.Add(optimizeButton);
+
+                dialog.Content = mainGrid;
+                dialog.ShowDialog();
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Error displaying preset optimization dialog: {ex.Message}",
                     "Display Error", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
@@ -4454,6 +4630,1054 @@ namespace VPM
             {
                 return false;
             }
+        }
+
+        /// <summary>
+        /// Checks if a preset .vap file has been optimized by looking for the optimization flag
+        /// </summary>
+        private bool IsPresetOptimized(string filePath)
+        {
+            try
+            {
+                if (string.IsNullOrEmpty(filePath) || !File.Exists(filePath))
+                    return false;
+
+                string jsonContent = File.ReadAllText(filePath);
+                using var doc = System.Text.Json.JsonDocument.Parse(jsonContent);
+                
+                if (doc.RootElement.ValueKind == System.Text.Json.JsonValueKind.Object)
+                {
+                    if (doc.RootElement.TryGetProperty("_VPM_Optimized", out var optimizedProp))
+                    {
+                        return optimizedProp.ValueKind == System.Text.Json.JsonValueKind.True;
+                    }
+                }
+                
+                return false;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// Applies preset optimizations (dependencies only)
+        /// </summary>
+        private async Task ApplyPresetOptimizations(List<CustomAtomItem> presets, Window parentDialog, TabControl tabControl)
+        {
+            try
+            {
+                // Get dependency data from the Dependencies tab (first tab)
+                System.Collections.ObjectModel.ObservableCollection<DependencyItemModel> dependencyItems = null;
+                
+                if (tabControl.Items.Count > 0)
+                {
+                    var depsTab = tabControl.Items[0] as TabItem;
+                    if (depsTab?.Content is Grid depsGrid)
+                    {
+                        // Find the DataGrid in the tab
+                        var dataGrid = depsGrid.Children.OfType<DataGrid>().FirstOrDefault();
+                        if (dataGrid?.ItemsSource != null)
+                        {
+                            // Handle both direct ObservableCollection and CollectionViewSource wrapper
+                            if (dataGrid.ItemsSource is System.Collections.ObjectModel.ObservableCollection<DependencyItemModel> directItems)
+                            {
+                                dependencyItems = directItems;
+                            }
+                            else if (dataGrid.ItemsSource is System.Windows.Data.ListCollectionView collectionView)
+                            {
+                                // Extract the underlying source collection from the view
+                                if (collectionView.SourceCollection is System.Collections.ObjectModel.ObservableCollection<DependencyItemModel> sourceItems)
+                                {
+                                    dependencyItems = sourceItems;
+                                }
+                            }
+                        }
+                    }
+                }
+                
+                if (dependencyItems != null)
+                {
+                    // Get disabled dependencies
+                    var disabledDependencies = dependencyItems
+                        .Where(d => !d.IsEnabled)
+                        .Select(d => d.Name)
+                        .ToList();
+
+                    // Get Force .latest setting from global checkbox in Dependencies tab
+                    var depsTab = tabControl.Items[0] as TabItem;
+                    var depsTabContent = depsTab?.Content as Grid;
+                    var summaryRow = depsTabContent?.Children.OfType<Grid>().FirstOrDefault();
+                    var forceLatestCheckbox = summaryRow?.Children.OfType<System.Windows.Controls.CheckBox>().FirstOrDefault();
+                    
+                    bool globalForceLatest = forceLatestCheckbox?.IsChecked ?? true;
+                    
+                    var forceLatestDependencies = globalForceLatest ? 
+                        dependencyItems.Where(d => d.IsEnabled).Select(d => d.Name).ToList() : 
+                        new List<string>();
+
+                    // Get minification setting from Misc tab (should be at index 1)
+                    bool shouldMinify = true;
+                    if (tabControl.Items.Count > 1)
+                    {
+                        var miscTab = tabControl.Items[1] as TabItem;
+                        if (miscTab?.Content is Grid miscGrid)
+                        {
+                            // Find the checkbox recursively by type
+                            var minifyCheckbox = FindVisualChild<System.Windows.Controls.CheckBox>(miscGrid);
+                            if (minifyCheckbox != null)
+                            {
+                                shouldMinify = minifyCheckbox.IsChecked == true;
+                            }
+                        }
+                    }
+
+                    // Close the dialog
+                    parentDialog.Close();
+
+                    // Apply optimizations to each preset
+                    int optimizedCount = 0;
+                    foreach (var preset in presets)
+                    {
+                        try
+                        {
+                            if (await OptimizePresetFile(preset.FilePath, disabledDependencies, forceLatestDependencies, shouldMinify))
+                            {
+                                optimizedCount++;
+                                
+                                // Update preset status to optimized
+                                preset.Status = "Optimized";
+                                preset.StatusIcon = "✓"; // Checkmark icon
+                                preset.IsOptimized = true;
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            MessageBox.Show($"Error optimizing preset {preset.DisplayName}:\n{ex.Message}",
+                                "Optimization Error", MessageBoxButton.OK, MessageBoxImage.Warning);
+                        }
+                    }
+
+                    // Optimization complete - no message needed
+
+                    SetStatus($"Optimized {optimizedCount} preset(s)");
+
+                    // Update the dependencies table to show .latest versions
+                    await UpdateDependenciesTableAfterOptimization(dependencyItems, forceLatestDependencies, disabledDependencies);
+                    
+                    // Refresh the preset list to show updated dependency counts and status
+                    await RefreshPresetListAfterOptimization(presets);
+                    
+                    SetStatus($"Successfully optimized {optimizedCount} of {presets.Count} preset(s)");
+                }
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Error during preset optimization:\n{ex.Message}",
+                    "Optimization Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                SetStatus($"Preset optimization failed: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// Creates a backup of the preset file and its preview image in the ArchivedPackages/Presets folder
+        /// </summary>
+        private async Task CreatePresetBackup(string filePath)
+        {
+            try
+            {
+                if (string.IsNullOrEmpty(_selectedFolder))
+                {
+                    SetStatus($"Warning: Cannot create backup - no VAM root folder selected");
+                    return;
+                }
+
+                var fileName = Path.GetFileName(filePath);
+                var fileDirectory = Path.GetDirectoryName(filePath);
+                
+                // Create backup in ArchivedPackages/Presets folder in game root
+                var archiveFolder = Path.Combine(_selectedFolder, "ArchivedPackages", "Presets");
+                
+                // Create archive folder if it doesn't exist
+                if (!Directory.Exists(archiveFolder))
+                {
+                    Directory.CreateDirectory(archiveFolder);
+                }
+                
+                // Use original filename for backup
+                var backupPath = Path.Combine(archiveFolder, fileName);
+                
+                // Copy original preset file to backup location
+                await Task.Run(() => File.Copy(filePath, backupPath, true));
+                
+                // Find and copy associated preview image
+                var basePath = Path.ChangeExtension(filePath, null);
+                var extensions = new[] { ".jpg", ".jpeg", ".png", ".JPG", ".JPEG", ".PNG" };
+                
+                foreach (var ext in extensions)
+                {
+                    var previewPath = basePath + ext;
+                    if (File.Exists(previewPath))
+                    {
+                        var previewFileName = Path.GetFileName(previewPath);
+                        var backupPreviewPath = Path.Combine(archiveFolder, previewFileName);
+                        
+                        await Task.Run(() => File.Copy(previewPath, backupPreviewPath, true));
+                        break; // Only copy the first preview image found
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                // Log backup error but don't fail the optimization
+                SetStatus($"Warning: Could not create backup for {Path.GetFileName(filePath)}: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// Updates the dependencies table to show .latest versions and disabled dependencies
+        /// </summary>
+        private async Task UpdateDependenciesTableAfterOptimization(
+            System.Collections.ObjectModel.ObservableCollection<DependencyItemModel> dependencyItems,
+            List<string> forceLatestDependencies,
+            List<string> disabledDependencies)
+        {
+            try
+            {
+                await Application.Current.Dispatcher.InvokeAsync(() =>
+                {
+                    foreach (var item in dependencyItems)
+                    {
+                        // Update dependencies that were forced to .latest
+                        if (forceLatestDependencies.Contains(item.Name))
+                        {
+                            item.ForceLatest = true;
+                            // Update the name to show .latest
+                            if (!item.Name.EndsWith(".latest", System.StringComparison.OrdinalIgnoreCase))
+                            {
+                                item.Name = item.Name.Split('.')[0] + ".latest";
+                            }
+                        }
+                        
+                        // Mark disabled dependencies as disabled by user
+                        if (disabledDependencies.Contains(item.Name) || disabledDependencies.Any(d => item.Name.StartsWith(d.Split('.')[0])))
+                        {
+                            item.IsDisabledByUser = true;
+                        }
+                    }
+                    
+                    // Force refresh of the dependencies DataGrid if visible
+                    var dependenciesTab = GetVisibleDependenciesTab();
+                    if (dependenciesTab?.Content is Grid tabGrid)
+                    {
+                        var dataGrid = tabGrid.Children.OfType<DataGrid>().FirstOrDefault();
+                        if (dataGrid != null)
+                        {
+                            var view = System.Windows.Data.CollectionViewSource.GetDefaultView(dataGrid.ItemsSource);
+                            view?.Refresh();
+                        }
+                    }
+                });
+            }
+            catch (Exception ex)
+            {
+                SetStatus($"Warning: Could not update dependencies table: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// Gets the currently visible dependencies tab from any open optimization dialogs
+        /// </summary>
+        private TabItem GetVisibleDependenciesTab()
+        {
+            try
+            {
+                // Look for any TabControl in the visual tree that might contain the dependencies tab
+                var windows = System.Windows.Application.Current.Windows;
+                foreach (Window window in windows)
+                {
+                    if (window.IsVisible && window.Title.Contains("Optimize"))
+                    {
+                        var tabControls = FindVisualChildren<TabControl>(window);
+                        foreach (var tabControl in tabControls)
+                        {
+                            var depsTab = tabControl.Items.Cast<TabItem>().FirstOrDefault(t =>
+                            {
+                                if (t.Header is StackPanel headerPanel)
+                                {
+                                    var textBlock = headerPanel.Children.OfType<TextBlock>().FirstOrDefault();
+                                    return textBlock?.Text?.Contains("Dependencies") == true;
+                                }
+                                return t.Header?.ToString()?.Contains("Dependencies") == true;
+                            });
+                            if (depsTab != null)
+                                return depsTab;
+                        }
+                    }
+                }
+            }
+            catch { }
+            return null;
+        }
+
+        /// <summary>
+        /// Helper method to find visual children of a specific type
+        /// </summary>
+        private IEnumerable<T> FindVisualChildren<T>(DependencyObject obj) where T : DependencyObject
+        {
+            if (obj != null)
+            {
+                for (int i = 0; i < System.Windows.Media.VisualTreeHelper.GetChildrenCount(obj); i++)
+                {
+                    DependencyObject child = System.Windows.Media.VisualTreeHelper.GetChild(obj, i);
+                    if (child != null && child is T)
+                    {
+                        yield return (T)child;
+                    }
+                    foreach (T childOfChild in FindVisualChildren<T>(child))
+                    {
+                        yield return childOfChild;
+                    }
+                }
+            }
+        }
+
+        /// <summary>
+        /// Refreshes the preset list after optimization to show updated dependencies and status
+        /// </summary>
+        private async Task RefreshPresetListAfterOptimization(List<CustomAtomItem> optimizedPresets)
+        {
+            try
+            {
+                // Re-scan the optimized preset files to update their dependency data
+                await Task.Run(() =>
+                {
+                    foreach (var preset in optimizedPresets)
+                    {
+                        // Re-parse the preset file to get updated dependencies
+                        Services.PresetScanner.ParsePresetDependencies(preset);
+                    }
+                });
+
+                // Refresh the UI on the main thread
+                await Application.Current.Dispatcher.InvokeAsync(() =>
+                {
+                    // Trigger UI refresh for the preset DataGrid
+                    if (CustomAtomDataGrid?.ItemsSource is System.Collections.ObjectModel.ObservableCollection<CustomAtomItem> collection)
+                    {
+                        // Force refresh of the collection view
+                        var view = System.Windows.Data.CollectionViewSource.GetDefaultView(collection);
+                        view?.Refresh();
+                    }
+
+                    // If presets are currently selected, refresh the dependencies table
+                    var selectedPresets = CustomAtomDataGrid?.SelectedItems?.Cast<CustomAtomItem>().ToList();
+                    if (selectedPresets?.Any() == true)
+                    {
+                        // Check if any of the selected presets were optimized
+                        var selectedOptimizedPresets = selectedPresets.Where(p => optimizedPresets.Any(op => op.FilePath == p.FilePath)).ToList();
+                        if (selectedOptimizedPresets.Any())
+                        {
+                            // Refresh the dependencies display for the currently selected presets
+                            PopulatePresetDependencies(selectedPresets);
+                        }
+                    }
+                });
+            }
+            catch (Exception ex)
+            {
+                SetStatus($"Warning: Could not refresh preset list: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// Optimizes a single preset file by modifying its dependencies and optionally minifying JSON
+        /// </summary>
+        private async Task<bool> OptimizePresetFile(string filePath, List<string> disabledDependencies, List<string> forceLatestDependencies, bool shouldMinify)
+        {
+            try
+            {
+                if (!File.Exists(filePath))
+                {
+                    return false;
+                }
+
+                // Create backup in archive folder
+                await CreatePresetBackup(filePath);
+
+                // Read the preset file
+                string jsonContent = await File.ReadAllTextAsync(filePath);
+                
+                // Parse JSON
+                using var document = System.Text.Json.JsonDocument.Parse(jsonContent);
+                var root = document.RootElement;
+
+                // Create optimized JSON
+                using var stream = new MemoryStream();
+                using var writer = new System.Text.Json.Utf8JsonWriter(stream, new System.Text.Json.JsonWriterOptions { Indented = !shouldMinify });
+                
+                ProcessPresetJsonElement(root, writer, forceLatestDependencies, disabledDependencies, true);
+                
+                writer.Flush();
+                string optimizedJson = System.Text.Encoding.UTF8.GetString(stream.ToArray());
+
+                // Write back to file
+                await File.WriteAllTextAsync(filePath, optimizedJson);
+                
+                return true;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// Processes a JSON element for preset optimization
+        /// </summary>
+        private void ProcessPresetJsonElement(System.Text.Json.JsonElement element, System.Text.Json.Utf8JsonWriter writer,
+            List<string> forceLatestDeps, List<string> disabledDeps, bool isRootElement = false)
+        {
+            switch (element.ValueKind)
+            {
+                case System.Text.Json.JsonValueKind.Object:
+                    ProcessPresetJsonObject(element, writer, forceLatestDeps, disabledDeps, isRootElement);
+                    break;
+                case System.Text.Json.JsonValueKind.Array:
+                    ProcessPresetJsonArray(element, writer, forceLatestDeps, disabledDeps);
+                    break;
+                case System.Text.Json.JsonValueKind.String:
+                    string stringValue = element.GetString();
+                    // Check if this is a dependency reference that should be converted to .latest
+                    string convertedValue = ConvertDependencyToLatest(stringValue, forceLatestDeps);
+                    writer.WriteStringValue(convertedValue);
+                    break;
+                case System.Text.Json.JsonValueKind.Number:
+                    if (element.TryGetInt32(out int intValue))
+                        writer.WriteNumberValue(intValue);
+                    else if (element.TryGetDouble(out double doubleValue))
+                        writer.WriteNumberValue(doubleValue);
+                    break;
+                case System.Text.Json.JsonValueKind.True:
+                    writer.WriteBooleanValue(true);
+                    break;
+                case System.Text.Json.JsonValueKind.False:
+                    writer.WriteBooleanValue(false);
+                    break;
+                case System.Text.Json.JsonValueKind.Null:
+                    writer.WriteNullValue();
+                    break;
+            }
+        }
+
+        /// <summary>
+        /// Processes a JSON object for preset optimization
+        /// </summary>
+        private void ProcessPresetJsonObject(System.Text.Json.JsonElement element, System.Text.Json.Utf8JsonWriter writer,
+            List<string> forceLatestDeps, List<string> disabledDeps, bool isRootObject = false)
+        {
+            writer.WriteStartObject();
+
+            // Add optimization flag at the beginning if this is the root object
+            if (isRootObject)
+            {
+                writer.WriteBoolean("_VPM_Optimized", true);
+                writer.WriteString("_VPM_OptimizedDate", DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss"));
+            }
+
+            foreach (var property in element.EnumerateObject())
+            {
+                string propName = property.Name;
+                var propValue = property.Value;
+
+                // Check if this object should be removed (disabled dependency)
+                if (propValue.ValueKind == System.Text.Json.JsonValueKind.String)
+                {
+                    string stringValue = propValue.GetString();
+                    if (ShouldRemoveDependency(stringValue, disabledDeps))
+                    {
+                        // Skip this property
+                        continue;
+                    }
+                    
+                    // Check if should convert to .latest
+                    string convertedValue = ConvertDependencyToLatest(stringValue, forceLatestDeps);
+                    if (convertedValue != stringValue)
+                    {
+                        writer.WriteString(propName, convertedValue);
+                        continue;
+                    }
+                }
+
+                // Write property name and recursively process value
+                writer.WritePropertyName(propName);
+                ProcessPresetJsonElement(propValue, writer, forceLatestDeps, disabledDeps, false);
+            }
+
+            writer.WriteEndObject();
+        }
+
+        /// <summary>
+        /// Processes a JSON array for preset optimization
+        /// </summary>
+        private void ProcessPresetJsonArray(System.Text.Json.JsonElement element, System.Text.Json.Utf8JsonWriter writer,
+            List<string> forceLatestDeps, List<string> disabledDeps)
+        {
+            writer.WriteStartArray();
+
+            foreach (var item in element.EnumerateArray())
+            {
+                // Check if this array item is an object with a dependency that should be removed
+                if (item.ValueKind == System.Text.Json.JsonValueKind.Object)
+                {
+                    bool shouldRemove = false;
+                    
+                    // Check if object has an "id" field with a disabled dependency
+                    foreach (var prop in item.EnumerateObject())
+                    {
+                        if (prop.Name == "id" && prop.Value.ValueKind == System.Text.Json.JsonValueKind.String)
+                        {
+                            string idValue = prop.Value.GetString();
+                            if (ShouldRemoveDependency(idValue, disabledDeps))
+                            {
+                                shouldRemove = true;
+                                break;
+                            }
+                        }
+                    }
+                    
+                    if (shouldRemove)
+                    {
+                        continue; // Skip this array item
+                    }
+                }
+
+                ProcessPresetJsonElement(item, writer, forceLatestDeps, disabledDeps, false);
+            }
+
+            writer.WriteEndArray();
+        }
+
+        /// <summary>
+        /// Creates the Misc tab for preset optimization with JSON minification feature
+        /// </summary>
+        private TabItem CreatePresetMiscTab(List<CustomAtomItem> presets)
+        {
+            var headerPanel = new StackPanel { Orientation = Orientation.Horizontal };
+            headerPanel.Children.Add(new TextBlock { Text = "Misc", VerticalAlignment = VerticalAlignment.Center });
+
+            var tab = new TabItem { Header = headerPanel, Background = new SolidColorBrush(Color.FromRgb(30, 30, 30)) };
+            var tabGrid = new Grid { Margin = new Thickness(10) };
+            tabGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+            tabGrid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(10) });
+            tabGrid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
+
+            var summaryText = new TextBlock
+            {
+                Text = "Miscellaneous optimization options",
+                FontSize = 14,
+                FontWeight = FontWeights.Bold,
+                Foreground = new SolidColorBrush(Color.FromRgb(220, 220, 220)),
+                VerticalAlignment = VerticalAlignment.Center,
+                Margin = new Thickness(0, 0, 0, 10)
+            };
+            Grid.SetRow(summaryText, 0);
+            tabGrid.Children.Add(summaryText);
+
+            // Scrollable content
+            var scrollViewer = new ScrollViewer
+            {
+                VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+                Background = new SolidColorBrush(Color.FromRgb(30, 30, 30))
+            };
+
+            var contentPanel = new StackPanel { Margin = new Thickness(5) };
+
+            // JSON Minification Section
+            var minifyHeader = new TextBlock
+            {
+                Text = "📄 JSON Optimization",
+                FontSize = 16,
+                FontWeight = FontWeights.Bold,
+                Foreground = new SolidColorBrush(Color.FromRgb(220, 220, 220)),
+                Margin = new Thickness(0, 0, 0, 15)
+            };
+            contentPanel.Children.Add(minifyHeader);
+
+            var minifyPanel = new StackPanel { Margin = new Thickness(15, 0, 0, 20) };
+
+            // Minify JSON checkbox
+            var minifyCheckbox = new System.Windows.Controls.CheckBox
+            {
+                Content = "Minify JSON files",
+                Foreground = new SolidColorBrush(Color.FromRgb(200, 200, 200)),
+                FontSize = 13,
+                FontWeight = FontWeights.Normal,
+                VerticalAlignment = VerticalAlignment.Center,
+                Margin = new Thickness(0, 0, 0, 8),
+                Cursor = System.Windows.Input.Cursors.Hand,
+                ToolTip = "Remove unnecessary whitespace and formatting from preset JSON files to reduce file size.",
+                IsChecked = _settingsManager?.Settings?.MinifyJsonFiles ?? true
+            };
+            minifyPanel.Children.Add(minifyCheckbox);
+
+            var minifyDescription = new TextBlock
+            {
+                Text = "Removes unnecessary whitespace and formatting from preset files to reduce file size.\n" +
+                       "This can significantly reduce the size of large preset files with minimal impact on loading times.",
+                FontSize = 11,
+                Foreground = new SolidColorBrush(Color.FromRgb(160, 160, 160)),
+                TextWrapping = TextWrapping.Wrap,
+                Margin = new Thickness(25, 0, 0, 0)
+            };
+            minifyPanel.Children.Add(minifyDescription);
+
+            contentPanel.Children.Add(minifyPanel);
+
+            // File Processing Section
+            var processingHeader = new TextBlock
+            {
+                Text = "⚙️ Processing Options",
+                FontSize = 16,
+                FontWeight = FontWeights.Bold,
+                Foreground = new SolidColorBrush(Color.FromRgb(220, 220, 220)),
+                Margin = new Thickness(0, 10, 0, 15)
+            };
+            contentPanel.Children.Add(processingHeader);
+
+            var processingPanel = new StackPanel { Margin = new Thickness(15, 0, 0, 20) };
+
+            var processingDescription = new TextBlock
+            {
+                Text = $"• {presets.Count} preset file(s) will be processed\n" +
+                       "• Files are modified in-place (no backup created)\n" +
+                       "• Original file timestamps are preserved",
+                FontSize = 12,
+                Foreground = new SolidColorBrush(Color.FromRgb(180, 180, 180)),
+                TextWrapping = TextWrapping.Wrap
+            };
+            processingPanel.Children.Add(processingDescription);
+
+            contentPanel.Children.Add(processingPanel);
+
+            scrollViewer.Content = contentPanel;
+            Grid.SetRow(scrollViewer, 2);
+            tabGrid.Children.Add(scrollViewer);
+
+            tab.Content = tabGrid;
+            return tab;
+        }
+
+        /// <summary>
+        /// Creates the Dependencies optimization tab for presets with interactive table matching scene mode style exactly
+        /// </summary>
+        private TabItem CreatePresetDependenciesTab(List<CustomAtomItem> presets)
+        {
+            var allDeps = new HashSet<string>();
+            foreach (var preset in presets)
+            {
+                if (preset.Dependencies != null)
+                {
+                    foreach (var dep in preset.Dependencies)
+                    {
+                        allDeps.Add(dep);
+                    }
+                }
+            }
+
+            var headerPanel = new StackPanel { Orientation = Orientation.Horizontal };
+            headerPanel.Children.Add(new TextBlock { Text = $"Dependencies ({allDeps.Count})", VerticalAlignment = VerticalAlignment.Center });
+
+            var tab = new TabItem { Header = headerPanel, Background = new SolidColorBrush(Color.FromRgb(30, 30, 30)) };
+            var tabGrid = new Grid { Margin = new Thickness(10) };
+            tabGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto }); // Summary + Force .latest checkbox
+            tabGrid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(10) });
+            tabGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto }); // Search row
+            tabGrid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(10) });
+            tabGrid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) }); // Table
+
+            // Summary row with Force .latest checkbox
+            var summaryRow = new Grid();
+            summaryRow.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            summaryRow.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+
+            var summaryText = new TextBlock
+            {
+                Text = $"Found {allDeps.Count} unique dependencies across {presets.Count} preset(s)",
+                FontSize = 14,
+                FontWeight = FontWeights.Bold,
+                Foreground = new SolidColorBrush(Color.FromRgb(220, 220, 220)),
+                VerticalAlignment = VerticalAlignment.Center
+            };
+            Grid.SetColumn(summaryText, 0);
+            summaryRow.Children.Add(summaryText);
+
+            // Create Force .latest checkbox with modern styling
+            var forceLatestCheckbox = new System.Windows.Controls.CheckBox
+            {
+                Content = "Force .latest",
+                Foreground = new SolidColorBrush(Color.FromRgb(200, 200, 200)),
+                FontSize = 12,
+                FontWeight = FontWeights.SemiBold,
+                VerticalAlignment = VerticalAlignment.Center,
+                Margin = new Thickness(15, 0, 0, 0),
+                Cursor = System.Windows.Input.Cursors.Hand,
+                ToolTip = "Convert all dependency versions to .latest when optimizing.",
+                IsChecked = _settingsManager?.Settings?.ForceLatestDependencies ?? true
+            };
+
+            Grid.SetColumn(forceLatestCheckbox, 1);
+            summaryRow.Children.Add(forceLatestCheckbox);
+
+            Grid.SetRow(summaryRow, 0);
+            tabGrid.Children.Add(summaryRow);
+
+            // Create search row
+            var searchRow = new Grid();
+            searchRow.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            searchRow.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+
+            var searchBox = new System.Windows.Controls.TextBox
+            {
+                Background = new SolidColorBrush(Color.FromRgb(45, 45, 45)),
+                Foreground = new SolidColorBrush(Color.FromRgb(220, 220, 220)),
+                BorderBrush = new SolidColorBrush(Color.FromRgb(76, 175, 80)),
+                BorderThickness = new Thickness(1),
+                Padding = new Thickness(8),
+                FontSize = 13,
+                Height = 32,
+                ToolTip = "Search dependencies by name"
+            };
+
+            var searchPlaceholder = new TextBlock
+            {
+                Text = "Search dependencies...",
+                Foreground = new SolidColorBrush(Color.FromRgb(120, 120, 120)),
+                FontSize = 13,
+                Padding = new Thickness(8, 8, 0, 0),
+                IsHitTestVisible = false,
+                Opacity = 0.6
+            };
+
+            var searchPlaceholderPanel = new Grid();
+            searchPlaceholderPanel.Children.Add(searchBox);
+            searchPlaceholderPanel.Children.Add(searchPlaceholder);
+
+            // Show/hide placeholder based on text
+            searchBox.TextChanged += (s, e) =>
+            {
+                searchPlaceholder.Visibility = string.IsNullOrEmpty(searchBox.Text) ? Visibility.Visible : Visibility.Collapsed;
+            };
+
+            Grid.SetColumn(searchPlaceholderPanel, 0);
+            searchRow.Children.Add(searchPlaceholderPanel);
+
+            // Clear button
+            var clearButton = new Button
+            {
+                Content = "✓",
+                Width = 32,
+                Height = 32,
+                FontSize = 16,
+                FontWeight = FontWeights.Bold,
+                Background = new SolidColorBrush(Color.FromRgb(45, 45, 45)),
+                Foreground = new SolidColorBrush(Color.FromRgb(200, 200, 200)),
+                BorderThickness = new Thickness(1),
+                BorderBrush = new SolidColorBrush(Color.FromRgb(76, 175, 80)),
+                Cursor = System.Windows.Input.Cursors.Hand,
+                Margin = new Thickness(8, 0, 0, 0),
+                ToolTip = "Clear search"
+            };
+
+            clearButton.Click += (s, e) =>
+            {
+                searchBox.Text = "";
+            };
+
+            Grid.SetColumn(clearButton, 1);
+            searchRow.Children.Add(clearButton);
+
+            Grid.SetRow(searchRow, 2);
+            tabGrid.Children.Add(searchRow);
+
+            // Create DataGrid for dependencies - matching scene mode exactly
+            var dataGrid = new DataGrid
+            {
+                AutoGenerateColumns = false,
+                IsReadOnly = true,
+                CanUserAddRows = false,
+                CanUserDeleteRows = false,
+                CanUserResizeRows = false,
+                SelectionMode = DataGridSelectionMode.Extended,
+                GridLinesVisibility = DataGridGridLinesVisibility.None,
+                HeadersVisibility = DataGridHeadersVisibility.Column,
+                RowHeight = 32,
+                Background = new SolidColorBrush(Color.FromRgb(30, 30, 30)),
+                BorderThickness = new Thickness(0),
+                Foreground = new SolidColorBrush(Color.FromRgb(220, 220, 220))
+            };
+
+            // Column header style - exact match to scene mode
+            var columnHeaderStyle = new Style(typeof(DataGridColumnHeader));
+            columnHeaderStyle.Setters.Add(new Setter(DataGridColumnHeader.BackgroundProperty, new SolidColorBrush(Color.FromRgb(45, 45, 45))));
+            columnHeaderStyle.Setters.Add(new Setter(DataGridColumnHeader.ForegroundProperty, new SolidColorBrush(Color.FromRgb(200, 200, 200))));
+            columnHeaderStyle.Setters.Add(new Setter(DataGridColumnHeader.BorderThicknessProperty, new Thickness(0, 0, 0, 1)));
+            columnHeaderStyle.Setters.Add(new Setter(DataGridColumnHeader.BorderBrushProperty, new SolidColorBrush(Color.FromRgb(60, 60, 60))));
+            columnHeaderStyle.Setters.Add(new Setter(DataGridColumnHeader.PaddingProperty, new Thickness(8, 8, 8, 8)));
+            columnHeaderStyle.Setters.Add(new Setter(DataGridColumnHeader.FontWeightProperty, FontWeights.SemiBold));
+            dataGrid.ColumnHeaderStyle = columnHeaderStyle;
+
+            // Row style - exact match to scene mode
+            var rowStyle = new Style(typeof(DataGridRow));
+            rowStyle.Setters.Add(new Setter(DataGridRow.BackgroundProperty, new SolidColorBrush(Color.FromRgb(30, 30, 30))));
+            rowStyle.Setters.Add(new Setter(DataGridRow.BorderThicknessProperty, new Thickness(0)));
+            
+            var alternateTrigger = new Trigger { Property = DataGridRow.AlternationIndexProperty, Value = 1 };
+            alternateTrigger.Setters.Add(new Setter(DataGridRow.BackgroundProperty, new SolidColorBrush(Color.FromRgb(35, 35, 35))));
+            rowStyle.Triggers.Add(alternateTrigger);
+            
+            var rowHoverTrigger = new Trigger { Property = DataGridRow.IsMouseOverProperty, Value = true };
+            rowHoverTrigger.Setters.Add(new Setter(DataGridRow.BackgroundProperty, new SolidColorBrush(Color.FromRgb(45, 45, 45))));
+            rowStyle.Triggers.Add(rowHoverTrigger);
+            
+            var selectedTrigger = new Trigger { Property = DataGridRow.IsSelectedProperty, Value = true };
+            selectedTrigger.Setters.Add(new Setter(DataGridRow.BackgroundProperty, new SolidColorBrush(Color.FromRgb(55, 65, 75))));
+            selectedTrigger.Setters.Add(new Setter(DataGridRow.ForegroundProperty, new SolidColorBrush(Color.FromRgb(220, 220, 220))));
+            rowStyle.Triggers.Add(selectedTrigger);
+            
+            dataGrid.RowStyle = rowStyle;
+            dataGrid.AlternationCount = 2;
+
+            // Cell style - exact match to scene mode
+            var cellStyle = new Style(typeof(DataGridCell));
+            cellStyle.Setters.Add(new Setter(DataGridCell.BorderThicknessProperty, new Thickness(0)));
+            cellStyle.Setters.Add(new Setter(DataGridCell.FocusVisualStyleProperty, null));
+            cellStyle.Setters.Add(new Setter(DataGridCell.BackgroundProperty, Brushes.Transparent));
+            
+            var cellSelectedTrigger = new Trigger { Property = DataGridCell.IsSelectedProperty, Value = true };
+            cellSelectedTrigger.Setters.Add(new Setter(DataGridCell.BackgroundProperty, Brushes.Transparent));
+            cellSelectedTrigger.Setters.Add(new Setter(DataGridCell.ForegroundProperty, new SolidColorBrush(Color.FromRgb(220, 220, 220))));
+            cellStyle.Triggers.Add(cellSelectedTrigger);
+            
+            dataGrid.CellStyle = cellStyle;
+
+            // Dependency name column - exact match to scene mode
+            var nameColumn = new DataGridTextColumn 
+            { 
+                Header = "Dependency Name", 
+                Binding = new Binding("DisplayName"), 
+                Width = new DataGridLength(1, DataGridLengthUnitType.Star),
+                HeaderStyle = CreateCenteredHeaderStyle()
+            };
+            nameColumn.ElementStyle = new Style(typeof(TextBlock)) 
+            { 
+                Setters = { 
+                    new Setter(TextBlock.VerticalAlignmentProperty, VerticalAlignment.Center), 
+                    new Setter(TextBlock.PaddingProperty, new Thickness(8, 0, 0, 0)), 
+                    new Setter(TextBlock.ForegroundProperty, new SolidColorBrush(Color.FromRgb(220, 220, 220))),
+                    new Setter(TextBlock.FontFamilyProperty, new System.Windows.Media.FontFamily("Consolas"))
+                } 
+            };
+            dataGrid.Columns.Add(nameColumn);
+
+            // Add Enable/Disable toggle columns with styled bubbles - exact match to scene mode
+            AddDependencyToggleColumn(dataGrid, "Enable", true, Color.FromRgb(76, 175, 80));
+            AddDependencyToggleColumn(dataGrid, "Disable", false, Color.FromRgb(244, 67, 54));
+
+            // Create dependency items for the grid - using DependencyItemModel like scene mode
+            var dependencyItems = new System.Collections.ObjectModel.ObservableCollection<DependencyItemModel>();
+            bool initialForceLatestState = _settingsManager?.Settings?.ForceLatestDependencies ?? true;
+            foreach (var dep in allDeps.OrderBy(d => d))
+            {
+                dependencyItems.Add(new DependencyItemModel
+                {
+                    Name = dep,
+                    IsEnabled = true,
+                    ForceLatest = initialForceLatestState
+                });
+            }
+
+            dataGrid.ItemsSource = dependencyItems;
+            Grid.SetRow(dataGrid, 4);
+            tabGrid.Children.Add(dataGrid);
+
+            tab.Content = tabGrid;
+            return tab;
+        }
+
+        /// <summary>
+        /// Creates the Summary tab for preset optimization
+        /// </summary>
+        private TabItem CreatePresetSummaryTab(List<CustomAtomItem> presets)
+        {
+            var tab = new TabItem
+            {
+                Header = "Summary",
+                Background = new SolidColorBrush(Color.FromRgb(30, 30, 30))
+            };
+
+            var tabGrid = new Grid { Margin = new Thickness(10) };
+            tabGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto }); // Header
+            tabGrid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(10) });
+            tabGrid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) }); // Content
+            tabGrid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(10) });
+            tabGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto }); // Buttons
+
+            // Header
+            var headerText = new TextBlock
+            {
+                Text = "Preset Optimization Summary",
+                FontSize = 18,
+                FontWeight = FontWeights.Bold,
+                Foreground = new SolidColorBrush(Color.FromRgb(76, 175, 80)),
+                Margin = new Thickness(0, 0, 0, 10)
+            };
+            Grid.SetRow(headerText, 0);
+            tabGrid.Children.Add(headerText);
+
+            // Scrollable content
+            var scrollViewer = new ScrollViewer
+            {
+                VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+                Background = new SolidColorBrush(Color.FromRgb(30, 30, 30))
+            };
+
+            var contentPanel = new StackPanel { Margin = new Thickness(5) };
+
+            // Preset Summary Section
+            var presetHeader = new TextBlock
+            {
+                Text = " Preset Optimizations",
+                FontSize = 16,
+                FontWeight = FontWeights.Bold,
+                Foreground = new SolidColorBrush(Color.FromRgb(220, 220, 220)),
+                Margin = new Thickness(0, 0, 0, 10)
+            };
+            contentPanel.Children.Add(presetHeader);
+
+            var presetInfoPanel = new StackPanel { Margin = new Thickness(15, 0, 0, 15) };
+            
+            var countText = new TextBlock
+            {
+                Text = $" {presets.Count} preset(s) selected for optimization",
+                FontSize = 14,
+                Foreground = new SolidColorBrush(Color.FromRgb(76, 175, 80)),
+                Margin = new Thickness(0, 0, 0, 10)
+            };
+            presetInfoPanel.Children.Add(countText);
+
+            foreach (var preset in presets)
+            {
+                var itemText = new TextBlock
+                {
+                    Text = $"  • {preset.DisplayName}",
+                    FontSize = 12,
+                    Foreground = new SolidColorBrush(Color.FromRgb(180, 180, 180)),
+                    FontFamily = new FontFamily("Consolas"),
+                    Margin = new Thickness(0, 2, 0, 2)
+                };
+                presetInfoPanel.Children.Add(itemText);
+            }
+
+            contentPanel.Children.Add(presetInfoPanel);
+
+            // Dependencies Summary Section
+            var allDeps = new HashSet<string>();
+            foreach (var preset in presets)
+            {
+                if (preset.Dependencies != null)
+                {
+                    foreach (var dep in preset.Dependencies)
+                    {
+                        allDeps.Add(dep);
+                    }
+                }
+            }
+
+            var depsHeader = new TextBlock
+            {
+                Text = " Dependency Optimizations",
+                FontSize = 16,
+                FontWeight = FontWeights.Bold,
+                Foreground = new SolidColorBrush(Color.FromRgb(220, 220, 220)),
+                Margin = new Thickness(0, 10, 0, 10)
+            };
+            contentPanel.Children.Add(depsHeader);
+
+            var depsInfoPanel = new StackPanel { Margin = new Thickness(15, 0, 0, 15) };
+            
+            var depsCountText = new TextBlock
+            {
+                Text = $" {allDeps.Count} unique dependencies found",
+                FontSize = 14,
+                Foreground = new SolidColorBrush(Color.FromRgb(76, 175, 80)),
+                Margin = new Thickness(0, 0, 0, 10)
+            };
+            depsInfoPanel.Children.Add(depsCountText);
+
+            var depsNoteText = new TextBlock
+            {
+                Text = "  • Dependencies can be disabled or forced to .latest version",
+                FontSize = 12,
+                Foreground = new SolidColorBrush(Color.FromRgb(180, 180, 180)),
+                Margin = new Thickness(0, 2, 0, 2)
+            };
+            depsInfoPanel.Children.Add(depsNoteText);
+
+            contentPanel.Children.Add(depsInfoPanel);
+
+            // Important Notes Section
+            var notesHeader = new TextBlock
+            {
+                Text = "⚠️ Important Notes",
+                FontSize = 16,
+                FontWeight = FontWeights.Bold,
+                Foreground = new SolidColorBrush(Color.FromRgb(255, 152, 0)),
+                Margin = new Thickness(0, 20, 0, 10)
+            };
+            contentPanel.Children.Add(notesHeader);
+
+            var notesPanel = new StackPanel { Margin = new Thickness(15, 0, 0, 0) };
+            
+            var note1 = new TextBlock
+            {
+                Text = "• Preset files will be modified in-place (no backup created)",
+                FontSize = 12,
+                Foreground = new SolidColorBrush(Color.FromRgb(180, 180, 180)),
+                Margin = new Thickness(0, 2, 0, 2),
+                TextWrapping = TextWrapping.Wrap
+            };
+            notesPanel.Children.Add(note1);
+
+            var note2 = new TextBlock
+            {
+                Text = "• Disabled dependencies will be removed from preset files",
+                FontSize = 12,
+                Foreground = new SolidColorBrush(Color.FromRgb(180, 180, 180)),
+                Margin = new Thickness(0, 2, 0, 2),
+                TextWrapping = TextWrapping.Wrap
+            };
+            notesPanel.Children.Add(note2);
+
+            var note3 = new TextBlock
+            {
+                Text = "• Force .latest will convert version numbers to .latest",
+                FontSize = 12,
+                Foreground = new SolidColorBrush(Color.FromRgb(180, 180, 180)),
+                Margin = new Thickness(0, 2, 0, 2),
+                TextWrapping = TextWrapping.Wrap
+            };
+            notesPanel.Children.Add(note3);
+
+            contentPanel.Children.Add(notesPanel);
+
+            scrollViewer.Content = contentPanel;
+            Grid.SetRow(scrollViewer, 2);
+            tabGrid.Children.Add(scrollViewer);
+
+            tab.Content = tabGrid;
+            return tab;
         }
 
     }

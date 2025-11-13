@@ -300,9 +300,11 @@ namespace VPM
                     HideToggleButton.IsEnabled = true;
                 }
                 
-                // Hide dependencies tabs
-                DependenciesTabsContainer.Visibility = Visibility.Collapsed;
+                // Show dependencies tab for presets, hide dependents tab
+                DependenciesTabsContainer.Visibility = Visibility.Visible;
                 DependentsTab.Visibility = Visibility.Collapsed;
+                DependentsTabColumn.Width = new GridLength(0);
+                DependenciesTab.Margin = new Thickness(0);
                 
                 // Hide package and scene filters, show preset-specific filters
                 if (PackageFiltersContainer != null)
@@ -354,12 +356,12 @@ namespace VPM
                     ApplyFilterPositions();
                 }
                 
-                // Grey out optimize button in presets mode (not applicable)
+                // Enable optimize button in presets mode
                 if (OptimizeToggleButton != null)
                 {
-                    OptimizeToggleButton.IsEnabled = false;
-                    OptimizeToggleButton.Opacity = 0.5;
-                    OptimizeToggleButton.ToolTip = "Optimization not available for presets";
+                    OptimizeToggleButton.IsEnabled = true;
+                    OptimizeToggleButton.Opacity = 1.0;
+                    OptimizeToggleButton.ToolTip = "Optimize selected presets";
                 }
             }
         }
