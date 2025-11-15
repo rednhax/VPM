@@ -8,7 +8,7 @@ namespace VPM.Models
     /// <summary>
     /// Represents a package item in the package manager
     /// </summary>
-    public class PackageItem : INotifyPropertyChanged
+    public class PackageItem : INotifyPropertyChanged, IComparable<PackageItem>
     {
         private string _name = "";
         private string _status = "";
@@ -46,10 +46,10 @@ namespace VPM.Models
 
         public string Name
         {
-            get => _name;
+            get => _name ?? "";
             set
             {
-                if (SetProperty(ref _name, value))
+                if (SetProperty(ref _name, value ?? ""))
                 {
                     // Notify that DisplayName has also changed
                     OnPropertyChanged(nameof(DisplayName));
@@ -59,10 +59,10 @@ namespace VPM.Models
 
         public string Status
         {
-            get => _status;
+            get => _status ?? "";
             set
             {
-                if (SetProperty(ref _status, value))
+                if (SetProperty(ref _status, value ?? ""))
                 {
                     // Notify dependent properties
                     OnPropertyChanged(nameof(StatusIcon));
@@ -73,8 +73,8 @@ namespace VPM.Models
 
         public string Creator
         {
-            get => _creator;
-            set => SetProperty(ref _creator, value);
+            get => _creator ?? "";
+            set => SetProperty(ref _creator, value ?? "");
         }
 
         public long FileSize
@@ -274,10 +274,10 @@ namespace VPM.Models
 
         public string DamageReason
         {
-            get => _damageReason;
+            get => _damageReason ?? "";
             set
             {
-                if (SetProperty(ref _damageReason, value))
+                if (SetProperty(ref _damageReason, value ?? ""))
                 {
                     OnPropertyChanged(nameof(DamageTooltip));
                 }
@@ -367,6 +367,15 @@ namespace VPM.Models
                 size /= 1024;
             }
             return $"{size:0.#} {sizes[order]}";
+        }
+
+        /// <summary>
+        /// Implements IComparable to support safe sorting by name
+        /// </summary>
+        public int CompareTo(PackageItem other)
+        {
+            if (other == null) return 1;
+            return string.Compare(Name ?? "", other.Name ?? "", StringComparison.OrdinalIgnoreCase);
         }
 
         protected virtual bool SetProperty<T>(ref T backingStore, T value, [CallerMemberName] string propertyName = "")

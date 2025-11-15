@@ -892,7 +892,8 @@
                             BorderThickness="1"
                             Foreground="White"
                             SelectionChanged="ContentModeDropdown_SelectionChanged"
-                            ToolTip="Select between Packages, Scenes, and Presets mode">
+                            PreviewMouseRightButtonDown="ContentModeDropdown_PreviewMouseRightButtonDown"
+                            ToolTip="Left-click: Open dropdown | Right-click: Cycle to next mode">
                             <ComboBox.Template>
                                 <ControlTemplate TargetType="ComboBox">
                                     <Grid>
@@ -2760,7 +2761,7 @@
                                             Style="{StaticResource BlueHoverButtonStyle}"
                                             Tag="SceneSourceFilter"
                                             ToolTip="Toggle filter section visibility" />
-                                        <Label Grid.Column="1" Content="✗ Filter scene source" />
+                                        <Label Grid.Column="1" Content="📁 Filter scene source" />
                                         <Button
                                             x:Name="SceneSourceFilterMoveUpButton"
                                             Grid.Column="2"
@@ -2810,7 +2811,7 @@
                                             Style="{StaticResource BlueHoverButtonStyle}"
                                             Tag="SceneSourceFilter"
                                             ToolTip="Toggle filter section visibility" />
-                                        <Label Grid.Column="1" Content="✗ Filter scene source" />
+                                        <Label Grid.Column="1" Content="📁 Filter scene source" />
                                     </Grid>
 
                                     <ListBox

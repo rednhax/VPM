@@ -173,57 +173,75 @@ namespace VPM.Services
             _favoriteNames.Clear();
             _shadowChanges.Clear();
             _shadowRemovals.Clear();
-            _isLoaded = true;
 
             try
             {
                 // Load main favorites file
                 if (File.Exists(_favoritesFilePath))
                 {
-                    string json = File.ReadAllText(_favoritesFilePath);
-                    var data = JsonSerializer.Deserialize(json, JsonSourceGenerationContext.Default.FavoritesData);
-
-                    if (data?.FavoriteNames != null)
+                    try
                     {
-                        foreach (var name in data.FavoriteNames)
+                        string json = File.ReadAllText(_favoritesFilePath);
+                        var data = JsonSerializer.Deserialize(json, JsonSourceGenerationContext.Default.FavoritesData);
+
+                        if (data?.FavoriteNames != null)
                         {
-                            _favoriteNames.Add(name);
+                            foreach (var name in data.FavoriteNames)
+                            {
+                                _favoriteNames.Add(name);
+                            }
                         }
+                    }
+                    catch (Exception ex)
+                    {
+                        // Log deserialization error but continue - file might be corrupted
+                        System.Diagnostics.Debug.WriteLine($"Failed to deserialize favorites file: {ex.Message}");
                     }
                 }
 
                 // Load and merge shadow file if it exists
                 if (File.Exists(_shadowFilePath))
                 {
-                    string shadowJson = File.ReadAllText(_shadowFilePath);
-                    var shadowData = JsonSerializer.Deserialize(shadowJson, JsonSourceGenerationContext.Default.ShadowFavoritesData);
-
-                    if (shadowData != null)
+                    try
                     {
-                        // Apply additions from shadow
-                        if (shadowData.Additions != null)
-                        {
-                            foreach (var name in shadowData.Additions)
-                            {
-                                _favoriteNames.Add(name);
-                                _shadowChanges.Add(name);
-                            }
-                        }
+                        string shadowJson = File.ReadAllText(_shadowFilePath);
+                        var shadowData = JsonSerializer.Deserialize(shadowJson, JsonSourceGenerationContext.Default.ShadowFavoritesData);
 
-                        // Apply removals from shadow
-                        if (shadowData.Removals != null)
+                        if (shadowData != null)
                         {
-                            foreach (var name in shadowData.Removals)
+                            // Apply additions from shadow
+                            if (shadowData.Additions != null)
                             {
-                                _favoriteNames.Remove(name);
-                                _shadowRemovals.Add(name);
+                                foreach (var name in shadowData.Additions)
+                                {
+                                    _favoriteNames.Add(name);
+                                    _shadowChanges.Add(name);
+                                }
+                            }
+
+                            // Apply removals from shadow
+                            if (shadowData.Removals != null)
+                            {
+                                foreach (var name in shadowData.Removals)
+                                {
+                                    _favoriteNames.Remove(name);
+                                    _shadowRemovals.Add(name);
+                                }
                             }
                         }
                     }
+                    catch (Exception ex)
+                    {
+                        // Log deserialization error but continue
+                        System.Diagnostics.Debug.WriteLine($"Failed to deserialize shadow favorites file: {ex.Message}");
+                    }
                 }
+                
+                _isLoaded = true;
             }
             catch (Exception)
             {
+                _isLoaded = true;
             }
         }
 
@@ -263,7 +281,7 @@ namespace VPM.Services
                     FavoriteNames = _favoriteNames.OrderBy(n => n, StringComparer.OrdinalIgnoreCase).ToList()
                 };
 
-                string json = JsonSerializer.Serialize(data, new JsonSerializerOptions { WriteIndented = true, TypeInfoResolver = JsonSourceGenerationContext.Default });
+                string json = JsonSerializer.Serialize(data, JsonSourceGenerationContext.Default.FavoritesData);
                 
                 // Try to open file with exclusive access
                 using (var fileStream = new FileStream(_favoritesFilePath, FileMode.Create, FileAccess.Write, FileShare.None))
@@ -279,8 +297,9 @@ namespace VPM.Services
                 // File is locked by another process (game)
                 return false;
             }
-            catch (Exception)
+            catch (Exception ex)
             {
+                System.Diagnostics.Debug.WriteLine($"Failed to write favorites file: {ex.Message}");
                 return false;
             }
         }
@@ -324,7 +343,7 @@ namespace VPM.Services
                     Removals = removals.OrderBy(n => n, StringComparer.OrdinalIgnoreCase).ToList()
                 };
 
-                string shadowJson = JsonSerializer.Serialize(shadowData, new JsonSerializerOptions { WriteIndented = true, TypeInfoResolver = JsonSourceGenerationContext.Default });
+                string shadowJson = JsonSerializer.Serialize(shadowData, JsonSourceGenerationContext.Default.ShadowFavoritesData);
                 File.WriteAllText(_shadowFilePath, shadowJson);
 
                 _shadowChanges = additions;

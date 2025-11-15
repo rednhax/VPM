@@ -52,14 +52,34 @@ namespace VPM.Services
                 isAscending = sortOption == PackageSortOption.Name || sortOption == PackageSortOption.Status;
             }
 
-            view.SortDescriptions.Clear();
+            try
+            {
+                view.SortDescriptions.Clear();
 
-            string propertyName = GetPropertyNameForPackageSort(sortOption);
-            var direction = isAscending ? ListSortDirection.Ascending : ListSortDirection.Descending;
-            view.SortDescriptions.Add(new SortDescription(propertyName, direction));
+                string propertyName = GetPropertyNameForPackageSort(sortOption);
+                var direction = isAscending ? ListSortDirection.Ascending : ListSortDirection.Descending;
+                view.SortDescriptions.Add(new SortDescription(propertyName, direction));
 
-            view.Refresh();
-            UpdateSortingState("Packages", sortOption, isAscending);
+                view.Refresh();
+                UpdateSortingState("Packages", sortOption, isAscending);
+            }
+            catch (Exception ex)
+            {
+                // If sorting fails (e.g., due to null values or type mismatches), log and continue
+                Console.WriteLine($"[SORTING] Failed to apply package sorting: {ex.Message}");
+                // Fall back to sorting by Name
+                try
+                {
+                    view.SortDescriptions.Clear();
+                    view.SortDescriptions.Add(new SortDescription("DisplayName", ListSortDirection.Ascending));
+                    view.Refresh();
+                    UpdateSortingState("Packages", PackageSortOption.Name, true);
+                }
+                catch (Exception fallbackEx)
+                {
+                    Console.WriteLine($"[SORTING] Fallback sorting also failed: {fallbackEx.Message}");
+                }
+            }
         }
 
         private string GetPropertyNameForPackageSort(PackageSortOption sortOption)
@@ -112,14 +132,34 @@ namespace VPM.Services
                 isAscending = sortOption == DependencySortOption.Name || sortOption == DependencySortOption.Status;
             }
 
-            view.SortDescriptions.Clear();
+            try
+            {
+                view.SortDescriptions.Clear();
 
-            string propertyName = GetPropertyNameForDependencySort(sortOption);
-            var direction = isAscending ? ListSortDirection.Ascending : ListSortDirection.Descending;
-            view.SortDescriptions.Add(new SortDescription(propertyName, direction));
+                string propertyName = GetPropertyNameForDependencySort(sortOption);
+                var direction = isAscending ? ListSortDirection.Ascending : ListSortDirection.Descending;
+                view.SortDescriptions.Add(new SortDescription(propertyName, direction));
 
-            view.Refresh();
-            UpdateSortingState("Dependencies", sortOption, isAscending);
+                view.Refresh();
+                UpdateSortingState("Dependencies", sortOption, isAscending);
+            }
+            catch (Exception ex)
+            {
+                // If sorting fails (e.g., due to null values or type mismatches), log and continue
+                Console.WriteLine($"[SORTING] Failed to apply dependency sorting: {ex.Message}");
+                // Fall back to sorting by Name
+                try
+                {
+                    view.SortDescriptions.Clear();
+                    view.SortDescriptions.Add(new SortDescription("DisplayName", ListSortDirection.Ascending));
+                    view.Refresh();
+                    UpdateSortingState("Dependencies", DependencySortOption.Name, true);
+                }
+                catch (Exception fallbackEx)
+                {
+                    Console.WriteLine($"[SORTING] Fallback sorting also failed: {fallbackEx.Message}");
+                }
+            }
         }
 
         private string GetPropertyNameForDependencySort(DependencySortOption sortOption)
@@ -157,14 +197,34 @@ namespace VPM.Services
                 isAscending = sortOption == SceneSortOption.Name;
             }
 
-            view.SortDescriptions.Clear();
+            try
+            {
+                view.SortDescriptions.Clear();
 
-            string propertyName = GetPropertyNameForSceneSort(sortOption);
-            var direction = isAscending ? ListSortDirection.Ascending : ListSortDirection.Descending;
-            view.SortDescriptions.Add(new SortDescription(propertyName, direction));
+                string propertyName = GetPropertyNameForSceneSort(sortOption);
+                var direction = isAscending ? ListSortDirection.Ascending : ListSortDirection.Descending;
+                view.SortDescriptions.Add(new SortDescription(propertyName, direction));
 
-            view.Refresh();
-            UpdateSortingState("Scenes", sortOption, isAscending);
+                view.Refresh();
+                UpdateSortingState("Scenes", sortOption, isAscending);
+            }
+            catch (Exception ex)
+            {
+                // If sorting fails (e.g., due to null values or type mismatches), log and continue
+                Console.WriteLine($"[SORTING] Failed to apply scene sorting: {ex.Message}");
+                // Fall back to sorting by Name
+                try
+                {
+                    view.SortDescriptions.Clear();
+                    view.SortDescriptions.Add(new SortDescription("DisplayName", ListSortDirection.Ascending));
+                    view.Refresh();
+                    UpdateSortingState("Scenes", SceneSortOption.Name, true);
+                }
+                catch (Exception fallbackEx)
+                {
+                    Console.WriteLine($"[SORTING] Fallback sorting also failed: {fallbackEx.Message}");
+                }
+            }
         }
 
         private string GetPropertyNameForSceneSort(SceneSortOption sortOption)
@@ -206,14 +266,34 @@ namespace VPM.Services
                              sortOption == PresetSortOption.Subfolder || sortOption == PresetSortOption.Status;
             }
 
-            view.SortDescriptions.Clear();
+            try
+            {
+                view.SortDescriptions.Clear();
 
-            string propertyName = GetPropertyNameForPresetSort(sortOption);
-            var direction = isAscending ? ListSortDirection.Ascending : ListSortDirection.Descending;
-            view.SortDescriptions.Add(new SortDescription(propertyName, direction));
+                string propertyName = GetPropertyNameForPresetSort(sortOption);
+                var direction = isAscending ? ListSortDirection.Ascending : ListSortDirection.Descending;
+                view.SortDescriptions.Add(new SortDescription(propertyName, direction));
 
-            view.Refresh();
-            UpdateSortingState("Presets", sortOption, isAscending);
+                view.Refresh();
+                UpdateSortingState("Presets", sortOption, isAscending);
+            }
+            catch (Exception ex)
+            {
+                // If sorting fails (e.g., due to null values or type mismatches), log and continue
+                Console.WriteLine($"[SORTING] Failed to apply preset sorting: {ex.Message}");
+                // Fall back to sorting by Name
+                try
+                {
+                    view.SortDescriptions.Clear();
+                    view.SortDescriptions.Add(new SortDescription("DisplayName", ListSortDirection.Ascending));
+                    view.Refresh();
+                    UpdateSortingState("Presets", PresetSortOption.Name, true);
+                }
+                catch (Exception fallbackEx)
+                {
+                    Console.WriteLine($"[SORTING] Fallback sorting also failed: {fallbackEx.Message}");
+                }
+            }
         }
 
         private string GetPropertyNameForPresetSort(PresetSortOption sortOption)

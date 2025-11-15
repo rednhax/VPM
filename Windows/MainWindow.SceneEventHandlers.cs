@@ -43,6 +43,24 @@ namespace VPM
         }
 
         /// <summary>
+        /// Handles right-click on content mode dropdown to cycle to next mode
+        /// </summary>
+        private void ContentModeDropdown_PreviewMouseRightButtonDown(object sender, MouseButtonEventArgs e)
+        {
+            // Get the next mode in the cycle: Packages -> Scenes -> Presets -> Packages
+            string nextMode = _currentContentMode switch
+            {
+                "Packages" => "Scenes",
+                "Scenes" => "Presets",
+                "Presets" => "Packages",
+                _ => "Packages"
+            };
+
+            SwitchContentMode(nextMode);
+            e.Handled = true;
+        }
+
+        /// <summary>
         /// Handles content mode button clicks (Packages vs Scenes)
         /// </summary>
         private void ContentModeButton_Click(object sender, RoutedEventArgs e)

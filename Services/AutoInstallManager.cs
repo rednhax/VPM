@@ -169,53 +169,71 @@ namespace VPM.Services
             _autoInstallNames.Clear();
             _shadowChanges.Clear();
             _shadowRemovals.Clear();
-            _isLoaded = true;
 
             try
             {
                 if (File.Exists(_autoInstallFilePath))
                 {
-                    string json = File.ReadAllText(_autoInstallFilePath);
-                    var data = JsonSerializer.Deserialize(json, JsonSourceGenerationContext.Default.AutoInstallData);
-
-                    if (data?.Names != null)
+                    try
                     {
-                        foreach (var name in data.Names)
+                        string json = File.ReadAllText(_autoInstallFilePath);
+                        var data = JsonSerializer.Deserialize(json, JsonSourceGenerationContext.Default.AutoInstallData);
+
+                        if (data?.Names != null)
                         {
-                            _autoInstallNames.Add(name);
+                            foreach (var name in data.Names)
+                            {
+                                _autoInstallNames.Add(name);
+                            }
                         }
+                    }
+                    catch (Exception ex)
+                    {
+                        // Log deserialization error but continue - file might be corrupted
+                        System.Diagnostics.Debug.WriteLine($"Failed to deserialize autoinstall file: {ex.Message}");
                     }
                 }
 
                 if (File.Exists(_shadowFilePath))
                 {
-                    string shadowJson = File.ReadAllText(_shadowFilePath);
-                    var shadowData = JsonSerializer.Deserialize(shadowJson, JsonSourceGenerationContext.Default.ShadowAutoInstallData);
-
-                    if (shadowData != null)
+                    try
                     {
-                        if (shadowData.Additions != null)
-                        {
-                            foreach (var name in shadowData.Additions)
-                            {
-                                _autoInstallNames.Add(name);
-                                _shadowChanges.Add(name);
-                            }
-                        }
+                        string shadowJson = File.ReadAllText(_shadowFilePath);
+                        var shadowData = JsonSerializer.Deserialize(shadowJson, JsonSourceGenerationContext.Default.ShadowAutoInstallData);
 
-                        if (shadowData.Removals != null)
+                        if (shadowData != null)
                         {
-                            foreach (var name in shadowData.Removals)
+                            if (shadowData.Additions != null)
                             {
-                                _autoInstallNames.Remove(name);
-                                _shadowRemovals.Add(name);
+                                foreach (var name in shadowData.Additions)
+                                {
+                                    _autoInstallNames.Add(name);
+                                    _shadowChanges.Add(name);
+                                }
+                            }
+
+                            if (shadowData.Removals != null)
+                            {
+                                foreach (var name in shadowData.Removals)
+                                {
+                                    _autoInstallNames.Remove(name);
+                                    _shadowRemovals.Add(name);
+                                }
                             }
                         }
                     }
+                    catch (Exception ex)
+                    {
+                        // Log deserialization error but continue
+                        System.Diagnostics.Debug.WriteLine($"Failed to deserialize shadow autoinstall file: {ex.Message}");
+                    }
                 }
+                
+                _isLoaded = true;
             }
             catch (Exception)
             {
+                _isLoaded = true;
             }
         }
 
@@ -266,8 +284,9 @@ namespace VPM.Services
             {
                 return false;
             }
-            catch (Exception)
+            catch (Exception ex)
             {
+                System.Diagnostics.Debug.WriteLine($"Failed to write autoinstall file: {ex.Message}");
                 return false;
             }
         }

@@ -802,10 +802,15 @@ namespace VPM
                     _imageManager.LoadExternalImageIndex(_packageManager.PreviewImageIndex);
                 }
 
-                // Reload favorites to get latest changes from game
+                // Reload favorites and autoinstall to get latest changes from game
                 if (_favoritesManager != null)
                 {
                     _favoritesManager.ReloadFavorites();
+                }
+                
+                if (_autoInstallManager != null)
+                {
+                    _autoInstallManager.ReloadAutoInstall();
                 }
 
                 // Update UI with real package data
