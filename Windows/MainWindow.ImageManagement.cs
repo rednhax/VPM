@@ -43,6 +43,9 @@ namespace VPM
         // Virtualized image grid manager for lazy loading images
         private VirtualizedImageGridManager _virtualizedImageManager;
 
+        // Incremental image grid manager for tracking displayed packages
+        private IncrementalImageGridManager _incrementalImageGridManager = new IncrementalImageGridManager();
+
         #region Image Display Methods
 
         private async Task DisplayPackageImagesAsync(PackageItem packageItem)
@@ -83,77 +86,178 @@ namespace VPM
         {
             try
             {
-                // Initialize packageSources if not provided (all packages are considered packages)
+                // Normalize inputs
                 if (packageSources == null || packageSources.Count != selectedPackages.Count)
                 {
-                    packageSources = selectedPackages.Select(p => true).ToList(); // true = package
+                    packageSources = selectedPackages.Select(p => true).ToList();
                 }
 
-                // Clear existing images and status indicator tracking
-                ImagesPanel.Children.Clear();
-                lock (_statusIndicatorsLock)
+                if (selectedPackages.Count == 0)
+                    return;
+
+                var selectedPackageNames = selectedPackages.Select(p => p.Name).ToList();
+
+                // Determine operation mode: full redraw, selective removal, or incremental append
+                bool shouldFullRedraw = _incrementalImageGridManager.ShouldFullRedraw(selectedPackageNames);
+                bool didSelectiveRemoval = false;
+
+                if (shouldFullRedraw)
                 {
-                    _packageStatusIndicators.Clear();
+                    var packagesToRemove = _incrementalImageGridManager.GetPackagesToRemove(selectedPackageNames);
+                    
+                    if (packagesToRemove.Count > 0 && packagesToRemove.Count < _incrementalImageGridManager.DisplayedPackageCount)
+                    {
+                        // Selective removal: remove deselected packages only
+                        RemovePackageContainers(packagesToRemove);
+                        _incrementalImageGridManager.RemovePackages(packagesToRemove);
+                        didSelectiveRemoval = true;
+                        shouldFullRedraw = false;
+                    }
+                    else
+                    {
+                        // Full redraw: clear everything
+                        ClearImageGridFull();
+                    }
                 }
-                lock (_buttonsLock)
+                else
                 {
-                    _packageButtons.Clear();
+                    // Ensure virtualized manager exists for incremental append
+                    EnsureVirtualizedManagerExists();
                 }
-                
-                // Initialize virtualized image grid manager
-                _virtualizedImageManager?.Dispose();
-                _virtualizedImageManager = new VirtualizedImageGridManager(ImagesScrollViewer)
-                {
-                    LoadBufferSize = 300
-                };
-                
-                var settings = _settingsManager?.Settings;
-                
-                // With virtualization enabled, skip expensive upfront image counting
-                // Individual containers will return null if they have no images (fast fail)
-                // This makes large selections instant regardless of package count
-                
-                // Load ALL available images (virtualization ensures only visible ones actually load)
-                // Always display grouped by package
-                await DisplayGroupedPackageImagesAsync(selectedPackages, packageSources);
+
+                // Load and display images
+                await DisplayGroupedPackageImagesAsync(selectedPackages, packageSources, shouldFullRedraw, didSelectiveRemoval);
             }
             catch (Exception)
             {
             }
         }
 
-        private async Task DisplayGroupedPackageImagesAsync(List<PackageItem> selectedPackages, List<bool> packageSources)
+        /// <summary>
+        /// Clears the entire image grid and resets managers for full redraw
+        /// </summary>
+        private void ClearImageGridFull()
         {
-            // Optimized batching: Smaller first batch for instant feedback, larger for remaining
-            const int firstBatchSize = 3; // Show first few packages immediately
-            const int batchSize = 8; // Larger batches for remaining packages
-            var remainingContainers = new List<StackPanel>();
-            var isFirstBatch = true;
-            var firstBatchAdded = false;
+            ImagesPanel.Children.Clear();
             
-            for (int i = 0; i < selectedPackages.Count; i += (isFirstBatch ? firstBatchSize : batchSize))
+            lock (_statusIndicatorsLock)
             {
-                var currentBatchSize = isFirstBatch ? firstBatchSize : batchSize;
-                var batch = selectedPackages.Skip(i).Take(currentBatchSize).ToList();
-                
-                // Process this batch in parallel - load ALL available images (virtualization handles lazy loading)
-                var batchTasks = batch.Select((packageItem, index) => 
-                    CreatePackageContainerAsync(packageItem, packageSources[i + index])
-                ).ToArray();
-                
-                var batchContainers = await Task.WhenAll(batchTasks);
-                var validBatchContainers = batchContainers.Where(c => c != null).ToList();
-                
-                // After first batch, immediately show it to user for instant feedback
-                if (isFirstBatch && validBatchContainers.Count > 0)
+                _packageStatusIndicators.Clear();
+            }
+            
+            lock (_buttonsLock)
+            {
+                _packageButtons.Clear();
+            }
+            
+            _incrementalImageGridManager.Clear();
+            
+            // Dispose and recreate virtualized manager
+            _virtualizedImageManager?.Dispose();
+            _virtualizedImageManager = new VirtualizedImageGridManager(ImagesScrollViewer)
+            {
+                LoadBufferSize = 300
+            };
+        }
+
+        /// <summary>
+        /// Ensures the virtualized manager is initialized
+        /// </summary>
+        private void EnsureVirtualizedManagerExists()
+        {
+            if (_virtualizedImageManager == null)
+            {
+                _virtualizedImageManager = new VirtualizedImageGridManager(ImagesScrollViewer)
                 {
-                    foreach (var container in validBatchContainers)
+                    LoadBufferSize = 300
+                };
+            }
+        }
+
+        private async Task DisplayGroupedPackageImagesAsync(List<PackageItem> selectedPackages, List<bool> packageSources, bool isFullRedraw = true, bool didSelectiveRemoval = false)
+        {
+            try
+            {
+                // Determine which packages need processing
+                List<PackageItem> packagesToProcess = selectedPackages;
+                List<bool> sourcesToProcess = packageSources;
+                
+                if (!isFullRedraw && !didSelectiveRemoval)
+                {
+                    // Incremental append: only process packages not currently in the UI
+                    var packagesInUI = GetPackagesCurrentlyInUI();
+                    var newPackages = new List<PackageItem>();
+                    var newSources = new List<bool>();
+                    
+                    for (int i = 0; i < selectedPackages.Count; i++)
+                    {
+                        if (!packagesInUI.Contains(selectedPackages[i].Name))
+                        {
+                            newPackages.Add(selectedPackages[i]);
+                            newSources.Add(packageSources[i]);
+                        }
+                    }
+                    
+                    packagesToProcess = newPackages;
+                    sourcesToProcess = newSources;
+                    
+                    if (packagesToProcess.Count == 0)
+                        return;
+                }
+                else if (didSelectiveRemoval)
+                {
+                    // After selective removal, process all selected packages
+                    // This ensures packages that were removed and re-added show their images
+                    packagesToProcess = selectedPackages;
+                    sourcesToProcess = packageSources;
+                }
+
+                // Batch configuration for optimal UX
+                const int firstBatchSize = 3;  // Immediate feedback
+                const int batchSize = 8;       // Larger batches for remaining
+                var allContainers = new List<StackPanel>();
+                var firstBatchContainers = new List<StackPanel>();
+
+                // Process packages in batches
+                for (int i = 0; i < packagesToProcess.Count; i += batchSize)
+                {
+                    var isFirstBatch = (i == 0);
+                    var currentBatchSize = isFirstBatch ? Math.Min(firstBatchSize, packagesToProcess.Count) : batchSize;
+                    var batch = packagesToProcess.Skip(i).Take(currentBatchSize).ToList();
+                    
+                    // Load containers in parallel
+                    var batchTasks = batch.Select((pkg, idx) => 
+                        CreatePackageContainerAsync(pkg, sourcesToProcess[i + idx])
+                    ).ToArray();
+                    
+                    var batchContainers = await Task.WhenAll(batchTasks);
+                    var validContainers = batchContainers.Where(c => c != null).ToList();
+                    
+                    // Mark packages as displayed
+                    foreach (var container in validContainers)
+                    {
+                        ExtractAndMarkPackageAsDisplayed(container);
+                    }
+                    
+                    if (isFirstBatch)
+                    {
+                        firstBatchContainers.AddRange(validContainers);
+                    }
+                    else
+                    {
+                        allContainers.AddRange(validContainers);
+                    }
+                }
+
+                // Add first batch immediately for instant feedback
+                if (firstBatchContainers.Count > 0)
+                {
+                    foreach (var container in firstBatchContainers)
                     {
                         ImagesPanel.Children.Add(container);
                     }
-                    firstBatchAdded = true;
                     
-                    // Trigger initial visible image load for first batch
+                    // Trigger initial image load for first batch
                     _ = Dispatcher.BeginInvoke(new Action(async () =>
                     {
                         ImagesScrollViewer?.UpdateLayout();
@@ -164,47 +268,104 @@ namespace VPM
                             await _virtualizedImageManager.LoadInitialVisibleImagesAsync();
                         }
                     }), DispatcherPriority.Loaded);
+                }
+
+                // Add remaining containers
+                if (allContainers.Count > 0)
+                {
+                    foreach (var container in allContainers)
+                    {
+                        ImagesPanel.Children.Add(container);
+                    }
+                }
+
+                // Final layout and image loading
+                _ = Dispatcher.BeginInvoke(new Action(async () =>
+                {
+                    ImagesScrollViewer?.UpdateLayout();
+                    ImagesPanel?.UpdateLayout();
+                    await Task.Delay(100);
                     
-                    isFirstBatch = false;
-                }
-                else
+                    if (_virtualizedImageManager != null)
+                    {
+                        if (!isFullRedraw)
+                        {
+                            await _virtualizedImageManager.RefreshAsync();
+                        }
+                        else
+                        {
+                            await _virtualizedImageManager.LoadInitialVisibleImagesAsync();
+                        }
+                    }
+                }), DispatcherPriority.Loaded);
+            }
+            catch (Exception)
+            {
+            }
+        }
+
+        /// <summary>
+        /// Extracts package name from container and marks it as displayed
+        /// </summary>
+        private void ExtractAndMarkPackageAsDisplayed(StackPanel container)
+        {
+            try
+            {
+                if (container?.Children.Count > 0 && container.Children[0] is Border headerBorder)
                 {
-                    // Add to remaining containers for batch add at end
-                    remainingContainers.AddRange(validBatchContainers);
-                    isFirstBatch = false;
+                    if (headerBorder.Child is Grid headerGrid && headerGrid.Children.Count > 0)
+                    {
+                        if (headerGrid.Children[0] is StackPanel headerPanel && headerPanel.Children.Count > 2)
+                        {
+                            if (headerPanel.Children[2] is TextBlock nameBlock)
+                            {
+                                var packageName = nameBlock.Text.Replace("📝 ", "");
+                                _incrementalImageGridManager.MarkPackageAsDisplayed(packageName);
+                            }
+                        }
+                    }
                 }
+            }
+            catch (Exception)
+            {
+            }
+        }
+
+        /// <summary>
+        /// Gets the list of package names currently visible in the UI
+        /// </summary>
+        private List<string> GetPackagesCurrentlyInUI()
+        {
+            var packagesInUI = new List<string>();
+            
+            try
+            {
+                foreach (UIElement child in ImagesPanel.Children)
+                {
+                    if (child is StackPanel container && container.Children.Count > 0)
+                    {
+                        if (container.Children[0] is Border headerBorder)
+                        {
+                            if (headerBorder.Child is Grid headerGrid && headerGrid.Children.Count > 0)
+                            {
+                                if (headerGrid.Children[0] is StackPanel headerPanel && headerPanel.Children.Count > 2)
+                                {
+                                    if (headerPanel.Children[2] is TextBlock nameBlock)
+                                    {
+                                        var packageName = nameBlock.Text.Replace("📝 ", "");
+                                        packagesInUI.Add(packageName);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            catch (Exception)
+            {
             }
             
-            // Batch UI update: Add remaining containers
-            if (remainingContainers.Count > 0)
-            {
-                foreach (var container in remainingContainers)
-                {
-                    ImagesPanel.Children.Add(container);
-                }
-            }
-            else if (!firstBatchAdded)
-            {
-                // No packages had images - don't show message to avoid interfering with image loading
-                return; // Early exit
-            }
-            
-            // Trigger initial load of visible images after UI layout
-            _ = Dispatcher.BeginInvoke(new Action(async () =>
-            {
-                // Force layout update to ensure ActualHeight/Width are calculated
-                ImagesScrollViewer?.UpdateLayout();
-                ImagesPanel?.UpdateLayout();
-                
-                // Add small delay to ensure layout is complete
-                await Task.Delay(100);
-                
-                // Now load visible images
-                if (_virtualizedImageManager != null)
-                {
-                    await _virtualizedImageManager.LoadInitialVisibleImagesAsync();
-                }
-            }), DispatcherPriority.Loaded);
+            return packagesInUI;
         }
 
         /// <summary>
@@ -214,29 +375,29 @@ namespace VPM
         {
             try
             {
+                // Get package key for lookups
+                var packageKey = !string.IsNullOrEmpty(packageItem.MetadataKey) ? packageItem.MetadataKey : packageItem.Name;
+                
                 // Find the package metadata - use cached lookup for performance
-                // Use MetadataKey for accurate lookup (handles multiple versions of same package)
-                var packageMetadata = GetCachedPackageMetadata(!string.IsNullOrEmpty(packageItem.MetadataKey) ? packageItem.MetadataKey : packageItem.Name);
+                var packageMetadata = GetCachedPackageMetadata(packageKey);
                 
                 if (packageMetadata == null)
-                {
                     return null;
-                }
                 
                 // Get cached images for this package
                 var packageBase = Path.GetFileNameWithoutExtension(packageMetadata.Filename);
                 
-                // First get total available images to show in header
+                // Check if package has images
                 var totalAvailableImages = _imageManager.GetCachedImageCount(packageBase);
-                
                 if (totalAvailableImages == 0)
-                {
                     return null;
-                }
                 
                 // Queue for preloading and load ALL available images (virtualization ensures only visible ones load)
                 _imageManager.QueueForPreloading(packageBase);
                 var images = await _imageManager.LoadImagesFromCacheAsync(packageBase, int.MaxValue);
+                
+                if (images.Count == 0)
+                    return null;
                 
                 // Create package group container
                 var packageGroupContainer = new StackPanel
@@ -401,7 +562,6 @@ namespace VPM
                     try
                     {
                         var image = images[i];
-                        var packageKey = !string.IsNullOrEmpty(packageItem.MetadataKey) ? packageItem.MetadataKey : packageItem.Name;
                         
                         // Create lazy load image tile
                         var lazyImageTile = new LazyLoadImage
@@ -493,6 +653,110 @@ namespace VPM
                     return grid;
                 });
             });
+        }
+
+        /// <summary>
+        /// Removes package containers from the image grid by package name
+        /// </summary>
+        private void RemovePackageContainers(List<string> packageNamesToRemove)
+        {
+            if (packageNamesToRemove == null || packageNamesToRemove.Count == 0)
+                return;
+
+            var namesToRemoveSet = new HashSet<string>(packageNamesToRemove, StringComparer.OrdinalIgnoreCase);
+            var containersToRemove = new List<UIElement>();
+            var imagesToUnregister = new List<LazyLoadImage>();
+
+            // Find containers that match the packages to remove
+            foreach (UIElement child in ImagesPanel.Children)
+            {
+                if (child is StackPanel container && container.Children.Count > 0)
+                {
+                    // Extract package name from the container header
+                    if (container.Children[0] is Border headerBorder)
+                    {
+                        if (headerBorder.Child is Grid headerGrid && headerGrid.Children.Count > 0)
+                        {
+                            if (headerGrid.Children[0] is StackPanel headerPanel && headerPanel.Children.Count > 2)
+                            {
+                                if (headerPanel.Children[2] is TextBlock nameBlock)
+                                {
+                                    var packageName = nameBlock.Text.Replace("📝 ", ""); // Remove dependency indicator
+                                    if (namesToRemoveSet.Contains(packageName))
+                                    {
+                                        containersToRemove.Add(child);
+                                        
+                                        // Collect all LazyLoadImage controls from this container for unregistration
+                                        CollectLazyLoadImages(container, imagesToUnregister);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Unregister images from virtualization manager before removing containers
+            if (_virtualizedImageManager != null)
+            {
+                _virtualizedImageManager.UnregisterImages(imagesToUnregister);
+            }
+            else
+            {
+                // Fallback: just unload if manager doesn't exist
+                foreach (var image in imagesToUnregister)
+                {
+                    image.UnloadImage();
+                }
+            }
+
+            // Remove the containers
+            foreach (var container in containersToRemove)
+            {
+                ImagesPanel.Children.Remove(container);
+            }
+
+            // Clean up status indicators and buttons for removed packages
+            lock (_statusIndicatorsLock)
+            {
+                foreach (var packageName in packageNamesToRemove)
+                {
+                    _packageStatusIndicators.Remove(packageName);
+                }
+            }
+
+            lock (_buttonsLock)
+            {
+                foreach (var packageName in packageNamesToRemove)
+                {
+                    _packageButtons.Remove(packageName);
+                }
+            }
+        }
+
+        /// <summary>
+        /// Recursively collects all LazyLoadImage controls from a container
+        /// </summary>
+        private void CollectLazyLoadImages(DependencyObject container, List<LazyLoadImage> images)
+        {
+            if (container == null)
+                return;
+
+            int childCount = System.Windows.Media.VisualTreeHelper.GetChildrenCount(container);
+            for (int i = 0; i < childCount; i++)
+            {
+                var child = System.Windows.Media.VisualTreeHelper.GetChild(container, i);
+                
+                if (child is LazyLoadImage lazyImage)
+                {
+                    images.Add(lazyImage);
+                }
+                else
+                {
+                    // Recursively search children
+                    CollectLazyLoadImages(child, images);
+                }
+            }
         }
         
         private async Task CreateResponsiveImageGrid(List<LazyLoadImage> imageTiles)

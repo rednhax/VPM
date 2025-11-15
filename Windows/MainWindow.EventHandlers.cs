@@ -254,7 +254,7 @@ namespace VPM
             // Create new timer for debounced dependency image display
             _dependencySelectionDebounceTimer = new DispatcherTimer
             {
-                Interval = TimeSpan.FromMilliseconds(150) // Slightly longer debounce for dependencies
+                Interval = TimeSpan.FromMilliseconds(75) // Fast debounce for responsive UI
             };
             
             _dependencySelectionDebounceTimer.Tick += (s, args) =>

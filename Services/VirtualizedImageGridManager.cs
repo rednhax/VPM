@@ -48,6 +48,32 @@ namespace VPM.Services
                 _lazyImages.Add(image);
             }
         }
+
+        /// <summary>
+        /// Unregisters a lazy load image from management
+        /// </summary>
+        public void UnregisterImage(LazyLoadImage image)
+        {
+            if (image != null)
+            {
+                image.UnloadImage();
+                _lazyImages.Remove(image);
+            }
+        }
+
+        /// <summary>
+        /// Unregisters multiple lazy load images from management
+        /// </summary>
+        public void UnregisterImages(IEnumerable<LazyLoadImage> images)
+        {
+            if (images == null)
+                return;
+
+            foreach (var image in images)
+            {
+                UnregisterImage(image);
+            }
+        }
         
         /// <summary>
         /// Clears all registered images
