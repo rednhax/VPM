@@ -906,26 +906,34 @@ namespace VPM
                     // Show placeholder message when no packages are selected
                     PackageButtonGrid.Visibility = Visibility.Collapsed;
                     ArchiveOldButton.Visibility = Visibility.Collapsed;
+                    FixDuplicatesButton.Visibility = Visibility.Collapsed;
                     return;
                 }
 
                 // Count duplicate vs non-duplicate packages
                 int duplicateCount = selectedPackages.Count(p => p.Status == "Duplicate");
                 int nonDuplicateCount = selectedPackages.Count - duplicateCount;
+                
+                // Count old version packages
+                int oldVersionCount = selectedPackages.Count(p => p.IsOldVersion);
 
-                // If ANY duplicates are selected, show Load/Unload buttons
+                // If ANY duplicates are selected, show Fix Duplicates button
                 if (duplicateCount > 0)
                 {
-                    PackageButtonGrid.Visibility = Visibility.Visible;
+                    PackageButtonGrid.Visibility = Visibility.Collapsed;
                     ArchiveOldButton.Visibility = Visibility.Collapsed;
+                    
+                    // Show Fix Duplicates button
+                    FixDuplicatesButton.Visibility = Visibility.Visible;
+                    FixDuplicatesButton.Content = duplicateCount == 1 
+                        ? "🔧 Fix Duplicate" 
+                        : $"🔧 Fix Duplicates ({duplicateCount})";
                     return;
                 }
 
                 // Otherwise show Load/Unload buttons for non-duplicates
                 PackageButtonGrid.Visibility = Visibility.Visible;
-                
-                // Count old version packages
-                int oldVersionCount = selectedPackages.Count(p => p.IsOldVersion);
+                FixDuplicatesButton.Visibility = Visibility.Collapsed;
                 
                 // If ANY old versions are selected, show Archive button
                 if (oldVersionCount > 0)

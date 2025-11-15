@@ -179,6 +179,9 @@ namespace VPM
             DuplicatesDataGrid.PreviewMouseUp += DuplicatesDataGrid_PreviewMouseUp;
             DuplicatesDataGrid.PreviewMouseMove += DuplicatesDataGrid_PreviewMouseMove;
             
+            // Attach selection changed event
+            DuplicatesDataGrid.SelectionChanged += DuplicatesDataGrid_SelectionChanged;
+            
             UpdateFixButtonCounter();
             UpdateStatusText();
         }
@@ -442,12 +445,15 @@ namespace VPM
         private void UpdateFixButtonCounter()
         {
             int deleteCount = 0;
+            bool hasSelection = false;
             
             foreach (var item in _duplicatePackages)
             {
                 // If both options are unchecked, this duplicate is excluded from processing
                 if (!item.KeepInAddonPackages && !item.KeepInAllPackages)
                     continue;
+
+                hasSelection = true;
 
                 if (item.ExistsInAddonPackages && !item.KeepInAddonPackages)
                     deleteCount++;
@@ -456,12 +462,27 @@ namespace VPM
             }
             
             FixDuplicatesButton.Content = $"Fix Duplicates ({deleteCount})";
-            FixDuplicatesButton.IsEnabled = deleteCount > 0;
+            FixDuplicatesButton.IsEnabled = hasSelection;
         }
 
         private void UpdateStatusText()
         {
             StatusText.Text = $"Found {_duplicatePackages.Count} duplicate package(s)";
+        }
+
+        private void DuplicatesDataGrid_SelectionChanged(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
+        {
+            // Show Archive button only when exactly one item is selected
+            if (DuplicatesDataGrid.SelectedItems.Count == 1)
+            {
+                FixDuplicatesPanel.Visibility = Visibility.Collapsed;
+                ArchivePanel.Visibility = Visibility.Visible;
+            }
+            else
+            {
+                FixDuplicatesPanel.Visibility = Visibility.Visible;
+                ArchivePanel.Visibility = Visibility.Collapsed;
+            }
         }
 
         private void KeepAllPackages_Click(object sender, RoutedEventArgs e)
@@ -486,6 +507,25 @@ namespace VPM
                     item.KeepInAllPackages = false;
                 }
             }
+        }
+
+        private void Archive_Click(object sender, RoutedEventArgs e)
+        {
+            // Get the selected item
+            if (DuplicatesDataGrid.SelectedItems.Count != 1)
+            {
+                return;
+            }
+
+            var selectedItem = DuplicatesDataGrid.SelectedItems[0] as DuplicatePackageItem;
+            if (selectedItem == null)
+            {
+                return;
+            }
+
+            // TODO: Implement archive functionality for the selected package
+            DarkMessageBox.Show($"Archive functionality for '{selectedItem.PackageName}' is not yet implemented.", 
+                "Archive", MessageBoxButton.OK, MessageBoxImage.Information);
         }
 
         private async void FixDuplicates_Click(object sender, RoutedEventArgs e)

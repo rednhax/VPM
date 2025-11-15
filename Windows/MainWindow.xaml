@@ -3811,6 +3811,58 @@ Off: Single selection, hide incompatible options"
                             </Button.Style>
                         </Button>
                     </UniformGrid>
+                    
+                    <!-- Fix Duplicates Button - Full Width -->
+                    <Button x:Name="FixDuplicatesButton" Content="🔧 Fix Duplicates" 
+                            Grid.Column="0" Margin="0,6,0,0" Padding="0" Height="36"
+                            Click="FixSelectedDuplicates_Click"
+                            ToolTip="Fix selected duplicate packages"
+                            FontSize="12" FontWeight="SemiBold"
+                            Foreground="#212121"
+                            Visibility="Collapsed"
+                            HorizontalAlignment="Stretch">
+                        <Button.Style>
+                            <Style TargetType="Button">
+                                <Setter Property="Background" Value="#FFEB3B"/>
+                                <Setter Property="Foreground" Value="#212121"/>
+                                <Setter Property="BorderBrush" Value="#FBC02D"/>
+                                <Setter Property="BorderThickness" Value="1"/>
+                                <Setter Property="Template">
+                                    <Setter.Value>
+                                        <ControlTemplate TargetType="Button">
+                                            <Border Background="{TemplateBinding Background}" 
+                                                    BorderBrush="{TemplateBinding BorderBrush}" 
+                                                    BorderThickness="{TemplateBinding BorderThickness}"
+                                                    CornerRadius="6">
+                                                <ContentPresenter HorizontalAlignment="Center" 
+                                                                  VerticalAlignment="Center"/>
+                                            </Border>
+                                        </ControlTemplate>
+                                    </Setter.Value>
+                                </Setter>
+                                <Style.Triggers>
+                                    <Trigger Property="IsMouseOver" Value="True">
+                                        <Setter Property="BorderBrush" Value="#FF0078D7"/>
+                                        <Setter Property="BorderThickness" Value="1"/>
+                                    </Trigger>
+                                    <Trigger Property="Visibility" Value="Visible">
+                                        <Trigger.EnterActions>
+                                            <BeginStoryboard>
+                                                <Storyboard>
+                                                    <DoubleAnimation Storyboard.TargetProperty="Opacity" 
+                                                                   From="0.0" To="1.0" Duration="0:0:0.15">
+                                                        <DoubleAnimation.EasingFunction>
+                                                            <QuadraticEase EasingMode="EaseOut"/>
+                                                        </DoubleAnimation.EasingFunction>
+                                                    </DoubleAnimation>
+                                                </Storyboard>
+                                            </BeginStoryboard>
+                                        </Trigger.EnterActions>
+                                    </Trigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Button.Style>
+                    </Button>
                     </Grid>
                 </Border>
             </Grid>

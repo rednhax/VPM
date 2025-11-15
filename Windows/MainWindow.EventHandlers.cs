@@ -829,6 +829,11 @@ namespace VPM
             await ArchiveSelectedOldVersions();
         }
 
+        private async void FixSelectedDuplicates_Click(object sender, RoutedEventArgs e)
+        {
+            await FixSelectedDuplicates();
+        }
+
         private async Task ArchiveOldVersionsFromMenu()
         {
             try
@@ -3796,6 +3801,49 @@ namespace VPM
                 if (duplicatePackages.Count == 0)
                 {
                     DarkMessageBox.Show("No duplicates found in the package collection.", "Fix Duplicates",
+                        MessageBoxButton.OK, MessageBoxImage.Information);
+                    return;
+                }
+                
+                // Get folder paths
+                string addonPackagesPath = Path.Combine(_selectedFolder, "AddonPackages");
+                string allPackagesPath = Path.Combine(_selectedFolder, "AllPackages");
+                
+                // Open the duplicate management window
+                var duplicateWindow = new DuplicateManagementWindow(duplicatePackages, addonPackagesPath, allPackagesPath)
+                {
+                    Owner = this
+                };
+                
+                var result = duplicateWindow.ShowDialog();
+                
+                // If user fixed duplicates, refresh the package list
+                if (result == true)
+                {
+                    SetStatus("Refreshing package list after fixing duplicates...");
+                    RefreshPackages();
+                }
+            }
+            catch (Exception ex)
+            {
+                DarkMessageBox.Show($"Error opening duplicate management window: {ex.Message}", 
+                    "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+        
+        /// <summary>
+        /// Fix only the selected duplicate packages
+        /// </summary>
+        private async Task FixSelectedDuplicates()
+        {
+            try
+            {
+                // Find duplicate instances for selected packages only
+                var duplicatePackages = FindSelectedDuplicateInstances();
+                
+                if (duplicatePackages.Count == 0)
+                {
+                    DarkMessageBox.Show("No duplicates found in the selected packages.", "Fix Duplicates",
                         MessageBoxButton.OK, MessageBoxImage.Information);
                     return;
                 }

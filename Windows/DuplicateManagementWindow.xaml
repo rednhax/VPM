@@ -239,12 +239,25 @@
             
             <!-- Buttons -->
             <StackPanel Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Right">
-                <Button x:Name="FixDuplicatesButton" Content="Fix Duplicates (0)" 
-                        MinWidth="150" Height="36" FontWeight="SemiBold"
-                        Background="#F44336" Foreground="White"
-                        Click="FixDuplicates_Click" Margin="0,0,10,0"/>
-                <Button Content="Cancel" MinWidth="100" Height="36" 
-                        Click="Cancel_Click"/>
+                <!-- Fix Duplicates Mode -->
+                <StackPanel x:Name="FixDuplicatesPanel" Orientation="Horizontal">
+                    <Button x:Name="FixDuplicatesButton" Content="Fix Duplicates (0)" 
+                            MinWidth="150" Height="36" FontWeight="SemiBold"
+                            Background="#F44336" Foreground="White"
+                            Click="FixDuplicates_Click" Margin="0,0,10,0"/>
+                    <Button Content="Cancel" MinWidth="100" Height="36" 
+                            Click="Cancel_Click"/>
+                </StackPanel>
+                
+                <!-- Archive Mode (Single Selection) -->
+                <StackPanel x:Name="ArchivePanel" Orientation="Horizontal" Visibility="Collapsed">
+                    <Button x:Name="ArchiveButton" Content="Archive" 
+                            MinWidth="150" Height="36" FontWeight="SemiBold"
+                            Background="#FF9800" Foreground="White"
+                            Click="Archive_Click" Margin="0,0,10,0"/>
+                    <Button Content="Cancel" MinWidth="100" Height="36" 
+                            Click="Cancel_Click"/>
+                </StackPanel>
             </StackPanel>
         </Grid>
     </Grid>
