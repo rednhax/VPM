@@ -148,18 +148,54 @@ namespace VPM
                 return;
             }
 
-            // Display thumbnails for selected items
-            var selectedItems = CustomAtomDataGrid?.SelectedItems?.Cast<CustomAtomItem>()?.ToList() ?? new List<CustomAtomItem>();
-            DisplayCustomAtomThumbnails(selectedItems);
+            // Cancel any pending preset selection update
+            _presetSelectionCts?.Cancel();
+            _presetSelectionCts?.Dispose();
+            _presetSelectionCts = new System.Threading.CancellationTokenSource();
+            var presetToken = _presetSelectionCts.Token;
 
-            // Populate dependencies from selected presets
-            PopulatePresetDependencies(selectedItems);
+            // Trigger debounced preset selection handler
+            _presetSelectionDebouncer?.Trigger();
 
-            // Update the details area
-            UpdatePackageButtonBar();
-            UpdateOptimizeCounter();
+            // Schedule the actual content update after debounce delay
+            _ = Task.Delay(SELECTION_DEBOUNCE_DELAY_MS, presetToken).ContinueWith(_ =>
+            {
+                // Check if this operation was cancelled
+                if (presetToken.IsCancellationRequested)
+                    return;
 
-            SetStatus($"Selected {selectedItems.Count} custom atom item(s)");
+                Dispatcher.Invoke(() =>
+                {
+                    // Display thumbnails for selected items
+                    var selectedItems = CustomAtomDataGrid?.SelectedItems?.Cast<CustomAtomItem>()?.ToList() ?? new List<CustomAtomItem>();
+                    DisplayCustomAtomThumbnails(selectedItems);
+
+                    // Populate dependencies from selected presets
+                    PopulatePresetDependencies(selectedItems);
+
+                    // Update the details area
+                    UpdatePackageButtonBar();
+                    UpdateOptimizeCounter();
+
+                    // Set opacity to 0 before animating to ensure animation runs
+                    if (DependenciesDataGrid != null)
+                        DependenciesDataGrid.Opacity = 0;
+                    if (ImagesPanel != null)
+                        ImagesPanel.Opacity = 0;
+
+                    // Snap in dependencies and images after update with smooth effect (prevents flicker on rapid switches)
+                    if (DependenciesDataGrid != null && Dependencies.Count > 0)
+                    {
+                        AnimationHelper.SnapInSmooth(DependenciesDataGrid, 250);
+                    }
+                    if (ImagesPanel != null && ImagesPanel.Children.Count > 0)
+                    {
+                        AnimationHelper.SnapInSmooth(ImagesPanel, 250);
+                    }
+
+                    SetStatus($"Selected {selectedItems.Count} custom atom item(s)");
+                });
+            });
         }
 
         /// <summary>

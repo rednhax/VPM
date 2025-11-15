@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
+using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Data;
 using System.Windows.Threading;
@@ -28,6 +29,9 @@ namespace VPM
                 base.OnClosed(e);
                 _imageManager?.Dispose();
                 DisposePackageDownloader();
+                _sceneSelectionDebouncer?.Dispose();
+                _presetSelectionDebouncer?.Dispose();
+                _packageSelectionDebouncer?.Dispose();
             }
         #region Fields and Properties
         
@@ -72,6 +76,20 @@ namespace VPM
         // Store counts for both tabs
         private int _dependenciesCount = 0;
         private int _dependentsCount = 0;
+        
+        // Selection debouncers for scene, preset, and package modes
+        private SelectionDebouncer _sceneSelectionDebouncer;
+        private SelectionDebouncer _presetSelectionDebouncer;
+        private SelectionDebouncer _packageSelectionDebouncer;
+        
+        // Cancellation tokens for pending selection updates
+        private System.Threading.CancellationTokenSource _sceneSelectionCts;
+        private System.Threading.CancellationTokenSource _presetSelectionCts;
+        private System.Threading.CancellationTokenSource _packageSelectionCts;
+        
+        // Animation configuration
+        private const int SELECTION_DEBOUNCE_DELAY_MS = 150;
+        private const int FADE_ANIMATION_DURATION_MS = 300;
         
         #endregion
         
@@ -193,6 +211,9 @@ namespace VPM
                 ContentModeDropdown.SelectedIndex = 0; // Select "📦 Packages"
             }
 
+            // Initialize selection debouncers for scene and preset modes
+            InitializeSelectionDebouncers();
+
         }
         
         #endregion
@@ -208,9 +229,6 @@ namespace VPM
             {
                 // Package data grid events
                 PackageDataGrid.SelectionChanged += PackageDataGrid_SelectionChanged;
-                PackageDataGrid.PreviewMouseDown += PackageDataGrid_PreviewMouseDown;
-                PackageDataGrid.PreviewMouseUp += PackageDataGrid_PreviewMouseUp;
-                PackageDataGrid.PreviewMouseMove += PackageDataGrid_PreviewMouseMove;
                 PackageDataGrid.KeyDown += PackageDataGrid_KeyDown;
                 PackageDataGrid.MouseDoubleClick += PackageDataGrid_MouseDoubleClick;
                 
@@ -253,6 +271,33 @@ namespace VPM
         {
             DependenciesTab.Tag = "Active";
             DependentsTab.Tag = null;
+        }
+
+        /// <summary>
+        /// Initializes selection debouncers for scene, preset, and package modes
+        /// </summary>
+        private void InitializeSelectionDebouncers()
+        {
+            // Scene selection debouncer - debounces rapid scene selections
+            _sceneSelectionDebouncer = new SelectionDebouncer(SELECTION_DEBOUNCE_DELAY_MS, async () =>
+            {
+                // Debouncer callback - no animation here, animations handled in selection handler
+                await Task.CompletedTask;
+            });
+
+            // Preset selection debouncer - debounces rapid preset selections
+            _presetSelectionDebouncer = new SelectionDebouncer(SELECTION_DEBOUNCE_DELAY_MS, async () =>
+            {
+                // Debouncer callback - no animation here, animations handled in selection handler
+                await Task.CompletedTask;
+            });
+
+            // Package selection debouncer - debounces rapid package selections
+            _packageSelectionDebouncer = new SelectionDebouncer(SELECTION_DEBOUNCE_DELAY_MS, async () =>
+            {
+                // Debouncer callback - no animation here, animations handled in selection handler
+                await Task.CompletedTask;
+            });
         }
         
         #endregion

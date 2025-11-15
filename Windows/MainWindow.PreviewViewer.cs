@@ -13,6 +13,7 @@ using System.Windows.Documents;
 using System.Text.Json;
 using System.Windows.Media.Animation;
 using VPM.Models;
+using VPM.Services;
 
 namespace VPM
 {
@@ -44,22 +45,8 @@ namespace VPM
             PreviewPanel.Visibility = Visibility.Visible;
             PreviewSplitter.Visibility = Visibility.Visible;
 
-            // Animate the preview panel appearance
-            var storyboard = new Storyboard();
-            
-            // Animate opacity
-            var opacityAnimation = new DoubleAnimation
-            {
-                From = 0.0,
-                To = 1.0,
-                Duration = TimeSpan.FromMilliseconds(200),
-                EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseOut }
-            };
-            Storyboard.SetTarget(opacityAnimation, PreviewPanel);
-            Storyboard.SetTargetProperty(opacityAnimation, new PropertyPath("Opacity"));
-            storyboard.Children.Add(opacityAnimation);
-
-            storyboard.Begin();
+            // Use .NET 10 storyboard animation via AnimationHelper for consistent performance
+            AnimationHelper.FadeIn(PreviewPanel, 200);
         }
 
         private bool _searchPanelInitialized = false;
@@ -121,21 +108,8 @@ namespace VPM
         {
             if (!_isPreviewVisible) return;
 
-            var storyboard = new Storyboard();
-            
-            // Animate opacity
-            var opacityAnimation = new DoubleAnimation
-            {
-                From = 1.0,
-                To = 0.0,
-                Duration = TimeSpan.FromMilliseconds(150),
-                EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseIn }
-            };
-            Storyboard.SetTarget(opacityAnimation, PreviewPanel);
-            Storyboard.SetTargetProperty(opacityAnimation, new PropertyPath("Opacity"));
-            storyboard.Children.Add(opacityAnimation);
-
-            storyboard.Completed += (s, e) =>
+            // Use .NET 10 storyboard animation via AnimationHelper with completion callback
+            AnimationHelper.FadeOut(PreviewPanel, 150, (s, e) =>
             {
                 PreviewPanel.Visibility = Visibility.Collapsed;
                 PreviewSplitter.Visibility = Visibility.Collapsed;
@@ -144,9 +118,7 @@ namespace VPM
                 _currentPreviewFile = null;
                 _currentPreviewPackage = null;
                 HideSearchPanel();
-            };
-
-            storyboard.Begin();
+            });
         }
 
         /// <summary>

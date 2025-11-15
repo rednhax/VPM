@@ -9,6 +9,7 @@ using System.Windows.Data;
 using System.Windows.Input;
 using System.Windows.Media;
 using VPM.Models;
+using VPM.Services;
 
 namespace VPM
 {
@@ -390,7 +391,7 @@ namespace VPM
         /// </summary>
         private void ScenesDataGrid_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
-            // Update toolbar buttons and optimize counter
+            // Update toolbar buttons and optimize counter immediately
             UpdateToolbarButtons();
             UpdateOptimizeCounter();
             
@@ -404,77 +405,113 @@ namespace VPM
                 return;
             }
 
-            // Accumulate dependencies from all selected scenes
-            Dependencies.Clear();
-            _originalDependencies.Clear();
-            var allDependencies = new HashSet<string>(); // Use HashSet to avoid duplicates
-            var allScenes = new List<SceneItem>();
-            int totalAtoms = 0;
-            int totalDependencies = 0;
+            // Cancel any pending scene selection update
+            _sceneSelectionCts?.Cancel();
+            _sceneSelectionCts?.Dispose();
+            _sceneSelectionCts = new System.Threading.CancellationTokenSource();
+            var sceneToken = _sceneSelectionCts.Token;
 
-            foreach (var selectedItem in ScenesDataGrid.SelectedItems)
-            {
-                var scene = selectedItem as SceneItem;
-                if (scene != null)
-                {
-                    allScenes.Add(scene);
-                    totalAtoms += scene.AtomCount;
-                    totalDependencies += scene.Dependencies.Count;
-                    foreach (var dep in scene.Dependencies)
-                    {
-                        allDependencies.Add(dep);
-                    }
-                }
-            }
+            // Trigger debounced scene selection handler
+            _sceneSelectionDebouncer?.Trigger();
 
-            // Process accumulated dependencies
-            foreach (var dep in allDependencies.OrderBy(d => d))
+            // Schedule the actual content update after debounce delay
+            _ = Task.Delay(SELECTION_DEBOUNCE_DELAY_MS, sceneToken).ContinueWith(_ =>
             {
-                // Extract base package name (remove version suffix)
-                // Dependencies come in format: "creator.package.version" or "creator.package" or "creator.package.latest"
-                string baseName = dep;
-                string version = "";
-                
-                // Check if it ends with .latest
-                if (dep.EndsWith(".latest", StringComparison.OrdinalIgnoreCase))
+                // Check if this operation was cancelled
+                if (sceneToken.IsCancellationRequested)
+                    return;
+
+                Dispatcher.Invoke(() =>
                 {
-                    baseName = dep.Substring(0, dep.Length - 7); // Remove .latest
-                    version = "latest";
-                }
-                else
-                {
-                    // Check for numeric version at the end (e.g., ".4" or ".13")
-                    var lastDotIndex = dep.LastIndexOf('.');
-                    if (lastDotIndex > 0)
+                    // Accumulate dependencies from all selected scenes
+                    Dependencies.Clear();
+                    _originalDependencies.Clear();
+                    var allDependencies = new HashSet<string>(); // Use HashSet to avoid duplicates
+                    var allScenes = new List<SceneItem>();
+                    int totalAtoms = 0;
+                    int totalDependencies = 0;
+
+                    foreach (var selectedItem in ScenesDataGrid.SelectedItems)
                     {
-                        var potentialVersion = dep.Substring(lastDotIndex + 1);
-                        if (int.TryParse(potentialVersion, out _))
+                        var scene = selectedItem as SceneItem;
+                        if (scene != null)
                         {
-                            version = potentialVersion;
-                            baseName = dep.Substring(0, lastDotIndex);
+                            allScenes.Add(scene);
+                            totalAtoms += scene.AtomCount;
+                            totalDependencies += scene.Dependencies.Count;
+                            foreach (var dep in scene.Dependencies)
+                            {
+                                allDependencies.Add(dep);
+                            }
                         }
                     }
-                }
-                
-                // Get the actual status from package manager using base name
-                var status = _packageFileManager?.GetPackageStatus(baseName) ?? "Missing";
-                // Store base name and version separately in DependencyItem
-                var depItem = new DependencyItem { Name = baseName, Version = version, Status = status };
-                Dependencies.Add(depItem);
-                _originalDependencies.Add(depItem);
-            }
 
-            // Update dependencies count
-            DependenciesCountText.Text = $"({Dependencies.Count})";
+                    // Process accumulated dependencies
+                    foreach (var dep in allDependencies.OrderBy(d => d))
+                    {
+                        // Extract base package name (remove version suffix)
+                        // Dependencies come in format: "creator.package.version" or "creator.package" or "creator.package.latest"
+                        string baseName = dep;
+                        string version = "";
+                        
+                        // Check if it ends with .latest
+                        if (dep.EndsWith(".latest", StringComparison.OrdinalIgnoreCase))
+                        {
+                            baseName = dep.Substring(0, dep.Length - 7); // Remove .latest
+                            version = "latest";
+                        }
+                        else
+                        {
+                            // Check for numeric version at the end (e.g., ".4" or ".13")
+                            var lastDotIndex = dep.LastIndexOf('.');
+                            if (lastDotIndex > 0)
+                            {
+                                var potentialVersion = dep.Substring(lastDotIndex + 1);
+                                if (int.TryParse(potentialVersion, out int parsedVersion))
+                                {
+                                    version = potentialVersion;
+                                    baseName = dep.Substring(0, lastDotIndex);
+                                }
+                            }
+                        }
+                        
+                        // Get the actual status from package manager using base name
+                        var status = _packageFileManager?.GetPackageStatus(baseName) ?? "Missing";
+                        // Store base name and version separately in DependencyItem
+                        var depItem = new DependencyItem { Name = baseName, Version = version, Status = status };
+                        Dependencies.Add(depItem);
+                        _originalDependencies.Add(depItem);
+                    }
 
-            // Display thumbnails for all selected scenes in the image grid
-            DisplayMultipleSceneThumbnails(allScenes);
+                    // Update dependencies count
+                    DependenciesCountText.Text = $"({Dependencies.Count})";
 
-            // Populate package breakdown tabs with combined scene content
-            PopulateMultipleSceneContentTabs(allScenes);
+                    // Display thumbnails for all selected scenes in the image grid
+                    DisplayMultipleSceneThumbnails(allScenes);
 
-            // Update the details area to show scene info
-            UpdatePackageButtonBar();
+                    // Populate package breakdown tabs with combined scene content
+                    PopulateMultipleSceneContentTabs(allScenes);
+
+                    // Update the details area to show scene info
+                    UpdatePackageButtonBar();
+
+                    // Set opacity to 0 before animating to ensure animation runs
+                    if (DependenciesDataGrid != null)
+                        DependenciesDataGrid.Opacity = 0;
+                    if (ImagesPanel != null)
+                        ImagesPanel.Opacity = 0;
+
+                    // Snap in dependencies and images after update with smooth effect (prevents flicker on rapid switches)
+                    if (DependenciesDataGrid != null && Dependencies.Count > 0)
+                    {
+                        AnimationHelper.SnapInSmooth(DependenciesDataGrid, 250);
+                    }
+                    if (ImagesPanel != null && ImagesPanel.Children.Count > 0)
+                    {
+                        AnimationHelper.SnapInSmooth(ImagesPanel, 250);
+                    }
+                });
+            });
 
             // Don't update title bar status for scene selection - only update placeholder text at bottom
         }

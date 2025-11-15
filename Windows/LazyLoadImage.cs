@@ -5,6 +5,7 @@ using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Media.Animation;
 using System.Windows.Media.Imaging;
+using VPM.Services;
 
 namespace VPM.Windows
 {
@@ -126,15 +127,8 @@ namespace VPM.Windows
                         _imageControl.Source = image;
                         _isLoaded = true;
                         
-                        // Smooth fade-in animation (similar to button animations)
-                        var fadeIn = new DoubleAnimation
-                        {
-                            From = 0.0,
-                            To = 1.0,
-                            Duration = TimeSpan.FromMilliseconds(250),
-                            EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseOut }
-                        };
-                        _imageControl.BeginAnimation(Image.OpacityProperty, fadeIn);
+                        // Use .NET 10 storyboard animation via AnimationHelper for consistent performance
+                        AnimationHelper.FadeIn(_imageControl, 250);
                     });
                     
                     ImageLoaded?.Invoke(this, EventArgs.Empty);

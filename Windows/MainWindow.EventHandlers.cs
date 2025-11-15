@@ -62,8 +62,8 @@ namespace VPM
         
         // Flag to prevent concurrent image display operations
         private bool _isDisplayingImages = false;
-        
-		private async void PackageDataGrid_SelectionChanged(object sender, SelectionChangedEventArgs e)
+
+        private void PackageDataGrid_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
             // Auto-select duplicate counterparts
             if (e?.AddedItems != null && e.AddedItems.Count > 0 && !_suppressSelectionEvents)
@@ -105,61 +105,55 @@ namespace VPM
             UpdateOptimizeCounter();
             
             if (_suppressSelectionEvents) return;
-            if (_isDragging && _dragButton == MouseButton.Left)
-            {
-                // Ignore transient selection changes while dragging to avoid flicker
-                return;
-            }
-            
-            // Safety: if drag is still marked but no buttons are down, reset drag state
-            if (_isDragging && Mouse.LeftButton == MouseButtonState.Released && Mouse.RightButton == MouseButtonState.Released)
-            {
-                _isDragging = false;
-                _dragButton = null;
-            }
-            
-            // Only skip image loading if this was a drag operation
-            // Allow image loading for: clicks, keyboard navigation, programmatic selection
-            if (_isDragging && _dragButton == MouseButton.Left)
-            {
-                // Still dragging - skip image loading
-                UpdatePackageSearchClearButton();
-                return;
-            }
-            
-            // Clear dependency selection tracking since package selection changed
-            _currentlyDisplayedDependencies.Clear();
 
-            // Debounce: schedule processing after a short delay, only latest version wins
-            int version = ++_selectionChangeVersion;
-            int delay = 10; // Very short delay, just enough to debounce rapid changes
-            if (delay > 0) await Task.Delay(delay);
-            if (version != _selectionChangeVersion) return; // superseded by a newer event
-            if (_suppressSelectionEvents || (_isDragging && _dragButton == MouseButton.Left)) return;
-
-			// Prevent concurrent image display operations
-            if (_isDisplayingImages)
+            if (PackageDataGrid?.SelectedItems?.Count == 0)
             {
+                Dependencies.Clear();
+                DependenciesCountText.Text = "(0)";
+                DependentsCountText.Text = "(0)";
+                ClearCategoryTabs();
+                ClearImageGrid();
+                SetStatus("No packages selected");
                 return;
             }
 
-			// Safeguard: if selection is too large, avoid heavy work
-			if (PackageDataGrid?.SelectedItems?.Count > _settingsManager.Settings.MaxSafeSelection)
-			{
-				PackageInfoTextBlock.Text = $"{PackageDataGrid.SelectedItems.Count} packages selected â€“ selection too large to preview\n\n" +
-					$"Preview limit: {_settingsManager.Settings.MaxSafeSelection} packages (configurable via Config †’ Preview Selection Limit)";
-				ImagesPanel.Children.Clear();
-				Dependencies.Clear();
-				ClearCategoryTabs();
-				UpdatePackageButtonBar();
-				UpdatePackageSearchClearButton();
-				return;
-			}
+            // Cancel any pending package selection update
+            _packageSelectionCts?.Cancel();
+            _packageSelectionCts?.Dispose();
+            _packageSelectionCts = new System.Threading.CancellationTokenSource();
+            var packageToken = _packageSelectionCts.Token;
 
-			await RefreshSelectionDisplaysImmediate();
-            
-            // Update only package search clear button visibility after main table selection changes
-            UpdatePackageSearchClearButton();
+            // Trigger debounced package selection handler
+            _packageSelectionDebouncer?.Trigger();
+
+            // Schedule the actual content update after debounce delay
+            _ = Task.Delay(SELECTION_DEBOUNCE_DELAY_MS, packageToken).ContinueWith(_ =>
+            {
+                // Check if this operation was cancelled
+                if (packageToken.IsCancellationRequested)
+                    return;
+
+                Dispatcher.Invoke(async () =>
+                {
+                    // Safeguard: if selection is too large, avoid heavy work
+                    if (PackageDataGrid?.SelectedItems?.Count > _settingsManager.Settings.MaxSafeSelection)
+                    {
+                        PackageInfoTextBlock.Text = $"{PackageDataGrid.SelectedItems.Count} packages selected – selection too large to preview\n\n" +
+                            $"Preview limit: {_settingsManager.Settings.MaxSafeSelection} packages (configurable via Config ' Preview Selection Limit)";
+                        ImagesPanel.Children.Clear();
+                        Dependencies.Clear();
+                        ClearCategoryTabs();
+                        UpdatePackageButtonBar();
+                        UpdatePackageSearchClearButton();
+                        return;
+                    }
+
+                    await RefreshSelectionDisplaysImmediate();
+                    
+                    // Update only package search clear button visibility after main table selection changes
+                    UpdatePackageSearchClearButton();
+                });
+            });
         }
 
         private void StatusFilterList_SelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -574,114 +568,6 @@ namespace VPM
             }
         }
 
-        private void PackageDataGrid_PreviewMouseDown(object sender, MouseButtonEventArgs e)
-        {
-            if (e.ChangedButton == MouseButton.Left)
-            {
-                var dataGrid = sender as DataGrid;
-                var hitTest = VisualTreeHelper.HitTest(dataGrid, e.GetPosition(dataGrid));
-                var dataGridRow = FindParent<DataGridRow>(hitTest?.VisualHit as DependencyObject);
-                
-                if (dataGridRow != null)
-                {
-                    _dragStartPoint = e.GetPosition(dataGrid);
-                    _dragStartItem = dataGridRow;
-                    _dragButton = e.ChangedButton;
-                    _isDragging = false;
-
-                    // Start drag watch timer
-                    _dragWatchTimer?.Stop();
-                    _dragWatchTimer = new DispatcherTimer
-                    {
-                        Interval = TimeSpan.FromMilliseconds(50)
-                    };
-                    _dragWatchTimer.Tick += DragWatchTimer_Tick;
-                    _dragWatchTimer.Start();
-
-                }
-            }
-        }
-
-        private async void PackageDataGrid_PreviewMouseUp(object sender, MouseButtonEventArgs e)
-        {
-            if (e.ChangedButton == _dragButton)
-            {
-                var wasDragging = _isDragging;
-                var currentPoint = e.GetPosition(sender as DataGrid);
-                
-                // Check if this was a click (mouse released close to start position) or drag
-                bool wasClick = !wasDragging && 
-                    Math.Abs(currentPoint.X - _dragStartPoint.X) <= 8 && 
-                    Math.Abs(currentPoint.Y - _dragStartPoint.Y) <= 8;
-                
-                _dragWatchTimer?.Stop();
-                _isDragging = false;
-                _dragButton = null;
-                _dragStartItem = null;
-                
-                // Ensure selection events are re-enabled
-                _suppressSelectionEvents = false;
-                
-                if (wasDragging)
-                {
-                    // This was a drag operation - refresh UI first, then load images after a short delay
-                    await RefreshSelectionDisplaysWithoutImages();
-                    UpdatePackageSearchClearButton();
-                    
-                    // Load images after drag completes with a small delay to ensure smooth UX
-                    _ = Task.Run(async () =>
-                    {
-                        await Task.Delay(100); // Short delay to let UI settle
-                        await Dispatcher.InvokeAsync(async () =>
-                        {
-                            await LoadImagesForCurrentSelection();
-                        });
-                    });
-                }
-                else if (wasClick)
-                {
-                    // This was a single click - allow image loading
-                    // Selection change event will handle the image loading
-                }
-            }
-        }
-
-        private void PackageDataGrid_PreviewMouseMove(object sender, MouseEventArgs e)
-        {
-            if (_dragButton == MouseButton.Left && _dragStartItem != null)
-            {
-                var dataGrid = sender as DataGrid;
-                var currentPoint = e.GetPosition(dataGrid);
-                
-                // Only start drag selection if we've moved a reasonable distance
-                if (Math.Abs(currentPoint.X - _dragStartPoint.X) > 8 || Math.Abs(currentPoint.Y - _dragStartPoint.Y) > 8)
-                {
-                    // Now we're actually dragging
-                    if (!_isDragging)
-                    {
-                        _isDragging = true;
-                    }
-                    
-                    var hitTest = VisualTreeHelper.HitTest(dataGrid, currentPoint);
-                    var currentItem = FindParent<DataGridRow>(hitTest?.VisualHit as DependencyObject);
-                    
-                    // Normal left button drag selection - select range
-                    if (currentItem != null && _dragStartItem != null)
-                    {
-                        // Suppress selection events only during actual dragging
-                        _suppressSelectionEvents = true;
-                        try
-                        {
-                            SelectItemsBetween(dataGrid, _dragStartItem, currentItem);
-                        }
-                        finally
-                        {
-                            // Don't re-enable here - wait for mouse up
-                        }
-                    }
-                }
-            }
-        }
 
         private void DragWatchTimer_Tick(object sender, EventArgs e)
         {
@@ -692,9 +578,6 @@ namespace VPM
                 _dragButton = null;
                 _dragStartItem = null;
                 _suppressSelectionEvents = false;
-                
-                // Fire and forget the async refresh
-                _ = RefreshSelectionDisplays();
             }
         }
 
@@ -2747,6 +2630,22 @@ namespace VPM
                         DisplayDependencies(packageItem);
                     
                     await DisplayPackageImagesAsync(packageItem);
+                    
+                    // Set opacity to 0 before animating to ensure animation runs
+                    if (DependenciesDataGrid != null)
+                        DependenciesDataGrid.Opacity = 0;
+                    if (ImagesPanel != null)
+                        ImagesPanel.Opacity = 0;
+                    
+                    // Animate dependencies and images after update with smooth effect (prevents flicker on rapid switches)
+                    if (DependenciesDataGrid != null && Dependencies.Count > 0)
+                    {
+                        AnimationHelper.SnapInSmooth(DependenciesDataGrid, 250);
+                    }
+                    if (ImagesPanel != null && ImagesPanel.Children.Count > 0)
+                    {
+                        AnimationHelper.SnapInSmooth(ImagesPanel, 250);
+                    }
                 }
                 else
                 {
@@ -2766,6 +2665,22 @@ namespace VPM
                     else
                     {
                         await DisplayMultiplePackageImagesAsync(selectedPackages);
+                    }
+                    
+                    // Set opacity to 0 before animating to ensure animation runs
+                    if (DependenciesDataGrid != null)
+                        DependenciesDataGrid.Opacity = 0;
+                    if (ImagesPanel != null)
+                        ImagesPanel.Opacity = 0;
+                    
+                    // Animate dependencies and images after update with smooth effect (prevents flicker on rapid switches)
+                    if (DependenciesDataGrid != null && Dependencies.Count > 0)
+                    {
+                        AnimationHelper.SnapInSmooth(DependenciesDataGrid, 250);
+                    }
+                    if (ImagesPanel != null && ImagesPanel.Children.Count > 0)
+                    {
+                        AnimationHelper.SnapInSmooth(ImagesPanel, 250);
                     }
                 }
                 
