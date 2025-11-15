@@ -2515,7 +2515,23 @@ namespace VPM
                     }
                     catch (Exception ex)
                     {
-                        errors.Add($"{packageName}: {ex.Message}");
+                        string errorMsg = $"{packageName}: {ex.Message}";
+                        errors.Add(errorMsg);
+                        
+                        // Log full exception details to file
+                        try
+                        {
+                            string logEntry = $"[OPTIMIZATION-ERROR] {DateTime.Now:yyyy-MM-dd HH:mm:ss.fff}\n" +
+                                            $"Package: {packageName}\n" +
+                                            $"Exception Type: {ex.GetType().Name}\n" +
+                                            $"Message: {ex.Message}\n" +
+                                            $"Stack Trace: {ex.StackTrace}\n" +
+                                            $"Inner Exception: {(ex.InnerException != null ? ex.InnerException.Message : "None")}\n" +
+                                            $"---\n";
+                            File.AppendAllText("C:\\vpm_debug.log", logEntry);
+                        }
+                        catch { }
+                        
                         // Still track the package even if it failed
                         if (!packageDetails.ContainsKey(packageName))
                         {

@@ -472,7 +472,8 @@ namespace VPM.Services
                         // Open on background thread to avoid blocking UI
                         await Task.Run(() =>
                         {
-                            using (var zip = System.IO.Compression.ZipFile.OpenRead(filePath))
+                            using (var fileStream = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.Read))
+                            using (var zip = new System.IO.Compression.ZipArchive(fileStream, System.IO.Compression.ZipArchiveMode.Read, leaveOpen: false))
                             {
                                 // Just access Count property to validate ZIP structure (no allocation)
                                 // This is orders of magnitude faster than ToList()

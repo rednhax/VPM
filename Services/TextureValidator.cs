@@ -2,9 +2,9 @@ using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.IO;
-using System.IO.Compression;
 using System.Linq;
 using System.Text.Json;
+using ICSharpCode.SharpZipLib.Zip;
 
 namespace VPM.Services
 {
@@ -320,9 +320,9 @@ namespace VPM.Services
                 
                 if (isVarFile)
                 {
-                    using (var archive = ZipFile.OpenRead(packagePath))
+                    using (var zipFile = new ZipFile(packagePath))
                     {
-                        var metaEntry = archive.GetEntry("meta.json");
+                        var metaEntry = SharpZipLibHelper.FindEntryByPath(zipFile, "meta.json");
                         if (metaEntry == null)
                         {
                             result.ErrorMessage = "meta.json not found in package";
@@ -330,18 +330,14 @@ namespace VPM.Services
                             return result;
                         }
 
-                        using (var stream = metaEntry.Open())
-                        using (var reader = new StreamReader(stream))
+                        string metaJson = SharpZipLibHelper.ReadEntryAsString(zipFile, metaEntry);
+                        var metaDoc = JsonDocument.Parse(metaJson);
+                        
+                        if (metaDoc.RootElement.TryGetProperty("contentList", out var contentListElement))
                         {
-                            string metaJson = reader.ReadToEnd();
-                            var metaDoc = JsonDocument.Parse(metaJson);
-                            
-                            if (metaDoc.RootElement.TryGetProperty("contentList", out var contentListElement))
+                            foreach (var item in contentListElement.EnumerateArray())
                             {
-                                foreach (var item in contentListElement.EnumerateArray())
-                                {
-                                    contentList.Add(item.GetString());
-                                }
+                                contentList.Add(item.GetString());
                             }
                         }
                     }
@@ -382,14 +378,16 @@ namespace VPM.Services
                 
                 if (isVarFile)
                 {
-                    using (var archive = ZipFile.OpenRead(packagePath))
+                    using (var zipFile = new ZipFile(packagePath))
                     {
-                        foreach (var entry in archive.Entries)
+                        var allEntries = SharpZipLibHelper.GetAllEntries(zipFile);
+                        foreach (var entry in allEntries)
                         {
-                            string ext = System.IO.Path.GetExtension(entry.FullName).ToLowerInvariant();
+                            if (entry.IsDirectory) continue;
+                            string ext = System.IO.Path.GetExtension(entry.Name).ToLowerInvariant();
                             if (ext == ".png" || ext == ".jpg" || ext == ".jpeg")
                             {
-                                allImageFiles.Add(entry.FullName);
+                                allImageFiles.Add(entry.Name);
                             }
                         }
                     }
@@ -451,9 +449,9 @@ namespace VPM.Services
                 
                 if (isVarFile)
                 {
-                    using (var archive = ZipFile.OpenRead(packagePath))
+                    using (var zipFile = new ZipFile(packagePath))
                     {
-                        exists = archive.GetEntry(texturePath) != null;
+                        exists = SharpZipLibHelper.FindEntryByPath(zipFile, texturePath) != null;
                     }
                 }
                 else
@@ -554,24 +552,20 @@ namespace VPM.Services
             {
                 if (isVarFile)
                 {
-                    using (var archive = ZipFile.OpenRead(packagePath))
+                    using (var zipFile = new ZipFile(packagePath))
                     {
-                        var metaEntry = archive.GetEntry("meta.json");
+                        var metaEntry = SharpZipLibHelper.FindEntryByPath(zipFile, "meta.json");
                         if (metaEntry != null)
                         {
-                            using (var stream = metaEntry.Open())
-                            using (var reader = new StreamReader(stream))
+                            string metaJson = SharpZipLibHelper.ReadEntryAsString(zipFile, metaEntry);
+                            
+                            // Look for conversion data flags
+                            int startIdx = metaJson.IndexOf("[VPM_TEXTURE_CONVERSION_DATA]");
+                            int endIdx = metaJson.IndexOf("[/VPM_TEXTURE_CONVERSION_DATA]");
+                            
+                            if (startIdx >= 0 && endIdx > startIdx)
                             {
-                                var metaJson = reader.ReadToEnd();
-                                
-                                // Look for conversion data flags
-                                int startIdx = metaJson.IndexOf("[VPM_TEXTURE_CONVERSION_DATA]");
-                                int endIdx = metaJson.IndexOf("[/VPM_TEXTURE_CONVERSION_DATA]");
-                                
-                                if (startIdx >= 0 && endIdx > startIdx)
-                                {
-                                    return metaJson.Substring(startIdx, endIdx - startIdx + "[/VPM_TEXTURE_CONVERSION_DATA]".Length);
-                                }
+                                return metaJson.Substring(startIdx, endIdx - startIdx + "[/VPM_TEXTURE_CONVERSION_DATA]".Length);
                             }
                         }
                     }
@@ -651,22 +645,13 @@ namespace VPM.Services
                 
                 if (isVarFile)
                 {
-                    using (var archive = ZipFile.OpenRead(packagePath))
+                    using (var zipFile = new ZipFile(packagePath))
                     {
-                        var entry = archive.GetEntry(texturePath);
-                        if (entry != null && entry.Length < 5 * 1024 * 1024)
+                        var entry = SharpZipLibHelper.FindEntryByPath(zipFile, texturePath);
+                        if (entry != null && entry.Size < 5 * 1024 * 1024)
                         {
-                            fileSize = entry.Length;
-                            fullBuffer = new byte[entry.Length];
-                            using (var stream = entry.Open())
-                            {
-                                int totalRead = 0;
-                                int bytesRead;
-                                while (totalRead < fullBuffer.Length && (bytesRead = stream.Read(fullBuffer, totalRead, fullBuffer.Length - totalRead)) > 0)
-                                {
-                                    totalRead += bytesRead;
-                                }
-                            }
+                            fileSize = entry.Size;
+                            fullBuffer = SharpZipLibHelper.ReadEntryAsBytes(zipFile, entry);
                         }
                     }
                 }
@@ -735,16 +720,13 @@ namespace VPM.Services
                 
                 if (isVarFile)
                 {
-                    using (var archive = ZipFile.OpenRead(packagePath))
+                    using (var zipFile = new ZipFile(packagePath))
                     {
-                        var entry = archive.GetEntry(texturePath);
+                        var entry = SharpZipLibHelper.FindEntryByPath(zipFile, texturePath);
                         if (entry != null)
                         {
-                            fileSize = entry.Length;
-                            using (var stream = entry.Open())
-                            {
-                                bytesRead = stream.Read(buffer, 0, buffer.Length);
-                            }
+                            fileSize = entry.Size;
+                            bytesRead = SharpZipLibHelper.ReadEntryIntoBuffer(zipFile, entry, buffer, 0, buffer.Length);
                         }
                     }
                 }
@@ -840,30 +822,19 @@ namespace VPM.Services
 
                 if (isVarFile)
                 {
-                    using (var archive = ZipFile.OpenRead(packagePath))
+                    using (var zipFile = new ZipFile(packagePath))
                     {
-                        var entry = archive.GetEntry(texturePath);
+                        var entry = SharpZipLibHelper.FindEntryByPath(zipFile, texturePath);
                         if (entry != null)
                         {
-                            fileSize = entry.Length;
+                            fileSize = entry.Size;
                             
                             // Read header into memory for parsing
-                            using (var stream = entry.Open())
+                            byte[] buffer = new byte[Math.Min(entry.Size, bufferSize)];
+                            int bytesRead = SharpZipLibHelper.ReadEntryIntoBuffer(zipFile, entry, buffer, 0, buffer.Length);
+                            if (bytesRead > 0)
                             {
-                                byte[] buffer = new byte[Math.Min(entry.Length, bufferSize)];
-                                int bytesRead = 0;
-                                int totalRead = 0;
-                                
-                                // Read in chunks until we have enough data
-                                while (totalRead < buffer.Length && (bytesRead = stream.Read(buffer, totalRead, buffer.Length - totalRead)) > 0)
-                                {
-                                    totalRead += bytesRead;
-                                }
-                                
-                                if (totalRead > 0)
-                                {
-                                    (width, height) = ReadImageDimensionsFromBuffer(buffer, totalRead, texturePath);
-                                }
+                                (width, height) = ReadImageDimensionsFromBuffer(buffer, bytesRead, texturePath);
                             }
                         }
                     }
@@ -958,7 +929,9 @@ namespace VPM.Services
                             {
                                 int height = (buffer[pos + 3] << 8) | buffer[pos + 4];
                                 int width = (buffer[pos + 5] << 8) | buffer[pos + 6];
-                                return (width, height);
+                                
+                                if (width > 0 && height > 0 && width < 100000 && height < 100000)
+                                    return (width, height);
                             }
                         }
 
@@ -1109,26 +1082,21 @@ namespace VPM.Services
             
             try
             {
-                using (var archive = ZipFile.OpenRead(archivePackagePath))
+                using (var zipFile = new ZipFile(archivePackagePath))
                 {
-                    foreach (var entry in archive.Entries)
+                    var allEntries = SharpZipLibHelper.GetAllEntries(zipFile);
+                    foreach (var entry in allEntries)
                     {
-                        string ext = Path.GetExtension(entry.FullName).ToLowerInvariant();
+                        string ext = Path.GetExtension(entry.Name).ToLowerInvariant();
                         if (ext == ".png" || ext == ".jpg" || ext == ".jpeg")
                         {
                             try
                             {
-                                using (var stream = entry.Open())
-                                using (var ms = new MemoryStream())
+                                byte[] imageData = SharpZipLibHelper.ReadEntryAsBytes(zipFile, entry);
+                                var (width, height) = ReadImageDimensionsFromBuffer(imageData, imageData.Length, entry.Name);
+                                if (width > 0 && height > 0)
                                 {
-                                    stream.CopyTo(ms);
-                                    byte[] imageData = ms.ToArray();
-                                    
-                                    var (width, height) = ReadImageDimensionsFromBuffer(imageData, imageData.Length, entry.FullName);
-                                    if (width > 0 && height > 0)
-                                    {
-                                        dimensions[entry.FullName] = (width, height);
-                                    }
+                                    dimensions[entry.Name] = (width, height);
                                 }
                             }
                             catch
@@ -1153,14 +1121,15 @@ namespace VPM.Services
             
             try
             {
-                using (var archive = ZipFile.OpenRead(archivePackagePath))
+                using (var zipFile = new ZipFile(archivePackagePath))
                 {
-                    foreach (var entry in archive.Entries)
+                    var allEntries = SharpZipLibHelper.GetAllEntries(zipFile);
+                    foreach (var entry in allEntries)
                     {
-                        string ext = Path.GetExtension(entry.FullName).ToLowerInvariant();
+                        string ext = Path.GetExtension(entry.Name).ToLowerInvariant();
                         if (ext == ".png" || ext == ".jpg" || ext == ".jpeg")
                         {
-                            fileSizes[entry.FullName] = entry.Length;
+                            fileSizes[entry.Name] = entry.Size;
                         }
                     }
                 }

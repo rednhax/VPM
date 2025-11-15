@@ -293,13 +293,33 @@ namespace VPM.Services
                             }
                             else
                             {
-                                var newEntry = outputArchive.CreateEntry(entry.FullName, compression);
-                                newEntry.LastWriteTime = entry.LastWriteTime;
-
-                                using (var sourceStream = entry.Open())
-                                using (var newStream = newEntry.Open())
+                                // Try to read source first before creating entry to prevent corrupted empty entries
+                                try
                                 {
-                                    sourceStream.CopyTo(newStream);
+                                    using (var sourceStream = entry.Open())
+                                    using (var ms = new MemoryStream())
+                                    {
+                                        sourceStream.CopyTo(ms);
+                                        byte[] sourceData = ms.ToArray();
+                                        
+                                        var newEntry = outputArchive.CreateEntry(entry.FullName, compression);
+                                        newEntry.LastWriteTime = entry.LastWriteTime;
+
+                                        using (var newStream = newEntry.Open())
+                                        {
+                                            newStream.Write(sourceData, 0, sourceData.Length);
+                                        }
+                                    }
+                                }
+                                catch (InvalidDataException ex)
+                                {
+                                    // Skip entries with unsupported compression methods
+                                    Console.WriteLine($"[WRITE-SKIP] Skipping {entry.FullName} due to unsupported compression: {ex.Message}");
+                                }
+                                catch (Exception ex)
+                                {
+                                    // Skip entries that cannot be read
+                                    Console.WriteLine($"[WRITE-SKIP] Skipping {entry.FullName}: {ex.GetType().Name}: {ex.Message}");
                                 }
                             }
                         }
@@ -492,7 +512,8 @@ namespace VPM.Services
                 }
 
                 // Try to open as ZIP archive
-                using (var archive = ZipFile.OpenRead(varPath))
+                using (var fileStream = new FileStream(varPath, FileMode.Open, FileAccess.Read, FileShare.Read))
+                using (var archive = new ZipArchive(fileStream, ZipArchiveMode.Read, leaveOpen: false))
                 {
                     // Check for meta.json
                     var metaEntry = archive.GetEntry("meta.json");

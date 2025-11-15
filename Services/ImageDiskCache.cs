@@ -124,13 +124,11 @@ namespace VPM.Services
                     bitmap.CacheOption = BitmapCacheOption.OnLoad;
                     bitmap.CreateOptions = BitmapCreateOptions.IgnoreColorProfile;
                     
-                    using (var stream = MemoryStreamPool.Manager.GetStream("ImageDiskCache", decryptedData.Length))
-                    {
-                        stream.Write(decryptedData, 0, decryptedData.Length);
-                        stream.Position = 0;
-                        bitmap.StreamSource = stream;
-                        bitmap.EndInit();
-                    }
+                    // Use a non-pooled MemoryStream for BitmapImage to avoid disposal issues in .NET 10
+                    // BitmapImage holds a reference to the stream, so we can't use a pooled stream
+                    var stream = new MemoryStream(decryptedData);
+                    bitmap.StreamSource = stream;
+                    bitmap.EndInit();
                     
                     bitmap.Freeze();
 

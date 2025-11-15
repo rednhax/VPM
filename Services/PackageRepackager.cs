@@ -83,6 +83,9 @@ namespace VPM.Services
             ProgressCallback progressCallback = null,
             bool createBackup = true)
         {
+            // Create error log file for debugging
+            string errorLogPath = Path.Combine(Path.GetTempPath(), "VPM_OptimizationErrors.log");
+            
             try
             {
                 string directory = Path.GetDirectoryName(sourceVarPath);
@@ -527,9 +530,9 @@ namespace VPM.Services
                         string originalMetaJson = null;
                         DateTime? originalMetaJsonDate = null;
                         
-                        // First pass: collect entries and read meta.json
+                        // First pass: collect entry metadata ONLY (not data) to avoid OOM
                         progressCallback?.Invoke("🔍 Analyzing package contents...", 0, totalOperations);
-                        var entriesToProcess = new List<(ZipArchiveEntry entry, byte[] data, bool needsTextureConversion, bool needsHairModification, bool needsSceneModification)>();
+                        var entriesToProcess = new List<(ZipArchiveEntry entry, bool needsTextureConversion, bool needsHairModification, bool needsSceneModification)>();
                         int entryIndex = 0;
                         int totalEntries = sourceArchive.Entries.Count;
 
@@ -562,16 +565,9 @@ namespace VPM.Services
                             bool needsMirrorDisabling = config.DisableMirrors && isSceneFile;
                             bool needsSceneModification = needsHairModification || needsLightModification || isVapFile || needsMirrorDisabling;
 
-                            byte[] entryData = null;
-                            if (needsTextureConversion || needsSceneModification)
-                            {
-                                using var stream = entry.Open();
-                                using var ms = new MemoryStream();
-                                stream.CopyTo(ms);
-                                entryData = ms.ToArray();
-                            }
-
-                            entriesToProcess.Add((entry, entryData, needsTextureConversion, needsHairModification || isVapFile, needsSceneModification));
+                            // CRITICAL FIX: Don't load entry data here - load it on-demand during processing
+                            // This prevents OOM when processing large packages with many textures
+                            entriesToProcess.Add((entry, needsTextureConversion, needsHairModification || isVapFile, needsSceneModification));
                             
                             // Update progress every 50 entries to avoid too many UI updates
                             entryIndex++;
@@ -581,45 +577,110 @@ namespace VPM.Services
                             }
                         }
 
-                        // Second pass: Process textures in parallel (use all CPU cores)
+                        // Second pass: Validate and process textures in parallel (use all CPU cores)
                         var convertedTextures = new ConcurrentDictionary<string, (byte[] data, DateTimeOffset lastWriteTime)>();
                         var textureEntries = entriesToProcess.Where(e => e.needsTextureConversion).ToList();
+                        var unsupportedCompressionTextures = new List<string>();
                         
                         if (textureEntries.Count > 0)
                         {
                             progressCallback?.Invoke($"🖼️  Converting {textureEntries.Count} texture(s)...", 0, totalOperations);
                         }
 
-                        Parallel.ForEach(textureEntries, new ParallelOptions { MaxDegreeOfParallelism = Environment.ProcessorCount * 2 }, item =>
+                        // CRITICAL FIX: Use sequential processing (1 thread) for texture conversion
+                        // Large texture files (100MB+) cannot be loaded in parallel without OOM
+                        // Sequential processing allows GC to fully reclaim memory after each texture
+                        // This is slower but prevents memory exhaustion
+                        Parallel.ForEach(textureEntries, new ParallelOptions { MaxDegreeOfParallelism = 1 }, item =>
                         {
-                            var (entry, sourceData, _, _, _) = item;
+                            var (entry, _, _, _) = item;
                             var conversionInfo = config.TextureConversions[entry.FullName];
 
-                            Interlocked.Add(ref originalTotalSize, sourceData.Length);
-
-                            // Convert texture
-                            int targetDimension = TextureConverter.GetTargetDimension(conversionInfo.targetResolution);
-                            string extension = Path.GetExtension(entry.FullName);
-                            byte[] convertedData = _textureConverter.ResizeImage(sourceData, targetDimension, extension);
-
-                            int currentProcessed = Interlocked.Increment(ref processedCount);
-                            progressCallback?.Invoke($"🖼️  [{currentProcessed}/{totalOperations}] Converting: {Path.GetFileName(entry.FullName)}", currentProcessed, totalOperations);
-
-                            // Track conversion details
-                            if (convertedData != null)
+                            try
                             {
-                                Interlocked.Add(ref newTotalSize, convertedData.Length);
+                                // CRITICAL FIX: Load texture data on-demand (not pre-loaded)
+                                // This allows the GC to free memory after each texture is processed
+                                byte[] sourceData;
+                                using (var stream = entry.Open())
+                                using (var ms = new MemoryStream())
+                                {
+                                    stream.CopyTo(ms);
+                                    sourceData = ms.ToArray();
+                                }
+
+                                Interlocked.Add(ref originalTotalSize, sourceData.Length);
+
+                                // Convert texture
+                                int targetDimension = TextureConverter.GetTargetDimension(conversionInfo.targetResolution);
+                                string extension = Path.GetExtension(entry.FullName);
+                                byte[] convertedData = _textureConverter.ResizeImage(sourceData, targetDimension, extension);
+
+                                int currentProcessed = Interlocked.Increment(ref processedCount);
+                                progressCallback?.Invoke($"🖼️  [{currentProcessed}/{totalOperations}] Converting: {Path.GetFileName(entry.FullName)}", currentProcessed, totalOperations);
+
+                                // Track conversion details
+                                if (convertedData != null)
+                                {
+                                    Interlocked.Add(ref newTotalSize, convertedData.Length);
+                                    
+                                    string textureName = Path.GetFileName(entry.FullName);
+                                    string originalRes = GetResolutionString(conversionInfo.originalWidth, conversionInfo.originalHeight);
+                                    string detail = $"  • {textureName}: {originalRes} → {conversionInfo.targetResolution} ({FormatBytes(sourceData.Length)} → {FormatBytes(convertedData.Length)})";
+                                    textureConversionDetails.Add(detail);
+                                    
+                                    convertedTextures[entry.FullName] = (convertedData, entry.LastWriteTime);
+                                }
+                                else
+                                {
+                                    Interlocked.Add(ref newTotalSize, sourceData.Length);
+                                }
                                 
-                                string textureName = Path.GetFileName(entry.FullName);
-                                string originalRes = GetResolutionString(conversionInfo.originalWidth, conversionInfo.originalHeight);
-                                string detail = $"  • {textureName}: {originalRes} → {conversionInfo.targetResolution} ({FormatBytes(sourceData.Length)} → {FormatBytes(convertedData.Length)})";
-                                textureConversionDetails.Add(detail);
-                                
-                                convertedTextures[entry.FullName] = (convertedData, entry.LastWriteTime);
+                                // Explicitly clear sourceData to help GC
+                                sourceData = null;
                             }
-                            else
+                            catch (InvalidDataException ex) when (ex.Message.Contains("unsupported compression"))
                             {
-                                Interlocked.Add(ref newTotalSize, sourceData.Length);
+                                // Skip entries with unsupported compression methods (Bzip2, LZMA, PPMd, etc.)
+                                // These will be copied as-is without conversion
+                                lock (unsupportedCompressionTextures)
+                                {
+                                    unsupportedCompressionTextures.Add(entry.FullName);
+                                }
+                                int currentProcessed = Interlocked.Increment(ref processedCount);
+                                progressCallback?.Invoke($"⚠️  [{currentProcessed}/{totalOperations}] Skipping (unsupported compression): {Path.GetFileName(entry.FullName)}", currentProcessed, totalOperations);
+                                
+                                // Log to file for debugging
+                                try
+                                {
+                                    File.AppendAllText(errorLogPath, $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss.fff}] UNSUPPORTED COMPRESSION: {entry.FullName}\n");
+                                }
+                                catch { }
+                            }
+                            catch (InvalidDataException ex) when (ex.Message.Contains("corrupt"))
+                            {
+                                // Skip entries with corrupt file headers (often indicates unsupported compression or damaged archive)
+                                int currentProcessed = Interlocked.Increment(ref processedCount);
+                                progressCallback?.Invoke($"⚠️  [{currentProcessed}/{totalOperations}] Skipping (corrupt file): {Path.GetFileName(entry.FullName)}", currentProcessed, totalOperations);
+                                
+                                // Log to file for debugging
+                                try
+                                {
+                                    File.AppendAllText(errorLogPath, $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss.fff}] CORRUPT FILE HEADER: {entry.FullName}\n");
+                                }
+                                catch { }
+                            }
+                            catch (Exception ex)
+                            {
+                                // Log other errors but continue processing
+                                int currentProcessed = Interlocked.Increment(ref processedCount);
+                                progressCallback?.Invoke($"❌ [{currentProcessed}/{totalOperations}] Error converting {Path.GetFileName(entry.FullName)}: {ex.Message}", currentProcessed, totalOperations);
+                                
+                                // Log to file for debugging
+                                try
+                                {
+                                    File.AppendAllText(errorLogPath, $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss.fff}] ERROR converting {entry.FullName}: {ex.GetType().Name}: {ex.Message}\n{ex.StackTrace}\n\n");
+                                }
+                                catch { }
                             }
                         });
 
@@ -637,41 +698,79 @@ namespace VPM.Services
 
                         Parallel.ForEach(sceneEntries, new ParallelOptions { MaxDegreeOfParallelism = Environment.ProcessorCount }, item =>
                         {
-                            var (entry, sourceData, _, needsHairModification, needsSceneModification) = item;
-                            if (!needsSceneModification || sourceData == null)
+                            var (entry, _, needsHairModification, needsSceneModification) = item;
+                            if (!needsSceneModification)
                             {
                                 return;
                             }
 
-                            string fileName = Path.GetFileName(entry.FullName);
-                            string jsonContent = Encoding.UTF8.GetString(sourceData);
-                            byte[] modifiedData = null;
-
-                            if (entry.FullName.EndsWith(".vap", StringComparison.OrdinalIgnoreCase) && needsHairModification)
+                            try
                             {
-                                string modifiedJson = ModifyHairInVapFile(jsonContent, maxTargetDensity, entry.FullName, hairConversionDetails);
-                                modifiedData = Encoding.UTF8.GetBytes(modifiedJson);
-                                int currentProcessed = Interlocked.Increment(ref processedCount);
-                                progressCallback?.Invoke($"💇 [{currentProcessed}/{totalOperations}] Hair preset: {fileName}", currentProcessed, totalOperations);
-                            }
-                            else
-                            {
-                                var hairMods = config.HairConversions.Where(kvp => kvp.Value.sceneFile == fileName).ToList();
-                                var lightMods = config.LightConversions.Where(kvp => kvp.Value.sceneFile == fileName).ToList();
-                                bool needsMirrorDisable = config.DisableMirrors && entry.FullName.EndsWith(".json", StringComparison.OrdinalIgnoreCase);
-
-                                if (hairMods.Count > 0 || lightMods.Count > 0 || needsMirrorDisable)
+                                // CRITICAL FIX: Load scene data on-demand (not pre-loaded)
+                                byte[] sourceData;
+                                using (var stream = entry.Open())
+                                using (var ms = new MemoryStream())
                                 {
-                                    string modifiedJson = ModifySceneJson(jsonContent, hairMods, lightMods, hairConversionDetails, lightConversionDetails, config.DisableMirrors);
+                                    stream.CopyTo(ms);
+                                    sourceData = ms.ToArray();
+                                }
+
+                                string fileName = Path.GetFileName(entry.FullName);
+                                string jsonContent = Encoding.UTF8.GetString(sourceData);
+                                byte[] modifiedData = null;
+
+                                if (entry.FullName.EndsWith(".vap", StringComparison.OrdinalIgnoreCase) && needsHairModification)
+                                {
+                                    string modifiedJson = ModifyHairInVapFile(jsonContent, maxTargetDensity, entry.FullName, hairConversionDetails);
                                     modifiedData = Encoding.UTF8.GetBytes(modifiedJson);
                                     int currentProcessed = Interlocked.Increment(ref processedCount);
-                                    progressCallback?.Invoke($"🎬 [{currentProcessed}/{totalOperations}] Scene file: {fileName}", currentProcessed, totalOperations);
+                                    progressCallback?.Invoke($"💇 [{currentProcessed}/{totalOperations}] Hair preset: {fileName}", currentProcessed, totalOperations);
+                                }
+                                else
+                                {
+                                    var hairMods = config.HairConversions.Where(kvp => kvp.Value.sceneFile == fileName).ToList();
+                                    var lightMods = config.LightConversions.Where(kvp => kvp.Value.sceneFile == fileName).ToList();
+                                    bool needsMirrorDisable = config.DisableMirrors && entry.FullName.EndsWith(".json", StringComparison.OrdinalIgnoreCase);
+
+                                    if (hairMods.Count > 0 || lightMods.Count > 0 || needsMirrorDisable)
+                                    {
+                                        string modifiedJson = ModifySceneJson(jsonContent, hairMods, lightMods, hairConversionDetails, lightConversionDetails, config.DisableMirrors);
+                                        modifiedData = Encoding.UTF8.GetBytes(modifiedJson);
+                                        int currentProcessed = Interlocked.Increment(ref processedCount);
+                                        progressCallback?.Invoke($"🎬 [{currentProcessed}/{totalOperations}] Scene file: {fileName}", currentProcessed, totalOperations);
+                                    }
+                                }
+
+                                if (modifiedData != null)
+                                {
+                                    modifiedScenes[entry.FullName] = (modifiedData, entry.LastWriteTime);
                                 }
                             }
-
-                            if (modifiedData != null)
+                            catch (InvalidDataException ex) when (ex.Message.Contains("unsupported compression"))
                             {
-                                modifiedScenes[entry.FullName] = (modifiedData, entry.LastWriteTime);
+                                // Skip entries with unsupported compression methods
+                                int currentProcessed = Interlocked.Increment(ref processedCount);
+                                progressCallback?.Invoke($"⚠️  [{currentProcessed}/{totalOperations}] Skipping (unsupported compression): {Path.GetFileName(entry.FullName)}", currentProcessed, totalOperations);
+                                
+                                // Log to file for debugging
+                                try
+                                {
+                                    File.AppendAllText(errorLogPath, $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss.fff}] UNSUPPORTED COMPRESSION (scene): {entry.FullName}\n");
+                                }
+                                catch { }
+                            }
+                            catch (Exception ex)
+                            {
+                                // Log other errors but continue processing
+                                int currentProcessed = Interlocked.Increment(ref processedCount);
+                                progressCallback?.Invoke($"❌ [{currentProcessed}/{totalOperations}] Error processing {Path.GetFileName(entry.FullName)}: {ex.Message}", currentProcessed, totalOperations);
+                                
+                                // Log to file for debugging
+                                try
+                                {
+                                    File.AppendAllText(errorLogPath, $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss.fff}] ERROR processing {entry.FullName}: {ex.GetType().Name}: {ex.Message}\n{ex.StackTrace}\n\n");
+                                }
+                                catch { }
                             }
                         });
 
@@ -682,7 +781,7 @@ namespace VPM.Services
                         
                         foreach (var item in entriesToProcess)
                         {
-                            var (entry, sourceData, needsTextureConversion, needsHairModification, needsSceneModification) = item;
+                            var (entry, needsTextureConversion, needsHairModification, needsSceneModification) = item;
 
                             byte[] dataToWrite = null;
                             DateTimeOffset lastWriteTime = entry.LastWriteTime;

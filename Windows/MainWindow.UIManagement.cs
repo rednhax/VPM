@@ -984,12 +984,19 @@ namespace VPM
                         _suppressSelectionEvents = true;
                         try
                         {
-                            Packages.ReplaceAll(allPackages);
-
-                            // No filter needed - collection is already pre-filtered
+                            // CRITICAL FIX for .NET 10: Use DeferRefresh to prevent massive memory allocation
+                            // during view sorting when updating large collections
                             if (PackagesView != null)
                             {
-                                PackagesView.Filter = null;
+                                using (PackagesView.DeferRefresh())
+                                {
+                                    Packages.ReplaceAll(allPackages);
+                                    PackagesView.Filter = null;
+                                }
+                            }
+                            else
+                            {
+                                Packages.ReplaceAll(allPackages);
                             }
                         }
                         finally

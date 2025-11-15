@@ -28,74 +28,77 @@ namespace VPM.Services
         {
             try
             {
+                // Use non-pooled MemoryStream to avoid .NET 10 disposal issues with pooled streams
                 using (var ms = new MemoryStream(sourceData))
-                using (var originalImage = Image.FromStream(ms))
                 {
-                    int originalWidth = originalImage.Width;
-                    int originalHeight = originalImage.Height;
-                    int maxDimension = Math.Max(originalWidth, originalHeight);
-
-                    // CRITICAL: Only downscale, never upscale OR same-resolution
-                    // If the texture is already at or below target resolution, DON'T TOUCH IT
-                    if (maxDimension <= targetMaxDimension)
+                    using (var originalImage = Image.FromStream(ms))
                     {
-                        System.Diagnostics.Debug.WriteLine($"Skipping texture conversion - already at or below target resolution ({maxDimension}px <= {targetMaxDimension}px)");
-                        return null; // No conversion needed
-                    }
+                        int originalWidth = originalImage.Width;
+                        int originalHeight = originalImage.Height;
+                        int maxDimension = Math.Max(originalWidth, originalHeight);
 
-                    // Calculate new dimensions maintaining aspect ratio
-                    double scale = (double)targetMaxDimension / maxDimension;
-                    int newWidth = (int)(originalWidth * scale);
-                    int newHeight = (int)(originalHeight * scale);
-
-                    // Create resized image
-                    using (var resizedImage = new Bitmap(newWidth, newHeight))
-                    {
-                        using (var graphics = Graphics.FromImage(resizedImage))
+                        // CRITICAL: Only downscale, never upscale OR same-resolution
+                        // If the texture is already at or below target resolution, DON'T TOUCH IT
+                        if (maxDimension <= targetMaxDimension)
                         {
-                            // Balanced quality/performance settings
-                            graphics.InterpolationMode = InterpolationMode.Bilinear;
-                            graphics.SmoothingMode = SmoothingMode.None;
-                            graphics.PixelOffsetMode = PixelOffsetMode.HighSpeed;
-                            graphics.CompositingQuality = CompositingQuality.HighSpeed;
-                            graphics.CompositingMode = CompositingMode.SourceCopy;
-                            
-                            graphics.DrawImage(originalImage, 0, 0, newWidth, newHeight);
+                            System.Diagnostics.Debug.WriteLine($"Skipping texture conversion - already at or below target resolution ({maxDimension}px <= {targetMaxDimension}px)");
+                            return null; // No conversion needed
                         }
 
-                        // Save to memory stream with appropriate format
-                        using (var outputMs = new MemoryStream())
+                        // Calculate new dimensions maintaining aspect ratio
+                        double scale = (double)targetMaxDimension / maxDimension;
+                        int newWidth = (int)(originalWidth * scale);
+                        int newHeight = (int)(originalHeight * scale);
+
+                        // Create resized image
+                        using (var resizedImage = new Bitmap(newWidth, newHeight))
                         {
-                            ImageFormat format = GetImageFormat(originalExtension);
-                            
-                            if (format.Equals(ImageFormat.Jpeg))
+                            using (var graphics = Graphics.FromImage(resizedImage))
                             {
-                                // Use quality 90 for optimal balance
-                                var encoderParameters = new EncoderParameters(1);
-                                encoderParameters.Param[0] = new EncoderParameter(
-                                    System.Drawing.Imaging.Encoder.Quality, 90L);
+                                // Balanced quality/performance settings
+                                graphics.InterpolationMode = InterpolationMode.Bilinear;
+                                graphics.SmoothingMode = SmoothingMode.None;
+                                graphics.PixelOffsetMode = PixelOffsetMode.HighSpeed;
+                                graphics.CompositingQuality = CompositingQuality.HighSpeed;
+                                graphics.CompositingMode = CompositingMode.SourceCopy;
                                 
-                                var jpegCodec = _jpegEncoder.Value;
-                                resizedImage.Save(outputMs, jpegCodec, encoderParameters);
-                            }
-                            else
-                            {
-                                // For PNG and other formats, use default encoding
-                                // Note: System.Drawing doesn't support proper PNG compression
-                                resizedImage.Save(outputMs, format);
+                                graphics.DrawImage(originalImage, 0, 0, newWidth, newHeight);
                             }
 
-                            byte[] convertedData = outputMs.ToArray();
-                            
-                            // CRITICAL SAFETY CHECK: Never return a texture larger than the original
-                            // This prevents "optimization" from making packages worse
-                            if (convertedData.Length >= sourceData.Length)
+                            // Save to non-pooled memory stream to avoid .NET 10 disposal issues
+                            using (var outputMs = new MemoryStream())
                             {
-                                System.Diagnostics.Debug.WriteLine($"Texture conversion skipped - output ({convertedData.Length} bytes) >= input ({sourceData.Length} bytes)");
-                                return null; // Keep original - it's better
+                                ImageFormat format = GetImageFormat(originalExtension);
+                                
+                                if (format.Equals(ImageFormat.Jpeg))
+                                {
+                                    // Use quality 90 for optimal balance
+                                    var encoderParameters = new EncoderParameters(1);
+                                    encoderParameters.Param[0] = new EncoderParameter(
+                                        System.Drawing.Imaging.Encoder.Quality, 90L);
+                                    
+                                    var jpegCodec = _jpegEncoder.Value;
+                                    resizedImage.Save(outputMs, jpegCodec, encoderParameters);
+                                }
+                                else
+                                {
+                                    // For PNG and other formats, use default encoding
+                                    // Note: System.Drawing doesn't support proper PNG compression
+                                    resizedImage.Save(outputMs, format);
+                                }
+
+                                byte[] convertedData = outputMs.ToArray();
+                                
+                                // CRITICAL SAFETY CHECK: Never return a texture larger than the original
+                                // This prevents "optimization" from making packages worse
+                                if (convertedData.Length >= sourceData.Length)
+                                {
+                                    System.Diagnostics.Debug.WriteLine($"Texture conversion skipped - output ({convertedData.Length} bytes) >= input ({sourceData.Length} bytes)");
+                                    return null; // Keep original - it's better
+                                }
+                                
+                                return convertedData;
                             }
-                            
-                            return convertedData;
                         }
                     }
                 }

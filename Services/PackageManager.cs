@@ -615,7 +615,8 @@ namespace VPM.Services
                 DateTime? previewImageDate = null;
 
             // Use standard .NET ZipFile for reliable reading
-            using var archive = System.IO.Compression.ZipFile.OpenRead(varPath);
+            using var fileStream = new FileStream(varPath, FileMode.Open, FileAccess.Read, FileShare.Read);
+            using var archive = new System.IO.Compression.ZipArchive(fileStream, System.IO.Compression.ZipArchiveMode.Read, leaveOpen: false);
                 
                 string metaJsonContent = null;
                 int metaJsonHash = 0;
@@ -1510,7 +1511,8 @@ namespace VPM.Services
             try
             {
                 var imageLocations = new List<ImageLocation>();
-                using var archive = System.IO.Compression.ZipFile.OpenRead(varPath);
+                using var fileStream = new FileStream(varPath, FileMode.Open, FileAccess.Read, FileShare.Read);
+                using var archive = new System.IO.Compression.ZipArchive(fileStream, System.IO.Compression.ZipArchiveMode.Read, leaveOpen: false);
 
                 foreach (var entry in archive.Entries)
                 {

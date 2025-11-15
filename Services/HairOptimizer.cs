@@ -396,7 +396,8 @@ namespace VPM.Services
 
                 if (isVarFile)
                 {
-                    using (var archive = ZipFile.OpenRead(packagePath))
+                    using (var fileStream = new FileStream(packagePath, FileMode.Open, FileAccess.Read, FileShare.Read))
+                    using (var archive = new ZipArchive(fileStream, ZipArchiveMode.Read, leaveOpen: false))
                     {
                         // Find all scene JSON files in Saves/scene/
                         var sceneFiles = archive.Entries

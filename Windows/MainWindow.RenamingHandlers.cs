@@ -170,7 +170,7 @@ namespace VPM
                                     }
                                 }
                             }
-                            catch (Exception refreshEx)
+                            catch (Exception)
                             {
                                 // Silently handle refresh errors
                             }
@@ -317,11 +317,10 @@ namespace VPM
                                     if (index >= 0)
                                     {
                                         CustomAtomItems.RemoveAt(index);
-                                        CustomAtomItems.Insert(index, presetItem);
                                     }
                                 }
                             }
-                            catch (Exception refreshEx)
+                            catch (Exception)
                             {
                                 // Silently handle refresh errors
                             }

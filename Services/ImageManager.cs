@@ -312,30 +312,37 @@ namespace VPM.Services
 
                 try
                 {
+                    byte[] imageData;
                     using (var entryStream = entry.Open())
-                    using (var memoryStream = MemoryStreamPool.Manager.GetStream())
                     {
-                        entryStream.CopyTo(memoryStream);
-                        memoryStream.Position = 0;
+                        // Use non-pooled MemoryStream to avoid .NET 10 disposal issues
+                        using (var ms = new MemoryStream())
+                        {
+                            entryStream.CopyTo(ms);
+                            ms.Position = 0;
 
-                        if (!IsValidImageStream(memoryStream))
-                            return null;
+                            if (!IsValidImageStream(ms))
+                                return null;
 
-                        memoryStream.Position = 0;
-                        var bitmap = new BitmapImage();
-                        bitmap.BeginInit();
-                        bitmap.CacheOption = BitmapCacheOption.OnLoad;
-                        memoryStream.Position = 0;
-                        bitmap.StreamSource = memoryStream;
-                        bitmap.CreateOptions = BitmapCreateOptions.IgnoreColorProfile | BitmapCreateOptions.PreservePixelFormat;
-                        bitmap.EndInit();
-                        bitmap.Freeze();
-
-                        if (!IsValidImageDimensions(bitmap))
-                            return null;
-
-                        return bitmap;
+                            ms.Position = 0;
+                            imageData = ms.ToArray();
+                        }
                     }
+                    
+                    // Create BitmapImage outside the using block with non-pooled stream
+                    var bitmap = new BitmapImage();
+                    bitmap.BeginInit();
+                    bitmap.CacheOption = BitmapCacheOption.OnLoad;
+                    var memoryStream = new MemoryStream(imageData);
+                    bitmap.StreamSource = memoryStream;
+                    bitmap.CreateOptions = BitmapCreateOptions.IgnoreColorProfile | BitmapCreateOptions.PreservePixelFormat;
+                    bitmap.EndInit();
+                    bitmap.Freeze();
+
+                    if (!IsValidImageDimensions(bitmap))
+                        return null;
+
+                    return bitmap;
                 }
                 catch (Exception ex) when (ex is InvalidOperationException or IOException or ArgumentException)
                 {
@@ -463,22 +470,29 @@ namespace VPM.Services
                             continue;
                         }
 
-                        using var entryStream = entry.Open();
-                        using var memoryStream = MemoryStreamPool.Manager.GetStream();
-                        entryStream.CopyTo(memoryStream);
-                        memoryStream.Position = 0;
-
-                        if (!IsValidImageStream(memoryStream))
+                        byte[] imageData;
+                        using (var entryStream = entry.Open())
                         {
-                            continue;
-                        }
+                            // Use non-pooled MemoryStream to avoid .NET 10 disposal issues
+                            using (var ms = new MemoryStream())
+                            {
+                                entryStream.CopyTo(ms);
+                                ms.Position = 0;
 
-                        memoryStream.Position = 0;
+                                if (!IsValidImageStream(ms))
+                                {
+                                    continue;
+                                }
+
+                                ms.Position = 0;
+                                imageData = ms.ToArray();
+                            }
+                        }
 
                         var bitmap = new BitmapImage();
                         bitmap.BeginInit();
                         bitmap.CacheOption = BitmapCacheOption.OnLoad;
-                        memoryStream.Position = 0;
+                        var memoryStream = new MemoryStream(imageData);
                         bitmap.StreamSource = memoryStream;
                         bitmap.CreateOptions = BitmapCreateOptions.IgnoreColorProfile | BitmapCreateOptions.PreservePixelFormat;
                         bitmap.EndInit();

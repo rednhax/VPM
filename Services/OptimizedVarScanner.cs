@@ -1,9 +1,9 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.IO;
-using System.IO.Compression;
 using System.Linq;
 using VPM.Models;
+using ICSharpCode.SharpZipLib.Zip;
 
 namespace VPM.Services
 {
@@ -71,28 +71,41 @@ namespace VPM.Services
                 result.FileSize = fileInfo.Length;
                 result.LastWriteTime = fileInfo.LastWriteTimeUtc;
 
-                using var stream = new FileStream(varPath, FileMode.Open, FileAccess.Read, 
-                    FileShare.ReadWrite | FileShare.Delete);
-                using var archive = new ZipArchive(stream, ZipArchiveMode.Read, leaveOpen: false);
+                using var zipFile = new ZipFile(varPath);
 
                 var indexedEntries = new List<VarFileEntry>();
                 var pairedFiles = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
                 var contentTypes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
                 var categories = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                int totalFileCount = 0;
+                string metaJsonContent = null;
 
-                foreach (var entry in archive.Entries)
+                // First pass: collect all entries and metadata
+                var allEntries = SharpZipLibHelper.GetAllEntries(zipFile);
+                totalFileCount = allEntries.Count;
+
+                // Extract meta.json content
+                var metaEntry = SharpZipLibHelper.FindEntryByPath(zipFile, "meta.json");
+                if (metaEntry != null)
                 {
-                    if (entry.FullName.EndsWith("/")) continue;
+                    result.HasMetaJson = true;
+                    metaJsonContent = SharpZipLibHelper.ReadEntryAsString(zipFile, metaEntry);
+                }
+
+                // Process entries
+                foreach (var entry in allEntries)
+                {
+                    if (entry.IsDirectory) continue;
 
                     // Skip if already added as paired file (before counting as scanned)
-                    if (pairedFiles.Contains(entry.FullName))
+                    if (pairedFiles.Contains(entry.Name))
                     {
                         continue;
                     }
 
                     System.Threading.Interlocked.Increment(ref _totalFilesScanned);
 
-                    var ext = Path.GetExtension(entry.FullName);
+                    var ext = Path.GetExtension(entry.Name);
                     
                     if (SkippedExtensions.Contains(ext))
                     {
@@ -111,10 +124,10 @@ namespace VPM.Services
                     // Add paired JPG if this file has a paired extension
                     if (PairedExtensions.Contains(ext))
                     {
-                        var baseName = Path.ChangeExtension(entry.FullName, null);
+                        var baseName = Path.ChangeExtension(entry.Name, null);
                         
                         // Try both .jpg and .JPG (case variations)
-                        ZipArchiveEntry jpgEntry = null;
+                        ZipEntry jpgEntry = null;
                         string jpgPath = null;
                         
                         foreach (var jpgExt in new[] { ".jpg", ".JPG", ".Jpg" })
@@ -122,7 +135,7 @@ namespace VPM.Services
                             var testPath = baseName + jpgExt;
                             if (!pairedFiles.Contains(testPath))
                             {
-                                jpgEntry = archive.GetEntry(testPath);
+                                jpgEntry = SharpZipLibHelper.FindEntryByPath(zipFile, testPath);
                                 if (jpgEntry != null)
                                 {
                                     jpgPath = testPath;
@@ -135,9 +148,9 @@ namespace VPM.Services
                         {
                             indexedEntries.Add(new VarFileEntry
                             {
-                                InternalPath = jpgEntry.FullName,
-                                Size = jpgEntry.Length,
-                                LastWriteTime = jpgEntry.LastWriteTime.DateTime
+                                InternalPath = jpgEntry.Name,
+                                Size = jpgEntry.Size,
+                                LastWriteTime = jpgEntry.DateTime
                             });
                             pairedFiles.Add(jpgPath);
                             System.Threading.Interlocked.Increment(ref _totalFilesIndexed);
@@ -146,30 +159,22 @@ namespace VPM.Services
 
                     indexedEntries.Add(new VarFileEntry
                     {
-                        InternalPath = entry.FullName,
-                        Size = entry.Length,
-                        LastWriteTime = entry.LastWriteTime.DateTime
+                        InternalPath = entry.Name,
+                        Size = entry.Size,
+                        LastWriteTime = entry.DateTime
                     });
 
                     System.Threading.Interlocked.Increment(ref _totalFilesIndexed);
-                    AnalyzeFileForMetadata(entry.FullName, contentTypes, categories);
+                    AnalyzeFileForMetadata(entry.Name, contentTypes, categories);
                 }
 
                 result.IndexedEntries = indexedEntries;
-                result.TotalFileCount = archive.Entries.Count;
+                result.TotalFileCount = totalFileCount;
                 result.IndexedFileCount = indexedEntries.Count;
                 result.ContentTypes = contentTypes;
                 result.Categories = categories;
+                result.MetaJsonContent = metaJsonContent;
                 result.Success = true;
-
-                var metaEntry = archive.GetEntry("meta.json");
-                if (metaEntry != null)
-                {
-                    result.HasMetaJson = true;
-                    using var metaStream = metaEntry.Open();
-                    using var reader = new StreamReader(metaStream);
-                    result.MetaJsonContent = reader.ReadToEnd();
-                }
             }
             catch (Exception ex)
             {
@@ -263,8 +268,7 @@ namespace VPM.Services
     public class LazyZipArchive : IDisposable
     {
         private readonly string _varPath;
-        private ZipArchive _archive;
-        private FileStream _stream;
+        private ZipFile _zipFile;
         private bool _disposed;
         private readonly object _lock = new object();
 
@@ -275,32 +279,30 @@ namespace VPM.Services
 
         private void EnsureOpen()
         {
-            if (_archive == null && !_disposed)
+            if (_zipFile == null && !_disposed)
             {
                 lock (_lock)
                 {
-                    if (_archive == null && !_disposed)
+                    if (_zipFile == null && !_disposed)
                     {
-                        _stream = new FileStream(_varPath, FileMode.Open, FileAccess.Read, 
-                            FileShare.ReadWrite | FileShare.Delete);
-                        _archive = new ZipArchive(_stream, ZipArchiveMode.Read, leaveOpen: false);
+                        _zipFile = new ZipFile(_varPath);
                     }
                 }
             }
         }
 
-        public ZipArchiveEntry GetEntry(string entryName)
+        public ZipEntry GetEntry(string entryName)
         {
             EnsureOpen();
-            return _archive?.GetEntry(entryName);
+            return _zipFile != null ? SharpZipLibHelper.FindEntryByPath(_zipFile, entryName) : null;
         }
 
-        public IReadOnlyCollection<ZipArchiveEntry> Entries
+        public List<ZipEntry> Entries
         {
             get
             {
                 EnsureOpen();
-                return _archive?.Entries;
+                return _zipFile != null ? SharpZipLibHelper.GetAllEntries(_zipFile) : new List<ZipEntry>();
             }
         }
 
@@ -310,8 +312,7 @@ namespace VPM.Services
             {
                 if (!_disposed)
                 {
-                    _archive?.Dispose();
-                    _stream?.Dispose();
+                    _zipFile?.Close();
                     _disposed = true;
                 }
             }

@@ -59,7 +59,8 @@ namespace VPM.Services
 
             try
             {
-                using (var sourceArchive = ZipFile.OpenRead(varPath))
+                using (var sourceFileStream = new FileStream(varPath, FileMode.Open, FileAccess.Read, FileShare.Read))
+                using (var sourceArchive = new ZipArchive(sourceFileStream, ZipArchiveMode.Read, leaveOpen: false))
                 using (var destFileStream = new FileStream(tempPath, FileMode.Create, FileAccess.Write, FileShare.None))
                 using (var destArchive = new ZipArchive(destFileStream, ZipArchiveMode.Create, false))
                 {

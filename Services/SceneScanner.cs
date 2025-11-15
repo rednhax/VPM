@@ -1,10 +1,10 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.IO;
-using System.IO.Compression;
 using System.Linq;
 using System.Text.Json;
 using VPM.Models;
+using ICSharpCode.SharpZipLib.Zip;
 
 namespace VPM.Services
 {
@@ -73,12 +73,13 @@ namespace VPM.Services
             {
                 var varName = Path.GetFileNameWithoutExtension(varPath);
 
-                using (var archive = ZipFile.OpenRead(varPath))
+                using (var zipFile = new ZipFile(varPath))
                 {
+                    var allEntries = SharpZipLibHelper.GetAllEntries(zipFile);
                     // Look for scene files in Saves/scene/ path
-                    var sceneEntries = archive.Entries
-                        .Where(e => e.FullName.StartsWith("Saves/scene/", StringComparison.OrdinalIgnoreCase) &&
-                                    e.FullName.EndsWith(".json", StringComparison.OrdinalIgnoreCase))
+                    var sceneEntries = allEntries
+                        .Where(e => !e.IsDirectory && e.Name.StartsWith("Saves/scene/", StringComparison.OrdinalIgnoreCase) &&
+                                    e.Name.EndsWith(".json", StringComparison.OrdinalIgnoreCase))
                         .ToList();
 
                     foreach (var entry in sceneEntries)
@@ -147,9 +148,9 @@ namespace VPM.Services
         /// <summary>
         /// Creates a SceneItem from a VAR archive entry
         /// </summary>
-        private SceneItem CreateSceneItemFromVarEntry(ZipArchiveEntry entry, string varPath, string varName)
+        private SceneItem CreateSceneItemFromVarEntry(ZipEntry entry, string varPath, string varName)
         {
-            var fileName = Path.GetFileName(entry.FullName);
+            var fileName = Path.GetFileName(entry.Name);
             var fileNameWithoutExt = Path.GetFileNameWithoutExtension(fileName);
             var creator = ExtractCreatorFromFilename(fileNameWithoutExt);
 
@@ -157,24 +158,23 @@ namespace VPM.Services
             {
                 Name = fileName,
                 DisplayName = fileNameWithoutExt,
-                FilePath = $"{varPath}::{entry.FullName}", // Virtual path
+                FilePath = $"{varPath}::{entry.Name}", // Virtual path
                 Creator = creator,
-                ModifiedDate = entry.LastWriteTime.DateTime,
-                FileSize = entry.Length,
+                ModifiedDate = entry.DateTime,
+                FileSize = entry.Size,
                 Source = "VAR",
                 SourcePackage = varName
             };
 
             // Try to find thumbnail in VAR
-            scene.ThumbnailPath = FindThumbnailInVar(varPath, entry.FullName);
+            scene.ThumbnailPath = FindThumbnailInVar(varPath, entry.Name);
 
             // Try to parse metadata from VAR entry
             try
             {
-                using (var stream = entry.Open())
-                using (var reader = new StreamReader(stream))
+                using (var zipFile = new ZipFile(varPath))
                 {
-                    var jsonContent = reader.ReadToEnd();
+                    var jsonContent = SharpZipLibHelper.ReadEntryAsString(zipFile, entry);
                     var metadata = ParseSceneMetadataFromJson(jsonContent);
                     ApplyMetadataToScene(scene, metadata);
                 }
@@ -214,7 +214,7 @@ namespace VPM.Services
         {
             try
             {
-                using (var archive = ZipFile.OpenRead(varPath))
+                using (var zipFile = new ZipFile(varPath))
                 {
                     var basePath = Path.ChangeExtension(sceneEntryPath, null);
                     var extensions = new[] { ".jpg", ".jpeg", ".png", ".JPG", ".JPEG", ".PNG" };
@@ -222,7 +222,7 @@ namespace VPM.Services
                     foreach (var ext in extensions)
                     {
                         var thumbPath = basePath + ext;
-                        var thumbEntry = archive.GetEntry(thumbPath);
+                        var thumbEntry = SharpZipLibHelper.FindEntryByPath(zipFile, thumbPath);
                         if (thumbEntry != null)
                         {
                             // Return virtual path to thumbnail in VAR
@@ -519,12 +519,13 @@ namespace VPM.Services
                 }
 
                 // Extract thumbnail from VAR
-                using (var archive = ZipFile.OpenRead(varPath))
+                using (var zipFile = new ZipFile(varPath))
                 {
-                    var entry = archive.GetEntry(entryPath);
+                    var entry = SharpZipLibHelper.FindEntryByPath(zipFile, entryPath);
                     if (entry != null)
                     {
-                        entry.ExtractToFile(cachePath, true);
+                        var data = SharpZipLibHelper.ReadEntryAsBytes(zipFile, entry);
+                        File.WriteAllBytes(cachePath, data);
                         return cachePath;
                     }
                 }

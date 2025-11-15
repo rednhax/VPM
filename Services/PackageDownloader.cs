@@ -974,7 +974,8 @@ namespace VPM.Services
                 bool isValidVarPackage = false;
                 try
                 {
-                    using (var zip = System.IO.Compression.ZipFile.OpenRead(destinationPath))
+                    using (var fileStream = new FileStream(destinationPath, FileMode.Open, FileAccess.Read, FileShare.Read))
+                    using (var zip = new System.IO.Compression.ZipArchive(fileStream, System.IO.Compression.ZipArchiveMode.Read, leaveOpen: false))
                     {
                         // Check if ZIP can be read
                         var entryCount = zip.Entries.Count;

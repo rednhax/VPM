@@ -238,7 +238,8 @@ namespace VPM.Services
                     }
                     
                     using var entryStream = entry.Open();
-                    using var memoryStream = MemoryStreamPool.Manager.GetStream();
+                    // Use non-pooled MemoryStream to avoid .NET 10 disposal issues with pooled streams
+                    using var memoryStream = new MemoryStream();
                     
                     entryStream.CopyTo(memoryStream);
                     memoryStream.Position = 0;
@@ -278,7 +279,9 @@ namespace VPM.Services
             try
             {
                 // Create BitmapImage on worker thread (frozen, so thread-safe)
-                using var memoryStream = new MemoryStream(qi.RawData);
+                // Do NOT use 'using' with the MemoryStream - BitmapImage holds a reference to it
+                // In .NET 10, disposing the stream while BitmapImage references it causes memory issues
+                var memoryStream = new MemoryStream(qi.RawData);
                 
                 var bitmap = new BitmapImage();
                 bitmap.BeginInit();

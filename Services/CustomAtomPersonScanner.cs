@@ -46,13 +46,13 @@ namespace VPM.Services
                             items.Add(item);
                         }
                     }
-                    catch (Exception ex)
+                    catch (Exception)
                     {
                         // Error processing file - continue with next file
                     }
                 }
             }
-            catch (Exception ex)
+            catch (Exception)
             {
                 // Error scanning folder - return what we have
             }

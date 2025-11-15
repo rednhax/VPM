@@ -55,8 +55,6 @@ namespace VPM
         private List<string> _currentlyDisplayedPackages = new List<string>();
         private List<string> _currentlyDisplayedDependencies = new List<string>();
         
-        private int _selectionChangeVersion = 0;
-        
         // Debounce timer for dependency selection changes
         private DispatcherTimer _dependencySelectionDebounceTimer;
         

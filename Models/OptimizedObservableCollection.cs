@@ -65,16 +65,29 @@ namespace VPM.Models
 
         /// <summary>
         /// Replaces all items efficiently with a single notification
+        /// CRITICAL FIX for .NET 10: Avoid massive memory allocations during view refresh
+        /// by clearing and rebuilding the collection without triggering view sorting
         /// </summary>
         public void ReplaceAll(IEnumerable<T> items)
         {
             if (items == null) return;
 
             var itemsList = items.ToList();
+            if (itemsList.Count == 0)
+            {
+                Clear();
+                return;
+            }
 
             _suppressNotification = true;
             try
             {
+                // Optimize for List<T> by pre-allocating capacity
+                if (Items is List<T> list)
+                {
+                    list.Capacity = itemsList.Count;
+                }
+
                 Items.Clear();
                 foreach (var item in itemsList)
                 {
@@ -87,6 +100,8 @@ namespace VPM.Models
             }
 
             // Fire single notification for complete replacement
+            // NOTE: This will trigger view refresh/sorting, which can be memory-intensive for large collections
+            // The caller should use DeferRefresh() on the view if needed
             OnPropertyChanged(new PropertyChangedEventArgs(nameof(Count)));
             OnPropertyChanged(new PropertyChangedEventArgs("Item[]"));
             OnCollectionChanged(new NotifyCollectionChangedEventArgs(NotifyCollectionChangedAction.Reset));

@@ -56,7 +56,8 @@ namespace VPM.Services
 
             try
             {
-                using var archive = ZipFile.OpenRead(varPath);
+                using var fileStream = new FileStream(varPath, FileMode.Open, FileAccess.Read, FileShare.Read);
+                using var archive = new ZipArchive(fileStream, ZipArchiveMode.Read, leaveOpen: false);
                 var metaEntry = archive.Entries.FirstOrDefault(e => 
                     e.Name.Equals("meta.json", StringComparison.OrdinalIgnoreCase));
 
