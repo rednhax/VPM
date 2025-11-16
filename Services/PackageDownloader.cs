@@ -125,16 +125,44 @@ namespace VPM.Services
                     Console.WriteLine($"[PackageDownloader]   Sample: '{pkg.FullPackageName}' -> '{pkg.PrimaryUrl}'");
                 }
 
-                // Convert to PackageDownloadInfo dictionary
-                _packageUrlCache = packageList
-                    .Select(pkg => new PackageDownloadInfo
+                // Convert to PackageDownloadInfo dictionary, filtering out invalid entries
+                // Handle duplicates by keeping only the first occurrence
+                _packageUrlCache = new Dictionary<string, PackageDownloadInfo>(StringComparer.OrdinalIgnoreCase);
+                int duplicateCount = 0;
+                
+                foreach (var pkg in packageList)
+                {
+                    if (string.IsNullOrWhiteSpace(pkg.FullPackageName) || string.IsNullOrWhiteSpace(pkg.PrimaryUrl))
+                    {
+                        continue;
+                    }
+                    
+                    if (_packageUrlCache.ContainsKey(pkg.FullPackageName))
+                    {
+                        duplicateCount++;
+                        Console.WriteLine($"[PackageDownloader] Duplicate package found: {pkg.FullPackageName} (keeping first occurrence)");
+                        continue;
+                    }
+                    
+                    _packageUrlCache[pkg.FullPackageName] = new PackageDownloadInfo
                     {
                         PackageName = pkg.FullPackageName,
                         DownloadUrl = pkg.PrimaryUrl,
                         HubUrls = pkg.HubUrls ?? new List<string>(),
                         PdrUrls = pkg.PdrUrls ?? new List<string>()
-                    })
-                    .ToDictionary(p => p.PackageName, p => p, StringComparer.OrdinalIgnoreCase);
+                    };
+                }
+                
+                // Log validation results
+                int invalidCount = packageList.Count(p => string.IsNullOrWhiteSpace(p.FullPackageName) || string.IsNullOrWhiteSpace(p.PrimaryUrl));
+                if (invalidCount > 0)
+                {
+                    Console.WriteLine($"[PackageDownloader] Filtered out {invalidCount} packages with missing URLs");
+                }
+                if (duplicateCount > 0)
+                {
+                    Console.WriteLine($"[PackageDownloader] Filtered out {duplicateCount} duplicate packages");
+                }
 
                 Console.WriteLine($"[PackageDownloader] Created cache with {_packageUrlCache.Count} entries");
                 
@@ -176,8 +204,10 @@ namespace VPM.Services
                 _lastLoadWasFromGitHub = true;
                 return true;
             }
-            catch (Exception)
+            catch (Exception ex)
             {
+                Console.WriteLine($"[PackageDownloader] Error loading encrypted package list: {ex.Message}");
+                Console.WriteLine($"[PackageDownloader] Stack trace: {ex.StackTrace}");
                 return false;
             }
             finally
@@ -807,6 +837,7 @@ namespace VPM.Services
                 if (!urlsToTry.Any() && !string.IsNullOrEmpty(packageInfo.DownloadUrl))
                 {
                     Console.WriteLine($"[PackageDownloader] Using primary URL for {packageName}");
+                    Console.WriteLine($"[PackageDownloader] Primary URL: {packageInfo.DownloadUrl}");
                     urlsToTry.Add(packageInfo.DownloadUrl);
                 }
                 
@@ -908,6 +939,10 @@ namespace VPM.Services
         {
             try
             {
+                // Debug: Print the URL being downloaded
+                Console.WriteLine($"[PackageDownloader] Downloading package: {packageName}");
+                Console.WriteLine($"[PackageDownloader] URL: {url}");
+                
                 // Download with progress reporting
                 using (var response = await _httpClient.GetAsync(url, HttpCompletionOption.ResponseHeadersRead, cancellationToken))
                 {

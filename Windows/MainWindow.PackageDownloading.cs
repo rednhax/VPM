@@ -105,7 +105,7 @@ namespace VPM
                 try
                 {
                     // Use Cloudflare Worker proxy for encrypted database
-                    const string githubUrl = "https://vpm-gist-proxy.jabcoebi.workers.dev";
+                    const string githubUrl = "https://github.com/gicstin/VPM/raw/refs/heads/main/VPM.bin";
                     var success = await _packageDownloader.LoadEncryptedPackageListAsync(githubUrl);
                     
                     // Success or failure is handled by the caller

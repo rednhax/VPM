@@ -10,7 +10,8 @@
     Height="800"
     Background="{DynamicResource {x:Static SystemColors.WindowBrushKey}}"
     Icon="pack://application:,,,/icon.ico"
-    WindowStartupLocation="CenterScreen">
+    WindowStartupLocation="CenterScreen"
+    PreviewKeyDown="MainWindow_PreviewKeyDown">
     <WindowChrome.WindowChrome>
         <WindowChrome
             CaptionHeight="32"
@@ -5316,7 +5317,7 @@
                             </Button>
                             <Button
                                 x:Name="DependenciesSortButton"
-                                Grid.Column="2"
+                                Grid.Column="3"
                                 MinWidth="30"
                                 Margin="3,0,0,0"
                                 Padding="0"
@@ -5334,7 +5335,7 @@
                                     </Style>
                                 </Button.Style>
                             </Button>
-                            <Grid Grid.Column="3" Margin="3,0,0,0">
+                            <Grid Grid.Column="2" Margin="3,0,0,0">
                                 <Button
                                     x:Name="DownloadMissingButton"
                                     MinWidth="30"

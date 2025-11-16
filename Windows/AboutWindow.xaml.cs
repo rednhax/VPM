@@ -1,4 +1,5 @@
 using System;
+using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Interop;
@@ -84,13 +85,8 @@ namespace VPM
                 VersionTextBlock.Text = VersionInfo.DisplayVersion;
 
                 // Build information
-                BuildDateTextBlock.Text = DateTime.Now.ToString("yyyy-MM-dd HH:mm");
-                FrameworkTextBlock.Text = ".NET 9.0";
-                PlatformTextBlock.Text = $"{(Environment.Is64BitProcess ? "Win32NT (64-bit)" : "Win32NT (32-bit)")}";
-
-                // Statistics - these will be set by the main window
-                PackageCountTextBlock.Text = "Loading...";
-                CacheLocationTextBlock.Text = "Loading...";
+                FrameworkTextBlock.Text = ".NET 10.0";
+                PlatformTextBlock.Text = $"{(Environment.Is64BitProcess ? "Windows (64-bit)" : "Windows (32-bit)")}";
             }
             catch (Exception ex)
             {
@@ -98,14 +94,20 @@ namespace VPM
             }
         }
 
-        public void SetPackageCount(int count)
+        private void SharpCompressLink_Click(object sender, RoutedEventArgs e)
         {
-            PackageCountTextBlock.Text = count.ToString("N0");
-        }
-
-        public void SetCacheLocation(string location)
-        {
-            CacheLocationTextBlock.Text = location ?? "Not set";
+            try
+            {
+                Process.Start(new ProcessStartInfo
+                {
+                    FileName = "https://github.com/adamhathcock/sharpcompress",
+                    UseShellExecute = true
+                });
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Error opening link: {ex.Message}");
+            }
         }
 
         private void CloseButton_Click(object sender, RoutedEventArgs e)

@@ -17,6 +17,7 @@ namespace VPM.Windows
         private int _completedCount = 0;
         private int _totalCount = 0;
         private bool _allCompleted = false;
+        private readonly HashSet<string> _completedPackages = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         
         // Event to notify when download count changes
         public event EventHandler DownloadCountChanged;
@@ -38,6 +39,7 @@ namespace VPM.Windows
         {
             _cancellationTokenSource?.Dispose();
             _cancellationTokenSource = new CancellationTokenSource();
+            _completedPackages.Clear();
         }
 
         /// <summary>
@@ -105,6 +107,12 @@ namespace VPM.Windows
         {
             Dispatcher.Invoke(() =>
             {
+                // Check if package is already marked as completed
+                if (_completedPackages.Contains(packageName))
+                {
+                    return;
+                }
+                
                 // Try exact match first, then try matching base name
                 var item = _downloadItems.FirstOrDefault(d => d.PackageName.Equals(packageName, StringComparison.OrdinalIgnoreCase));
                 
@@ -118,8 +126,8 @@ namespace VPM.Windows
                 
                 if (item != null)
                 {
-                    // If item is cancelled, ignore progress updates
-                    if (item.StatusText == "Cancelled")
+                    // If item is cancelled or already completed, ignore progress updates
+                    if (item.StatusText == "Cancelled" || item.StatusText.Contains("Completed") || item.StatusText.Contains("Failed"))
                     {
                         return;
                     }
@@ -143,6 +151,9 @@ namespace VPM.Windows
         {
             Dispatcher.Invoke(() =>
             {
+                // Add to completed packages set to prevent further progress updates
+                _completedPackages.Add(packageName);
+                
                 // Try exact match first, then try matching base name (without version)
                 var item = _downloadItems.FirstOrDefault(d => d.PackageName.Equals(packageName, StringComparison.OrdinalIgnoreCase));
                 
@@ -153,6 +164,12 @@ namespace VPM.Windows
                     item = _downloadItems.FirstOrDefault(d => 
                         d.PackageName.Equals(baseName, StringComparison.OrdinalIgnoreCase) ||
                         GetBaseName(d.PackageName).Equals(baseName, StringComparison.OrdinalIgnoreCase));
+                    
+                    // Also add base name to completed set
+                    if (item != null)
+                    {
+                        _completedPackages.Add(baseName);
+                    }
                 }
                 
                 if (item != null)

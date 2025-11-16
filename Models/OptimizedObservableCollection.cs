@@ -82,13 +82,14 @@ namespace VPM.Models
             _suppressNotification = true;
             try
             {
-                // Optimize for List<T> by pre-allocating capacity
+                Items.Clear();
+
+                // Optimize for List<T> by pre-allocating capacity after clearing
                 if (Items is List<T> list)
                 {
                     list.Capacity = itemsList.Count;
                 }
 
-                Items.Clear();
                 foreach (var item in itemsList)
                 {
                     Items.Add(item);

@@ -423,7 +423,7 @@ Examples:
                         </DataGrid.RowStyle>
                         <DataGrid.Columns>
                             <!-- Column 1: Status Dot -->
-                            <DataGridTemplateColumn Width="40">
+                            <DataGridTemplateColumn Width="40" Header="">
                                 <DataGridTemplateColumn.CellTemplate>
                                     <DataTemplate>
                                         <Ellipse Width="12" Height="12" 
@@ -439,7 +439,7 @@ Examples:
                             </DataGridTemplateColumn>
                             
                             <!-- Column 2: Package Info -->
-                            <DataGridTemplateColumn Width="*">
+                            <DataGridTemplateColumn Width="*" Header="">
                                 <DataGridTemplateColumn.CellTemplate>
                                     <DataTemplate>
                                         <Grid Margin="0,6" VerticalAlignment="Center">
@@ -550,7 +550,7 @@ Examples:
                             </DataGridTemplateColumn>
                             
                             <!-- Column 3: Cancel Button -->
-                            <DataGridTemplateColumn Width="50">
+                            <DataGridTemplateColumn Width="50" Header="">
                                 <DataGridTemplateColumn.CellTemplate>
                                     <DataTemplate>
                                         <Button Width="32"
@@ -572,7 +572,7 @@ Examples:
                                                             <ControlTemplate TargetType="Button">
                                                                 <Border Background="{TemplateBinding Background}" 
                                                                         CornerRadius="{StaticResource CornerRadiusValue}">
-                                                                    <TextBlock Text="✓"
+                                                                    <TextBlock Text="✕"
                                                                                FontSize="18"
                                                                                FontWeight="Bold"
                                                                                Foreground="White"

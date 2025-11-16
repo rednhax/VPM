@@ -22,17 +22,23 @@ namespace VPM.Services
         public NetworkPermissionService(SettingsManager settingsManager)
         {
             _settingsManager = settingsManager ?? throw new ArgumentNullException(nameof(settingsManager));
-            _localDbPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "VAMPackageDatabase.bin");
+            
+            // Check for VPM.bin first, then fall back to VAMPackageDatabase.bin
+            string vpmBinPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "VPM.bin");
+            string legacyPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "VAMPackageDatabase.bin");
+            
+            _localDbPath = File.Exists(vpmBinPath) ? vpmBinPath : legacyPath;
         }
 
         /// <summary>
         /// Checks if network access is allowed. If permission hasn't been asked,
         /// shows a confirmation dialog to the user.
         /// </summary>
+        /// <param name="forceShowDialog">If true, always show the dialog even if offline mode is available</param>
         /// <returns>True if network access is granted, false otherwise</returns>
-        public async Task<bool> RequestNetworkAccessAsync()
+        public async Task<bool> RequestNetworkAccessAsync(bool forceShowDialog = false)
         {
-            var result = await RequestNetworkAccessWithOptionsAsync();
+            var result = await RequestNetworkAccessWithOptionsAsync(forceShowDialog: forceShowDialog);
             return result.granted;
         }
         
@@ -41,11 +47,13 @@ namespace VPM.Services
         /// Shows dialog unless "Never show again" was checked with granted permission.
         /// </summary>
         /// <param name="offerDatabaseUpdate">If true, shows the "Update database" checkbox (only once per session)</param>
+        /// <param name="forceShowDialog">If true, always show the dialog even if offline mode is available</param>
         /// <returns>Tuple with (granted, updateDatabase)</returns>
-        public async Task<(bool granted, bool updateDatabase)> RequestNetworkAccessWithOptionsAsync(bool offerDatabaseUpdate = false)
+        public async Task<(bool granted, bool updateDatabase)> RequestNetworkAccessWithOptionsAsync(bool offerDatabaseUpdate = false, bool forceShowDialog = false)
         {
             // Check for offline mode first - if .bin file exists, skip network permission popup
-            if (IsOfflineModeAvailable())
+            // UNLESS forceShowDialog is true (for forced refresh scenarios)
+            if (!forceShowDialog && IsOfflineModeAvailable())
             {
                 Console.WriteLine("[NetworkPermission] Offline database detected, skipping network permission popup");
                 return (true, false); // Grant access without showing popup (offline mode)

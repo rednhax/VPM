@@ -76,44 +76,15 @@
             <StackPanel Margin="30,25,30,20">
                 
                 <!-- Build Information Section -->
-                <StackPanel Margin="0,0,0,20">
-                    <TextBlock Text="Build Information" 
+                <StackPanel Margin="0,0,0,25">
+                    <TextBlock Text="Version" 
                                FontSize="14" 
                                FontWeight="Bold" 
-                               Margin="0,0,0,10"
+                               Margin="0,0,0,12"
                                Foreground="{DynamicResource {x:Static SystemColors.ControlTextBrushKey}}"/>
                     <Grid>
                         <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="150"/>
-                            <ColumnDefinition Width="*"/>
-                        </Grid.ColumnDefinitions>
-                        <Grid.RowDefinitions>
-                            <RowDefinition Height="Auto"/>
-                            <RowDefinition Height="Auto"/>
-                            <RowDefinition Height="Auto"/>
-                        </Grid.RowDefinitions>
-                        
-                        <TextBlock Grid.Row="0" Grid.Column="0" Text="Build Date:" FontWeight="SemiBold"/>
-                        <TextBlock Grid.Row="0" Grid.Column="1" x:Name="BuildDateTextBlock"/>
-                        
-                        <TextBlock Grid.Row="1" Grid.Column="0" Text="Framework:" FontWeight="SemiBold" Margin="0,8,0,0"/>
-                        <TextBlock Grid.Row="1" Grid.Column="1" x:Name="FrameworkTextBlock" Margin="0,8,0,0"/>
-                        
-                        <TextBlock Grid.Row="2" Grid.Column="0" Text="Platform:" FontWeight="SemiBold" Margin="0,8,0,0"/>
-                        <TextBlock Grid.Row="2" Grid.Column="1" x:Name="PlatformTextBlock" Margin="0,8,0,0"/>
-                    </Grid>
-                </StackPanel>
-                
-                <!-- Statistics Section -->
-                <StackPanel Margin="0,0,0,20">
-                    <TextBlock Text="Statistics" 
-                               FontSize="14" 
-                               FontWeight="Bold" 
-                               Margin="0,0,0,10"
-                               Foreground="{DynamicResource {x:Static SystemColors.ControlTextBrushKey}}"/>
-                    <Grid>
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="150"/>
+                            <ColumnDefinition Width="120"/>
                             <ColumnDefinition Width="*"/>
                         </Grid.ColumnDefinitions>
                         <Grid.RowDefinitions>
@@ -121,33 +92,33 @@
                             <RowDefinition Height="Auto"/>
                         </Grid.RowDefinitions>
                         
-                        <TextBlock Grid.Row="0" Grid.Column="0" Text="Loaded Packages:" FontWeight="SemiBold"/>
-                        <TextBlock Grid.Row="0" Grid.Column="1" x:Name="PackageCountTextBlock"/>
+                        <TextBlock Grid.Row="0" Grid.Column="0" Text="Framework:" FontWeight="SemiBold"/>
+                        <TextBlock Grid.Row="0" Grid.Column="1" x:Name="FrameworkTextBlock"/>
                         
-                        <TextBlock Grid.Row="1" Grid.Column="0" Text="Cache Location:" FontWeight="SemiBold" Margin="0,8,0,0"/>
-                        <TextBlock Grid.Row="1" Grid.Column="1" 
-                                   x:Name="CacheLocationTextBlock" 
-                                   TextWrapping="Wrap"
-                                   Margin="0,8,0,0"
-                                   FontSize="11"/>
+                        <TextBlock Grid.Row="1" Grid.Column="0" Text="Platform:" FontWeight="SemiBold" Margin="0,8,0,0"/>
+                        <TextBlock Grid.Row="1" Grid.Column="1" x:Name="PlatformTextBlock" Margin="0,8,0,0"/>
                     </Grid>
                 </StackPanel>
                 
-                <!-- Features Section -->
-                <StackPanel>
-                    <TextBlock Text="Features" 
+                <!-- Dependencies Section -->
+                <StackPanel Margin="0,0,0,25">
+                    <TextBlock Text="Dependencies" 
                                FontSize="14" 
                                FontWeight="Bold" 
-                               Margin="0,0,0,10"
+                               Margin="0,0,0,12"
                                Foreground="{DynamicResource {x:Static SystemColors.ControlTextBrushKey}}"/>
-                    <ItemsControl>
-                        <TextBlock Text="✓ Advanced package management and organization"/>
-                        <TextBlock Text="✓ Scene and preset management" Margin="0,4,0,0"/>
-                        <TextBlock Text="✓ Real-time filtering and searching" Margin="0,4,0,0"/>
-                        <TextBlock Text="✓ Package optimization and cleanup" Margin="0,4,0,0"/>
-                        <TextBlock Text="✓ Dark mode support" Margin="0,4,0,0"/>
-                        <TextBlock Text="✓ Duplicate detection and management" Margin="0,4,0,0"/>
-                    </ItemsControl>
+                    <StackPanel Margin="0,0,0,8">
+                        <TextBlock Text="SharpCompress" FontWeight="SemiBold" FontSize="12"/>
+                        <TextBlock Text="Archive extraction and compression library" 
+                                   FontSize="11" 
+                                   Foreground="{DynamicResource {x:Static SystemColors.GrayTextBrushKey}}"
+                                   Margin="0,2,0,0"/>
+                        <TextBlock Margin="0,4,0,0">
+                            <Hyperlink x:Name="SharpCompressLink" Click="SharpCompressLink_Click" Foreground="#0078D4">
+                                github.com/adamhathcock/sharpcompress
+                            </Hyperlink>
+                        </TextBlock>
+                    </StackPanel>
                 </StackPanel>
             </StackPanel>
         </ScrollViewer>

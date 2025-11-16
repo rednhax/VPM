@@ -633,6 +633,9 @@ namespace VPM
                 if (DependenciesDataGrid == null || DependenciesDataGrid.Items.Count == 0)
                     return;
 
+                // Treat sort button scrolling as if the DataGrid has focus for keyboard shortcut display
+                _dependenciesDataGridHasFocus = true;
+
                 // Get current selected index
                 int currentIndex = DependenciesDataGrid.SelectedIndex;
                 
@@ -654,6 +657,8 @@ namespace VPM
                 {
                     DependenciesDataGrid.SelectedIndex = newIndex;
                     DependenciesDataGrid.ScrollIntoView(DependenciesDataGrid.SelectedItem);
+                    // Update button bar to show keyboard shortcuts
+                    UpdateDependenciesButtonBar();
                 }
 
                 // Mark event as handled to prevent scrolling the DataGrid itself
@@ -1251,10 +1256,6 @@ namespace VPM
             {
                 Owner = this
             };
-
-            // Set package count and cache location
-            aboutWindow.SetPackageCount(Packages?.Count ?? 0);
-            aboutWindow.SetCacheLocation(_settingsManager?.Settings?.CacheFolder ?? "Not set");
 
             aboutWindow.ShowDialog();
         }
@@ -2130,6 +2131,52 @@ namespace VPM
 
         #endregion
         #region Keyboard Navigation Handlers
+
+        private void MainWindow_PreviewKeyDown(object sender, KeyEventArgs e)
+        {
+            // Handle Space key for dependencies when using sort button scroll
+            if (e.Key == Key.Space && _dependenciesDataGridHasFocus && DependenciesDataGrid?.SelectedItems.Count > 0)
+            {
+                // Prevent key repeat - only trigger on first press
+                if (e.IsRepeat)
+                {
+                    e.Handled = true;
+                    return;
+                }
+
+                // Check if Ctrl is pressed for multiple selection, or single item without Ctrl
+                bool isCtrlPressed = Keyboard.Modifiers.HasFlag(ModifierKeys.Control);
+                bool isSingleSelection = DependenciesDataGrid.SelectedItems.Count == 1;
+
+                // Only allow: single item with Space, or multiple items with Ctrl+Space
+                if (isSingleSelection || isCtrlPressed)
+                {
+                    var selectedDependencies = DependenciesDataGrid.SelectedItems.Cast<DependencyItem>().ToList();
+
+                    // Check if all selected items have the same status
+                    var statuses = selectedDependencies.Select(d => d.Status).Distinct().ToList();
+
+                    if (statuses.Count == 1)
+                    {
+                        // All items have same status - proceed with operation
+                        var status = statuses[0];
+
+                        if (status == "Available")
+                        {
+                            // Trigger load
+                            LoadDependencies_Click(sender, e);
+                            e.Handled = true;
+                        }
+                        else if (status == "Loaded")
+                        {
+                            // Trigger unload
+                            UnloadDependencies_Click(sender, e);
+                            e.Handled = true;
+                        }
+                    }
+                }
+            }
+        }
 
         private async void PackageDataGrid_KeyDown(object sender, KeyEventArgs e)
         {

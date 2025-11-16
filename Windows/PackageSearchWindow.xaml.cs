@@ -747,7 +747,7 @@ namespace VPM
             try
             {
                 // Use Cloudflare Worker proxy with random filename for obscurity
-                const string githubUrl = "https://vpm-gist-proxy.jabcoebi.workers.dev";
+                const string githubUrl = "https://github.com/gicstin/VPM/raw/refs/heads/main/VPM.bin";
                 
                 // Check if database is already loaded
                 int existingCount = _packageDownloader.GetPackageCount();

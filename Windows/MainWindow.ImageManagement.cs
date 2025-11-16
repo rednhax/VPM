@@ -104,15 +104,7 @@ namespace VPM
 
                 if (packagesToIndex.Count > 0)
                 {
-                    try
-                    {
-                        Mouse.OverrideCursor = Cursors.Wait;
-                        await _imageManager.BuildImageIndexFromVarsAsync(packagesToIndex, forceRebuild: false);
-                    }
-                    finally
-                    {
-                        Mouse.OverrideCursor = null;
-                    }
+                    await _imageManager.BuildImageIndexFromVarsAsync(packagesToIndex, forceRebuild: false);
                 }
 
                 var selectedPackageNames = selectedPackages.Select(p => p.Name).ToList();

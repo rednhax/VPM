@@ -43,8 +43,11 @@ namespace VPM.Services
 
         public EncryptedDatabaseService()
         {
-            // Check for offline database file in exe directory
-            _localDbPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "VAMPackageDatabase.bin");
+            // Check for VPM.bin first, then fall back to VAMPackageDatabase.bin
+            string vpmBinPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "VPM.bin");
+            string legacyPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "VAMPackageDatabase.bin");
+            
+            _localDbPath = File.Exists(vpmBinPath) ? vpmBinPath : legacyPath;
             
             _httpClient = new HttpClient
             {
@@ -91,20 +94,28 @@ namespace VPM.Services
             }
 
             // No offline file or forceRefresh - need network access
-            // Check network permission ONLY if we need to download
+            // Always check network permission before attempting download
+            bool hasNetworkPermission = false;
             if (_networkPermissionCheck != null)
             {
-                bool hasPermission = await _networkPermissionCheck();
-                if (!hasPermission)
+                Console.WriteLine($"[EncryptedDB] Requesting network permission for download...");
+                hasNetworkPermission = await _networkPermissionCheck();
+                if (!hasNetworkPermission)
                 {
+                    Console.WriteLine($"[EncryptedDB] Network permission denied by user");
                     goto LoadFromCache;
                 }
+                Console.WriteLine($"[EncryptedDB] Network permission approved");
+            }
+            else
+            {
+                Console.WriteLine($"[EncryptedDB] Warning: No network permission check configured, proceeding with download");
+                hasNetworkPermission = true;
             }
 
-            // Try to load from GitHub
-            if (!string.IsNullOrWhiteSpace(githubUrl) && (forceRefresh || _cachedEncryptedData == null))
+            // Try to load from GitHub only if we have permission
+            if (hasNetworkPermission && !string.IsNullOrWhiteSpace(githubUrl) && (forceRefresh || _cachedEncryptedData == null))
             {
-
                 try
                 {
                     Console.WriteLine($"[EncryptedDB] Downloading from: {githubUrl}");
@@ -402,20 +413,28 @@ namespace VPM.Services
             }
 
             // No offline file or forceRefresh - need network access
-            // Check network permission ONLY if we need to download
+            // Always check network permission before attempting download
+            bool hasNetworkPermission = false;
             if (_networkPermissionCheck != null)
             {
-                bool hasPermission = await _networkPermissionCheck();
-                if (!hasPermission)
+                Console.WriteLine($"[EncryptedDB-JSON] Requesting network permission for download...");
+                hasNetworkPermission = await _networkPermissionCheck();
+                if (!hasNetworkPermission)
                 {
+                    Console.WriteLine($"[EncryptedDB-JSON] Network permission denied by user");
                     goto LoadFromCache;
                 }
+                Console.WriteLine($"[EncryptedDB-JSON] Network permission approved");
+            }
+            else
+            {
+                Console.WriteLine($"[EncryptedDB-JSON] Warning: No network permission check configured, proceeding with download");
+                hasNetworkPermission = true;
             }
 
-            // Try to load from GitHub
-            if (!string.IsNullOrWhiteSpace(githubUrl) && (forceRefresh || _cachedEncryptedData == null))
+            // Try to load from GitHub only if we have permission
+            if (hasNetworkPermission && !string.IsNullOrWhiteSpace(githubUrl) && (forceRefresh || _cachedEncryptedData == null))
             {
-
                 try
                 {
                     Console.WriteLine($"[EncryptedDB-JSON] Downloading from: {githubUrl}");

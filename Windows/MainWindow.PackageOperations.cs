@@ -67,8 +67,6 @@ namespace VPM
 
                 // Disable UI during operation
                 LoadPackagesButton.IsEnabled = false;
-                var originalCursor = Cursor;
-                Cursor = Cursors.Wait;
 
                 try
                 {
@@ -160,7 +158,6 @@ namespace VPM
                 {
                     // Re-enable UI
                     LoadPackagesButton.IsEnabled = true;
-                    Cursor = originalCursor;
                     UpdatePackageButtonBar();
                 }
             }
@@ -263,8 +260,6 @@ namespace VPM
 
                 LoadPackagesButton.IsEnabled = false;
                 LoadPackagesWithDepsButton.IsEnabled = false;
-                var originalCursor = Cursor;
-                Cursor = Cursors.Wait;
 
                 try
                 {
@@ -343,7 +338,6 @@ namespace VPM
                 {
                     LoadPackagesButton.IsEnabled = true;
                     LoadPackagesWithDepsButton.IsEnabled = true;
-                    Cursor = originalCursor;
                     UpdatePackageButtonBar();
                 }
             }
@@ -396,8 +390,6 @@ namespace VPM
 
                 // Disable UI during operation
                 UnloadPackagesButton.IsEnabled = false;
-                var originalCursor = Cursor;
-                Cursor = Cursors.Wait;
 
                 try
                 {
@@ -478,7 +470,6 @@ namespace VPM
                 {
                     // Re-enable UI
                     UnloadPackagesButton.IsEnabled = true;
-                    Cursor = originalCursor;
                     UpdatePackageButtonBar();
                 }
 
@@ -529,8 +520,6 @@ namespace VPM
 
                 // Disable UI during operation
                 LoadDependenciesButton.IsEnabled = false;
-                var originalCursor = Cursor;
-                Cursor = Cursors.Wait;
 
                 try
                 {
@@ -619,7 +608,6 @@ namespace VPM
                 {
                     // Re-enable UI
                     LoadDependenciesButton.IsEnabled = true;
-                    Cursor = originalCursor;
                     UpdateDependenciesButtonBar();
                 }
             }
@@ -670,8 +658,6 @@ namespace VPM
 
                 // Disable UI during operation
                 UnloadDependenciesButton.IsEnabled = false;
-                var originalCursor = Cursor;
-                Cursor = Cursors.Wait;
 
                 try
                 {
@@ -751,7 +737,6 @@ namespace VPM
                 {
                     // Re-enable UI
                     UnloadDependenciesButton.IsEnabled = true;
-                    Cursor = originalCursor;
                     UpdateDependenciesButtonBar();
                 }
 
@@ -914,8 +899,6 @@ namespace VPM
 
                 // Disable UI during operation
                 LoadAllDependenciesButton.IsEnabled = false;
-                var originalCursor = Cursor;
-                Cursor = Cursors.Wait;
 
                 try
                 {
@@ -1004,7 +987,6 @@ namespace VPM
                 {
                     // Re-enable UI
                     LoadAllDependenciesButton.IsEnabled = true;
-                    Cursor = originalCursor;
                     UpdatePackageButtonBar();
                 }
             }

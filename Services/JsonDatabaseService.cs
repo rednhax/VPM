@@ -47,7 +47,11 @@ namespace VPM.Services
 
         public JsonDatabaseService()
         {
-            _localDbPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "VAMPackageDatabase.bin");
+            // Check for VPM.bin first, then fall back to VAMPackageDatabase.bin
+            string vpmBinPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "VPM.bin");
+            string legacyPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "VAMPackageDatabase.bin");
+            
+            _localDbPath = File.Exists(vpmBinPath) ? vpmBinPath : legacyPath;
             
             _httpClient = new HttpClient
             {
@@ -93,20 +97,28 @@ namespace VPM.Services
             }
 
             // No offline file or forceRefresh - need network access
-            // Check network permission ONLY if we need to download
+            // Always check network permission before attempting download
+            bool hasNetworkPermission = false;
             if (_networkPermissionCheck != null)
             {
-                bool hasPermission = await _networkPermissionCheck();
-                if (!hasPermission)
+                Console.WriteLine($"[JsonDB] Requesting network permission for download...");
+                hasNetworkPermission = await _networkPermissionCheck();
+                if (!hasNetworkPermission)
                 {
+                    Console.WriteLine($"[JsonDB] Network permission denied by user");
                     goto LoadFromCache;
                 }
+                Console.WriteLine($"[JsonDB] Network permission approved");
+            }
+            else
+            {
+                Console.WriteLine($"[JsonDB] Warning: No network permission check configured, proceeding with download");
+                hasNetworkPermission = true;
             }
 
-            // Try to load from GitHub
-            if (!string.IsNullOrWhiteSpace(githubUrl) && (forceRefresh || _cachedEncryptedData == null))
+            // Try to load from GitHub only if we have permission
+            if (hasNetworkPermission && !string.IsNullOrWhiteSpace(githubUrl) && (forceRefresh || _cachedEncryptedData == null))
             {
-
                 try
                 {
                     Console.WriteLine($"[JsonDB] Downloading from: {githubUrl}");
@@ -141,15 +153,23 @@ namespace VPM.Services
             try
             {
                 byte[] decryptedData = DecryptAES(encryptedData);
-                Console.WriteLine($"[JsonDB] Decrypted {decryptedData.Length:N0} bytes");
-                
                 byte[] decompressedData = DecompressGzip(decryptedData);
-                Console.WriteLine($"[JsonDB] Decompressed {decompressedData.Length:N0} bytes");
+                string content = Encoding.UTF8.GetString(decompressedData);
                 
-                string jsonContent = Encoding.UTF8.GetString(decompressedData);
+                // Detect format: JSON or plain text
+                List<FlatPackageEntry> packageList = null;
+                string trimmedContent = content.Trim();
                 
-                var packageList = ParseJsonDatabase(jsonContent);
-                Console.WriteLine($"[JsonDB] Parsed {packageList?.Count ?? 0} packages");
+                if (trimmedContent.StartsWith("{"))
+                {
+                    // JSON format
+                    packageList = ParseJsonDatabase(content);
+                }
+                else
+                {
+                    // Plain text format (tab/space-separated)
+                    packageList = ParsePlainTextDatabase(content);
+                }
                 
                 return packageList;
             }
@@ -200,6 +220,162 @@ namespace VPM.Services
                 gzip.CopyTo(msDecompressed);
                 return msDecompressed.ToArray();
             }
+        }
+
+        /// <summary>
+        /// Parses plain text database (tab/space-separated format) and converts to package entries
+        /// </summary>
+        private List<FlatPackageEntry> ParsePlainTextDatabase(string content)
+        {
+            var packageList = new List<FlatPackageEntry>();
+            ReadOnlySpan<char> remaining = content.AsSpan();
+
+            int lineNumber = 0;
+            int parsedCount = 0;
+            int skippedCount = 0;
+
+            while (!remaining.IsEmpty)
+            {
+                int lineBreakIndex = remaining.IndexOfAny('\r', '\n');
+                ReadOnlySpan<char> lineSpan;
+
+                if (lineBreakIndex < 0)
+                {
+                    lineSpan = remaining;
+                    remaining = ReadOnlySpan<char>.Empty;
+                }
+                else
+                {
+                    lineSpan = remaining.Slice(0, lineBreakIndex);
+                    int skip = 1;
+                    if (remaining[lineBreakIndex] == '\r' && lineBreakIndex + 1 < remaining.Length && remaining[lineBreakIndex + 1] == '\n')
+                    {
+                        skip = 2;
+                    }
+
+                    remaining = remaining.Slice(lineBreakIndex + skip);
+                }
+
+                lineNumber++;
+
+                lineSpan = lineSpan.Trim();
+                if (lineSpan.IsEmpty)
+                {
+                    skippedCount++;
+                    continue;
+                }
+
+                if (lineSpan[0] == '#')
+                {
+                    skippedCount++;
+                    continue;
+                }
+
+                string packageName = null;
+                string downloadUrl = null;
+
+                try
+                {
+                    // Try tab-separated first
+                    int tabIndex = lineSpan.IndexOf('\t');
+                    if (tabIndex >= 0)
+                    {
+                        var nameSpan = lineSpan.Slice(0, tabIndex).TrimEnd();
+                        var urlSpan = lineSpan.Slice(tabIndex + 1).Trim();
+                        if (!nameSpan.IsEmpty && !urlSpan.IsEmpty)
+                        {
+                            packageName = nameSpan.ToString();
+                            downloadUrl = urlSpan.ToString();
+                        }
+                    }
+                    else
+                    {
+                        // Try double-space separated
+                        int multiSpaceIndex = -1;
+                        for (int i = 0; i < lineSpan.Length - 1; i++)
+                        {
+                            if (lineSpan[i] == ' ' && lineSpan[i + 1] == ' ')
+                            {
+                                multiSpaceIndex = i;
+                                break;
+                            }
+                        }
+
+                        if (multiSpaceIndex >= 0)
+                        {
+                            int urlStart = multiSpaceIndex;
+                            while (urlStart < lineSpan.Length && lineSpan[urlStart] == ' ')
+                            {
+                                urlStart++;
+                            }
+
+                            var nameSpan = lineSpan.Slice(0, multiSpaceIndex).TrimEnd();
+                            var urlSpan = lineSpan.Slice(urlStart).Trim();
+                            if (!nameSpan.IsEmpty && !urlSpan.IsEmpty)
+                            {
+                                packageName = nameSpan.ToString();
+                                downloadUrl = urlSpan.ToString();
+                            }
+                        }
+                        else
+                        {
+                            // Try comma-separated
+                            int commaIndex = lineSpan.IndexOf(',');
+                            if (commaIndex >= 0)
+                            {
+                                var nameSpan = lineSpan.Slice(0, commaIndex).TrimEnd();
+                                var urlSpan = lineSpan.Slice(commaIndex + 1).Trim();
+                                if (!nameSpan.IsEmpty && !urlSpan.IsEmpty)
+                                {
+                                    packageName = nameSpan.ToString();
+                                    downloadUrl = urlSpan.ToString();
+                                }
+                            }
+                        }
+                    }
+
+                    if (!string.IsNullOrWhiteSpace(packageName) && !string.IsNullOrWhiteSpace(downloadUrl))
+                    {
+                        // Remove .var extension if present
+                        if (packageName.EndsWith(".var", StringComparison.OrdinalIgnoreCase))
+                        {
+                            packageName = packageName.Substring(0, packageName.Length - 4);
+                        }
+
+                        // Keep Pixeldrain URLs as-is - they point to specific files within a ZIP
+                        string finalUrl = downloadUrl;
+                        if (downloadUrl.Contains("pixeldrain.com", StringComparison.OrdinalIgnoreCase))
+                        {
+                            // Pixeldrain URLs in format: /api/file/{id}/info/zip/{filename}
+                            // These are direct file downloads from within a ZIP, so keep them as-is
+                            finalUrl = downloadUrl;
+                        }
+
+                        // Create entry with URL as primary
+                        var entry = new FlatPackageEntry
+                        {
+                            Creator = "",
+                            PackageKey = packageName,
+                            FullPackageName = packageName,
+                            Filename = packageName + ".var",
+                            HubUrls = new List<string>(),
+                            PdrUrls = new List<string> { finalUrl },
+                            AllUrls = new List<string> { finalUrl },
+                            PrimaryUrl = finalUrl
+                        };
+
+                        packageList.Add(entry);
+                        parsedCount++;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"[JsonDB] Parse error on line {lineNumber}: {ex.Message}");
+                }
+            }
+
+            Console.WriteLine($"[JsonDB] Plain text parsing: {parsedCount} packages parsed, {skippedCount} lines skipped");
+            return packageList;
         }
 
         /// <summary>
