@@ -171,6 +171,82 @@ namespace VPM.Services
         }
 
         /// <summary>
+        /// MEDIUM PRIORITY FIX 5: Batch lookup for multiple images from same VAR
+        /// Returns dictionary of found images and list of uncached paths
+        /// Reduces I/O operations by batching lookups instead of sequential checks
+        /// </summary>
+        public (Dictionary<string, BitmapImage> cached, List<string> uncached) TryGetCachedBatch(
+            string varPath, List<string> internalPaths, long fileSize, long lastWriteTicks)
+        {
+            var cached = new Dictionary<string, BitmapImage>();
+            var uncached = new List<string>();
+            
+            try
+            {
+                var packageKey = GetPackageCacheKey(varPath, fileSize, lastWriteTicks);
+
+                lock (_cacheLock)
+                {
+                    if (!_memoryCache.TryGetValue(packageKey, out var packageCache))
+                    {
+                        // Package not cached, all paths are uncached
+                        uncached.AddRange(internalPaths);
+                        _cacheMisses += internalPaths.Count;
+                        return (cached, uncached);
+                    }
+
+                    // Check each image in batch
+                    foreach (var internalPath in internalPaths)
+                    {
+                        if (packageCache.Images.TryGetValue(internalPath, out var encryptedData))
+                        {
+                            try
+                            {
+                                // Decrypt and load image
+                                var decryptedData = Decrypt(encryptedData);
+                                
+                                var bitmap = new BitmapImage();
+                                bitmap.BeginInit();
+                                bitmap.CacheOption = BitmapCacheOption.OnLoad;
+                                bitmap.CreateOptions = BitmapCreateOptions.IgnoreColorProfile;
+                                
+                                // Use non-pooled MemoryStream for BitmapImage
+                                var stream = new MemoryStream(decryptedData);
+                                bitmap.StreamSource = stream;
+                                bitmap.EndInit();
+                                bitmap.Freeze();
+
+                                cached[internalPath] = bitmap;
+                                _cacheHits++;
+                                _totalBytesRead += decryptedData.Length;
+                            }
+                            catch
+                            {
+                                // Decryption/loading failed, treat as uncached
+                                uncached.Add(internalPath);
+                                _cacheMisses++;
+                            }
+                        }
+                        else
+                        {
+                            // Image not in cache
+                            uncached.Add(internalPath);
+                            _cacheMisses++;
+                        }
+                    }
+                }
+            }
+            catch
+            {
+                // Cache read failed, treat all as uncached
+                uncached.AddRange(internalPaths);
+                _cacheMisses += internalPaths.Count;
+            }
+
+            return (cached, uncached);
+        }
+
+        /// <summary>
         /// Saves a BitmapImage to disk cache (encrypted database)
         /// </summary>
         public bool TrySaveToCache(string varPath, string internalPath, long fileSize, long lastWriteTicks, BitmapImage bitmap)

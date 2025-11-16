@@ -1512,16 +1512,46 @@ namespace VPM.Services
                 var imageLocations = new List<ImageLocation>();
                 using var archive = SharpCompressHelper.OpenForRead(varPath);
 
+                // Debug logging for Testitou packages
+                bool isDebugPackage = metadataKey.StartsWith("Testitou", StringComparison.OrdinalIgnoreCase);
+                if (isDebugPackage)
+                {
+                    var timestamp = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss.fff");
+                    var msg = $"[{timestamp}] PackageManager.IndexPreviewImages: metadataKey='{metadataKey}', varPath='{varPath}'";
+                    System.Diagnostics.Debug.WriteLine(msg);
+                    
+                    var debugLogPath = Path.Combine(Path.GetTempPath(), "vpm_preview_debug.log");
+                    File.AppendAllText(debugLogPath, msg + "\n");
+                }
+
+                // Build a flattened list of all files in the archive for pairing detection
+                // Flatten by filename only (without directory path) for global pairing detection
+                // This catches all pairs regardless of directory depth
+                var allFilesFlattened = new List<string>();
+                foreach (var entry in archive.Entries)
+                {
+                    if (!entry.Key.EndsWith("/"))
+                    {
+                        // Store just the filename for global pairing
+                        var filename = Path.GetFileName(entry.Key);
+                        allFilesFlattened.Add(filename.ToLowerInvariant());
+                    }
+                }
+
+                // Now check each image file for pairing
                 foreach (var entry in archive.Entries)
                 {
                     if (entry.Key.EndsWith("/")) continue; // skip directories
                     var ext = Path.GetExtension(entry.Key).ToLowerInvariant();
                     if (ext != ".jpg" && ext != ".jpeg" && ext != ".png") continue;
 
-                    var pathNorm = entry.Key.Replace('\\', '/').ToLowerInvariant();
-                    if (pathNorm.Contains("/textures/") || pathNorm.Contains("/texture/")) continue;
-
+                    var filename = Path.GetFileName(entry.Key).ToLowerInvariant();
+                    
+                    // Size filter: 1KB - 1MB
                     if (entry.Size < 1024 || entry.Size > 1024 * 1024) continue;
+
+                    // Use the new pairing logic: check if this image has a paired file with same stem
+                    if (!PreviewImageValidator.IsPreviewImage(filename, allFilesFlattened)) continue;
 
                     // Phase 1 Optimization: Use header-only read for dimension detection
                     // This reduces I/O by 95-99% compared to loading full image
@@ -1544,6 +1574,15 @@ namespace VPM.Services
                 if (imageLocations.Count > 0)
                 {
                     PreviewImageIndex[metadataKey] = imageLocations;
+                    if (isDebugPackage)
+                    {
+                        var timestamp = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss.fff");
+                        var msg = $"[{timestamp}] PackageManager.IndexPreviewImages: Stored {imageLocations.Count} images for key '{metadataKey}'";
+                        System.Diagnostics.Debug.WriteLine(msg);
+                        
+                        var debugLogPath = Path.Combine(Path.GetTempPath(), "vpm_preview_debug.log");
+                        File.AppendAllText(debugLogPath, msg + "\n");
+                    }
                 }
             }
             catch

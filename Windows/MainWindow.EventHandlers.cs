@@ -2946,14 +2946,41 @@ namespace VPM
                 _currentlyDisplayedPackages = currentPackageNames;
                 _currentlyDisplayedDependencies = currentDependencyNames;
 
-                // Convert selected dependencies to package items
-                var dependencyPackages = ConvertDependenciesToPackages(selectedDependencies);
+                // Convert selected dependencies to package items and pre-index images in background
+                // This avoids blocking the UI thread on dependency lookup and image indexing
+                List<PackageItem> dependencyPackages = await Task.Run(() =>
+                {
+                    var packages = ConvertDependenciesToPackages(selectedDependencies);
+                    
+                    // Pre-index images for dependency packages to avoid on-demand scanning during display
+                    // Only index if not already indexed (check cache first to avoid redundant VAR scans)
+                    if (packages.Count > 0 && _imageManager != null && _packageManager != null)
+                    {
+                        foreach (var depPackage in packages)
+                        {
+                            var packageKey = !string.IsNullOrEmpty(depPackage.MetadataKey) ? depPackage.MetadataKey : depPackage.Name;
+                            if (_packageManager.PackageMetadata.TryGetValue(packageKey, out var metadata))
+                            {
+                                // Extract base name for cache lookup
+                                var packageBase = Path.GetFileNameWithoutExtension(metadata.Filename);
+                                
+                                // Only pre-index if not already in cache (avoids redundant VAR scans)
+                                if (_imageManager.GetCachedImageCount(packageBase) == 0)
+                                {
+                                    _imageManager.PreIndexImagesForPackage(metadata.FilePath);
+                                }
+                            }
+                        }
+                    }
+                    
+                    return packages;
+                });
 
                 // If dependencies are selected, show ONLY their images, not the parent packages
                 var allPackages = new List<PackageItem>();
                 var packageSources = new List<bool>(); // true = package, false = dependency
 
-                if (dependencyPackages.Count > 0)
+                if (dependencyPackages != null && dependencyPackages.Count > 0)
                 {
                     // Show only dependency/dependent images
                     allPackages = dependencyPackages;
@@ -3013,6 +3040,36 @@ namespace VPM
                 return result;
             }
 
+            // Build lookup cache once to avoid O(n*m) scanning for each dependency
+            // Maps base package names (without version) to their metadata keys and versions
+            var packageLookup = new Dictionary<string, List<(string key, int version)>>(StringComparer.OrdinalIgnoreCase);
+            
+            foreach (var kvp in _packageManager.PackageMetadata)
+            {
+                var key = kvp.Key;
+                var normalizedKey = NormalizePackageName(key); // Remove #archived suffix
+                var version = ExtractVersionFromPackageName(normalizedKey);
+                
+                // Extract base name (without version number)
+                // e.g., "Creator.Package.1" -> "Creator.Package"
+                string baseName = normalizedKey;
+                if (version > 0)
+                {
+                    var parts = normalizedKey.Split('.');
+                    if (parts.Length >= 3 && int.TryParse(parts.Last(), out _))
+                    {
+                        baseName = string.Join(".", parts.Take(parts.Length - 1));
+                    }
+                }
+                
+                if (!packageLookup.ContainsKey(baseName))
+                {
+                    packageLookup[baseName] = new List<(string, int)>();
+                }
+                
+                packageLookup[baseName].Add((key, version));
+            }
+
             foreach (var dependency in dependencies)
             {
                 // Skip placeholder items
@@ -3031,19 +3088,8 @@ namespace VPM
                     }
                 }
 
-                // Collect metadata keys matching this dependency (handles archived variants via normalization)
-                // For dependents, the name might be the full package name (e.g., "Creator.Package.1")
-                // For dependencies, the name might be just the base (e.g., "Creator.Package")
-                var matchingKeys = _packageManager.PackageMetadata.Keys
-                    .Where(k => {
-                        var normalizedKey = NormalizePackageName(k);
-                        // Check for exact match or match with version suffix
-                        return normalizedKey.Equals(baseDependencyName, StringComparison.OrdinalIgnoreCase) ||
-                               normalizedKey.StartsWith(baseDependencyName + ".", StringComparison.OrdinalIgnoreCase);
-                    })
-                    .ToList();
-
-                if (matchingKeys.Count == 0)
+                // Fast lookup using pre-built cache instead of scanning all keys
+                if (!packageLookup.TryGetValue(baseDependencyName, out var matchingEntries))
                 {
                     continue;
                 }
@@ -3052,13 +3098,11 @@ namespace VPM
 
                 if (requestedVersion.HasValue)
                 {
-                    var versionMatches = matchingKeys
-                        .Where(k => ExtractVersionFromPackageName(k) == requestedVersion.Value)
-                        .ToList();
-
-                    if (versionMatches.Count > 0)
+                    // Find exact version match
+                    var versionMatch = matchingEntries.FirstOrDefault(e => e.version == requestedVersion.Value);
+                    if (versionMatch != default)
                     {
-                        selectedKey = SelectPreferredMetadataKey(versionMatches);
+                        selectedKey = versionMatch.key;
                     }
                 }
 
@@ -3066,14 +3110,28 @@ namespace VPM
                 {
                     if (isLatest)
                     {
-                        var orderedKeys = matchingKeys
-                            .OrderByDescending(k => ExtractVersionFromPackageName(k))
-                            .ToList();
-                        selectedKey = SelectPreferredMetadataKey(orderedKeys);
+                        // Find highest version
+                        var maxVersion = matchingEntries.Max(e => e.version);
+                        selectedKey = matchingEntries
+                            .Where(e => e.version == maxVersion)
+                            .Select(e => e.key)
+                            .FirstOrDefault();
+                        
+                        // Prefer archived if available
+                        var archivedKey = matchingEntries
+                            .Where(e => e.version == maxVersion && e.key.EndsWith("#archived", StringComparison.OrdinalIgnoreCase))
+                            .Select(e => e.key)
+                            .FirstOrDefault();
+                        if (!string.IsNullOrEmpty(archivedKey))
+                        {
+                            selectedKey = archivedKey;
+                        }
                     }
                     else
                     {
-                        selectedKey = SelectPreferredMetadataKey(matchingKeys);
+                        // No specific version requested, use first match (prefer archived)
+                        var archivedKey = matchingEntries.FirstOrDefault(e => e.key.EndsWith("#archived", StringComparison.OrdinalIgnoreCase));
+                        selectedKey = archivedKey != default ? archivedKey.key : matchingEntries.First().key;
                     }
                 }
 

@@ -569,6 +569,8 @@ namespace VPM
                             ImageSource = image,
                             PackageKey = packageKey,
                             ImageIndex = i,
+                            ImageWidth = image.PixelWidth,
+                            ImageHeight = image.PixelHeight,
                             CornerRadius = new CornerRadius(UI_CORNER_RADIUS),
                             Margin = new Thickness(3),
                             ToolTip = $"{packageItem.Name}\nDouble-click to open in image viewer"
@@ -637,9 +639,13 @@ namespace VPM
             {
                 return Dispatcher.Invoke(() =>
                 {
+                    // Adjust columns based on image count to avoid tiny tiles
+                    // If fewer images than columns, use the image count instead
+                    int columnsToUse = Math.Min(_imageColumns, imageTiles.Count);
+                    
                     var grid = new UniformGrid
                     {
-                        Columns = _imageColumns,
+                        Columns = columnsToUse,
                         Margin = new Thickness(0, 0, 0, 8)
                     };
                     
@@ -807,6 +813,13 @@ namespace VPM
                     actualTileSize = minTileSize;
                 }
                 
+                // Determine if all images have a 1x2 aspect ratio (height is 2x width)
+                bool allImagesAre1x2 = imageTiles.Count > 0 && imageTiles.All(tile => 
+                    tile.ImageHeight > 0 && tile.ImageWidth > 0 &&
+                    Math.Abs((double)tile.ImageHeight / tile.ImageWidth - 2.0) < 0.1); // Allow 10% tolerance
+                
+                double tileHeight = allImagesAre1x2 ? actualTileSize * 2 : actualTileSize;
+                
                 // Clear the container and create the grid
                 container.Children.Clear();
                 
@@ -826,13 +839,13 @@ namespace VPM
                     {
                         var tile = imageTiles[currentIndex];
                         tile.Width = actualTileSize;
-                        tile.Height = actualTileSize;
+                        tile.Height = tileHeight;
                         
                         // Ensure the image inside the tile is properly sized
                         if (tile.Child is System.Windows.Controls.Image img)
                         {
                             img.Width = actualTileSize - 6; // Account for border margin
-                            img.Height = actualTileSize - 6;
+                            img.Height = tileHeight - 6;
                         }
                         
                         rowPanel.Children.Add(tile);

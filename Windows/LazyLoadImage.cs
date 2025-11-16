@@ -24,6 +24,10 @@ namespace VPM.Windows
         public int ImageIndex { get; set; }
         public BitmapImage ImageSource { get; set; }
         
+        // Image dimensions for aspect ratio calculations
+        public int ImageWidth { get; set; }
+        public int ImageHeight { get; set; }
+        
         // Callback for loading the actual image
         public Func<Task<BitmapImage>> LoadImageCallback { get; set; }
         
