@@ -2,7 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
-using System.IO.Compression;
 using System.Linq;
 using System.Text;
 using System.Windows;
@@ -11,7 +10,9 @@ using System.Windows.Controls.Primitives;
 using System.Windows.Data;
 using System.Windows.Input;
 using System.Windows.Media;
+using SharpCompress.Archives;
 using VPM.Models;
+using VPM.Services;
 using static VPM.Models.PackageItem;
 
 namespace VPM
@@ -375,11 +376,11 @@ namespace VPM
                 
                 try
                 {
-                    using (var archive = ZipFile.OpenRead(packageVarPath))
+                    using (var archive = SharpCompressHelper.OpenForRead(packageVarPath))
                     {
                         var entry = archive.Entries.FirstOrDefault(e => 
-                            e.FullName.Equals(filePath, StringComparison.OrdinalIgnoreCase) ||
-                            e.FullName.Replace("\\", "/").Equals(filePath.Replace("\\", "/"), StringComparison.OrdinalIgnoreCase));
+                            e.Key.Equals(filePath, StringComparison.OrdinalIgnoreCase) ||
+                            e.Key.Replace("\\", "/").Equals(filePath.Replace("\\", "/"), StringComparison.OrdinalIgnoreCase));
                         
                         if (entry == null)
                         {
@@ -388,7 +389,11 @@ namespace VPM
                         }
                         
                         string extractedPath = Path.Combine(tempDir, Path.GetFileName(filePath));
-                        entry.ExtractToFile(extractedPath, true);
+                        using (var entryStream = entry.OpenEntryStream())
+                        using (var fileStream = File.Create(extractedPath))
+                        {
+                            entryStream.CopyTo(fileStream);
+                        }
                         
                         if (extension == ".json" || extension == ".vap")
                         {

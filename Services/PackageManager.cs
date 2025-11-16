@@ -2,13 +2,13 @@ using System;
 using System.Buffers;
 using System.Collections.Generic;
 using System.IO;
-using System.IO.Compression;
 using System.Linq;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using System.Threading;
 using System.Collections.Concurrent;
 using System.Threading.Tasks;
+using SharpCompress.Archives;
 using VPM.Models;
 
 namespace VPM.Services
@@ -614,14 +614,13 @@ namespace VPM.Services
                 // Will try to get actual creation date from preview images inside the .var
                 DateTime? previewImageDate = null;
 
-            // Use standard .NET ZipFile for reliable reading
-            using var fileStream = new FileStream(varPath, FileMode.Open, FileAccess.Read, FileShare.Read);
-            using var archive = new System.IO.Compression.ZipArchive(fileStream, System.IO.Compression.ZipArchiveMode.Read, leaveOpen: false);
+            // Use SharpCompress for reliable reading
+            using var archive = SharpCompressHelper.OpenForRead(varPath);
                 
                 string metaJsonContent = null;
                 int metaJsonHash = 0;
                 var contentList = new List<string>();
-                ZipArchiveEntry metaEntry = null;
+                IArchiveEntry metaEntry = null;
                 
                 // COMPLETE ARCHIVE SCAN: enumerate ALL entries and build comprehensive content list
                 // This bypasses meta.json contentList to ensure accurate detection
@@ -632,8 +631,8 @@ namespace VPM.Services
                     
                     // Look for meta.json (case-insensitive)
                     if (metaEntry == null && 
-                        entry.Name.Length == 9 && // "meta.json" length check (fast)
-                        entry.Name.Equals("meta.json", StringComparison.OrdinalIgnoreCase))
+                        entry.Key.Length == 9 && // "meta.json" length check (fast)
+                        entry.Key.Equals("meta.json", StringComparison.OrdinalIgnoreCase))
                     {
                         metaEntry = entry;
                         // Don't break - we need to scan all entries
@@ -641,9 +640,9 @@ namespace VPM.Services
                     
                     // Build comprehensive content list from ALL relevant files
                     // Skip directories and irrelevant files for performance
-                    if (!entry.FullName.EndsWith("/") && IsRelevantContent(entry.FullName))
+                    if (!entry.Key.EndsWith("/") && IsRelevantContent(entry.Key))
                     {
-                        contentList.Add(entry.FullName);
+                        contentList.Add(entry.Key);
                     }
                 }
                 
@@ -655,15 +654,15 @@ namespace VPM.Services
                 {
                     try
                     {
-                        using var stream = metaEntry.Open();
+                        using var stream = metaEntry.OpenEntryStream();
                         using var reader = new StreamReader(stream, System.Text.Encoding.UTF8, detectEncodingFromByteOrderMarks: false, bufferSize: 4096);
                         metaJsonContent = reader.ReadToEnd();
                         
                         // Calculate hash of meta.json content for cache validation
                         metaJsonHash = metaJsonContent.GetHashCode();
                         
-                        // Use meta.json LastWriteTime as the creation date
-                        previewImageDate = metaEntry.LastWriteTime.DateTime;
+                        // Use meta.json LastModifiedTime as the creation date
+                        previewImageDate = metaEntry.LastModifiedTime ?? DateTime.Now;
                         
                         // Keep our scanned contentList instead of using meta.json's contentList
                     }
@@ -1511,25 +1510,24 @@ namespace VPM.Services
             try
             {
                 var imageLocations = new List<ImageLocation>();
-                using var fileStream = new FileStream(varPath, FileMode.Open, FileAccess.Read, FileShare.Read);
-                using var archive = new System.IO.Compression.ZipArchive(fileStream, System.IO.Compression.ZipArchiveMode.Read, leaveOpen: false);
+                using var archive = SharpCompressHelper.OpenForRead(varPath);
 
                 foreach (var entry in archive.Entries)
                 {
-                    if (entry.FullName.EndsWith("/")) continue; // skip directories
-                    var ext = Path.GetExtension(entry.FullName).ToLowerInvariant();
+                    if (entry.Key.EndsWith("/")) continue; // skip directories
+                    var ext = Path.GetExtension(entry.Key).ToLowerInvariant();
                     if (ext != ".jpg" && ext != ".jpeg" && ext != ".png") continue;
 
-                    var pathNorm = entry.FullName.Replace('\\', '/').ToLowerInvariant();
+                    var pathNorm = entry.Key.Replace('\\', '/').ToLowerInvariant();
                     if (pathNorm.Contains("/textures/") || pathNorm.Contains("/texture/")) continue;
 
-                    if (entry.Length < 1024 || entry.Length > 1024 * 1024) continue;
+                    if (entry.Size < 1024 || entry.Size > 1024 * 1024) continue;
 
                     imageLocations.Add(new ImageLocation
                     {
                         VarFilePath = varPath,
-                        InternalPath = entry.FullName,
-                        FileSize = entry.Length
+                        InternalPath = entry.Key,
+                        FileSize = entry.Size
                     });
                 }
 

@@ -3,7 +3,8 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using VPM.Models;
-using ICSharpCode.SharpZipLib.Zip;
+using SharpCompress.Archives;
+using SharpCompress.Archives.Zip;
 
 namespace VPM.Services
 {
@@ -71,110 +72,111 @@ namespace VPM.Services
                 result.FileSize = fileInfo.Length;
                 result.LastWriteTime = fileInfo.LastWriteTimeUtc;
 
-                using var zipFile = new ZipFile(varPath);
-
-                var indexedEntries = new List<VarFileEntry>();
-                var pairedFiles = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-                var contentTypes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-                var categories = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-                int totalFileCount = 0;
-                string metaJsonContent = null;
-
-                // First pass: collect all entries and metadata
-                var allEntries = SharpCompressHelper.GetAllEntries(zipFile);
-                totalFileCount = allEntries.Count;
-
-                // Extract meta.json content
-                var metaEntry = SharpCompressHelper.FindEntryByPath(zipFile, "meta.json");
-                if (metaEntry != null)
+                using (var zipFile = ZipArchive.Open(varPath))
                 {
-                    result.HasMetaJson = true;
-                    metaJsonContent = SharpCompressHelper.ReadEntryAsString(zipFile, metaEntry);
-                }
+                    var indexedEntries = new List<VarFileEntry>();
+                    var pairedFiles = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                    var contentTypes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                    var categories = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                    int totalFileCount = 0;
+                    string metaJsonContent = null;
 
-                // Process entries
-                foreach (var entry in allEntries)
-                {
-                    if (entry.IsDirectory) continue;
+                    // First pass: collect all entries and metadata
+                    var allEntries = SharpCompressHelper.GetAllEntries(zipFile);
+                    totalFileCount = allEntries.Count;
 
-                    // Skip if already added as paired file (before counting as scanned)
-                    if (pairedFiles.Contains(entry.Name))
+                    // Extract meta.json content
+                    var metaEntry = SharpCompressHelper.FindEntryByPath(zipFile, "meta.json");
+                    if (metaEntry != null)
                     {
-                        continue;
+                        result.HasMetaJson = true;
+                        metaJsonContent = SharpCompressHelper.ReadEntryAsString(zipFile, metaEntry);
                     }
 
-                    System.Threading.Interlocked.Increment(ref _totalFilesScanned);
-
-                    var ext = Path.GetExtension(entry.Name);
-                    
-                    if (SkippedExtensions.Contains(ext))
+                    // Process entries
+                    foreach (var entry in allEntries)
                     {
-                        result.SkippedFileCount++;
-                        System.Threading.Interlocked.Increment(ref _totalFilesSkipped);
-                        continue;
-                    }
+                        if (entry.IsDirectory) continue;
 
-                    if (!indexAllFiles && !IndexedExtensions.Contains(ext))
-                    {
-                        result.SkippedFileCount++;
-                        System.Threading.Interlocked.Increment(ref _totalFilesSkipped);
-                        continue;
-                    }
-
-                    // Add paired JPG if this file has a paired extension
-                    if (PairedExtensions.Contains(ext))
-                    {
-                        var baseName = Path.ChangeExtension(entry.Name, null);
-                        
-                        // Try both .jpg and .JPG (case variations)
-                        ZipEntry jpgEntry = null;
-                        string jpgPath = null;
-                        
-                        foreach (var jpgExt in new[] { ".jpg", ".JPG", ".Jpg" })
+                        // Skip if already added as paired file (before counting as scanned)
+                        if (pairedFiles.Contains(entry.Key))
                         {
-                            var testPath = baseName + jpgExt;
-                            if (!pairedFiles.Contains(testPath))
+                            continue;
+                        }
+
+                        System.Threading.Interlocked.Increment(ref _totalFilesScanned);
+
+                        var ext = Path.GetExtension(entry.Key);
+                        
+                        if (SkippedExtensions.Contains(ext))
+                        {
+                            result.SkippedFileCount++;
+                            System.Threading.Interlocked.Increment(ref _totalFilesSkipped);
+                            continue;
+                        }
+
+                        if (!indexAllFiles && !IndexedExtensions.Contains(ext))
+                        {
+                            result.SkippedFileCount++;
+                            System.Threading.Interlocked.Increment(ref _totalFilesSkipped);
+                            continue;
+                        }
+
+                        // Add paired JPG if this file has a paired extension
+                        if (PairedExtensions.Contains(ext))
+                        {
+                            var baseName = Path.ChangeExtension(entry.Key, null);
+                            
+                            // Try both .jpg and .JPG (case variations)
+                            IArchiveEntry jpgEntry = null;
+                            string jpgPath = null;
+                            
+                            foreach (var jpgExt in new[] { ".jpg", ".JPG", ".Jpg" })
                             {
-                                jpgEntry = SharpCompressHelper.FindEntryByPath(zipFile, testPath);
-                                if (jpgEntry != null)
+                                var testPath = baseName + jpgExt;
+                                if (!pairedFiles.Contains(testPath))
                                 {
-                                    jpgPath = testPath;
-                                    break;
+                                    jpgEntry = SharpCompressHelper.FindEntryByPath(zipFile, testPath);
+                                    if (jpgEntry != null)
+                                    {
+                                        jpgPath = testPath;
+                                        break;
+                                    }
                                 }
+                            }
+
+                            if (jpgEntry != null && jpgPath != null)
+                            {
+                                indexedEntries.Add(new VarFileEntry
+                                {
+                                    InternalPath = jpgEntry.Key,
+                                    Size = jpgEntry.Size,
+                                    LastWriteTime = (DateTime)(jpgEntry.LastModifiedTime ?? DateTime.UtcNow)
+                                });
+                                pairedFiles.Add(jpgPath);
+                                System.Threading.Interlocked.Increment(ref _totalFilesIndexed);
                             }
                         }
 
-                        if (jpgEntry != null && jpgPath != null)
+                        indexedEntries.Add(new VarFileEntry
                         {
-                            indexedEntries.Add(new VarFileEntry
-                            {
-                                InternalPath = jpgEntry.Name,
-                                Size = jpgEntry.Size,
-                                LastWriteTime = jpgEntry.DateTime
-                            });
-                            pairedFiles.Add(jpgPath);
-                            System.Threading.Interlocked.Increment(ref _totalFilesIndexed);
-                        }
+                            InternalPath = entry.Key,
+                            Size = entry.Size,
+                            LastWriteTime = (DateTime)(entry.LastModifiedTime ?? DateTime.UtcNow)
+                        });
+
+                        System.Threading.Interlocked.Increment(ref _totalFilesIndexed);
+                        AnalyzeFileForMetadata(entry.Key, contentTypes, categories);
                     }
 
-                    indexedEntries.Add(new VarFileEntry
-                    {
-                        InternalPath = entry.Name,
-                        Size = entry.Size,
-                        LastWriteTime = entry.DateTime
-                    });
-
-                    System.Threading.Interlocked.Increment(ref _totalFilesIndexed);
-                    AnalyzeFileForMetadata(entry.Name, contentTypes, categories);
+                    result.IndexedEntries = indexedEntries;
+                    result.TotalFileCount = totalFileCount;
+                    result.IndexedFileCount = indexedEntries.Count;
+                    result.ContentTypes = contentTypes;
+                    result.Categories = categories;
+                    result.MetaJsonContent = metaJsonContent;
+                    result.Success = true;
                 }
-
-                result.IndexedEntries = indexedEntries;
-                result.TotalFileCount = totalFileCount;
-                result.IndexedFileCount = indexedEntries.Count;
-                result.ContentTypes = contentTypes;
-                result.Categories = categories;
-                result.MetaJsonContent = metaJsonContent;
-                result.Success = true;
             }
             catch (Exception ex)
             {
@@ -268,7 +270,7 @@ namespace VPM.Services
     public class LazyZipArchive : IDisposable
     {
         private readonly string _varPath;
-        private ZipFile _zipFile;
+        private IArchive _archive;
         private bool _disposed;
         private readonly object _lock = new object();
 
@@ -279,30 +281,30 @@ namespace VPM.Services
 
         private void EnsureOpen()
         {
-            if (_zipFile == null && !_disposed)
+            if (_archive == null && !_disposed)
             {
                 lock (_lock)
                 {
-                    if (_zipFile == null && !_disposed)
+                    if (_archive == null && !_disposed)
                     {
-                        _zipFile = new ZipFile(_varPath);
+                        _archive = ZipArchive.Open(_varPath);
                     }
                 }
             }
         }
 
-        public ZipEntry GetEntry(string entryName)
+        public IArchiveEntry GetEntry(string entryName)
         {
             EnsureOpen();
-            return _zipFile != null ? SharpCompressHelper.FindEntryByPath(_zipFile, entryName) : null;
+            return _archive != null ? SharpCompressHelper.FindEntryByPath(_archive, entryName) : null;
         }
 
-        public List<ZipEntry> Entries
+        public List<IArchiveEntry> Entries
         {
             get
             {
                 EnsureOpen();
-                return _zipFile != null ? SharpCompressHelper.GetAllEntries(_zipFile) : new List<ZipEntry>();
+                return _archive != null ? SharpCompressHelper.GetAllEntries(_archive) : new List<IArchiveEntry>();
             }
         }
 
@@ -312,7 +314,7 @@ namespace VPM.Services
             {
                 if (!_disposed)
                 {
-                    _zipFile?.Close();
+                    _archive?.Dispose();
                     _disposed = true;
                 }
             }

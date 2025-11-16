@@ -1,10 +1,13 @@
 ﻿using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text.Json;
+using System.Threading.Tasks;
 using VPM.Models;
-using ICSharpCode.SharpZipLib.Zip;
+using SharpCompress.Archives;
+using SharpCompress.Archives.Zip;
 
 namespace VPM.Services
 {
@@ -73,30 +76,45 @@ namespace VPM.Services
             {
                 var varName = Path.GetFileNameWithoutExtension(varPath);
 
-                using (var zipFile = new ZipFile(varPath))
+                // Get all scene entries first
+                List<IArchiveEntry> sceneEntries = new List<IArchiveEntry>();
+                using (var zipFile = ZipArchive.Open(varPath))
                 {
                     var allEntries = SharpCompressHelper.GetAllEntries(zipFile);
                     // Look for scene files in Saves/scene/ path
-                    var sceneEntries = allEntries
-                        .Where(e => !e.IsDirectory && e.Name.StartsWith("Saves/scene/", StringComparison.OrdinalIgnoreCase) &&
-                                    e.Name.EndsWith(".json", StringComparison.OrdinalIgnoreCase))
+                    sceneEntries = allEntries
+                        .Where(e => !e.IsDirectory && e.Key.StartsWith("Saves/scene/", StringComparison.OrdinalIgnoreCase) &&
+                                    e.Key.EndsWith(".json", StringComparison.OrdinalIgnoreCase))
                         .ToList();
+                }
 
-                    foreach (var entry in sceneEntries)
+                // Process scene entries in parallel for better performance
+                var sceneInfos = new ConcurrentBag<SceneItem>();
+                var parallelOptions = new ParallelOptions
+                {
+                    MaxDegreeOfParallelism = ParallelArchiveProcessor.GetOptimalParallelism("io")
+                };
+
+                Parallel.ForEach(sceneEntries, parallelOptions, entry =>
+                {
+                    try
                     {
-                        try
+                        var scene = CreateSceneItemFromVarEntryParallel(entry, varPath, varName);
+                        if (scene != null)
                         {
-                            var scene = CreateSceneItemFromVarEntry(entry, varPath, varName);
-                            if (scene != null)
-                            {
-                                scenes.Add(scene);
-                            }
-                        }
-                        catch (Exception ex)
-                        {
-                            System.Diagnostics.Debug.WriteLine($"Error scanning scene in VAR {varName}: {ex.Message}");
+                            sceneInfos.Add(scene);
                         }
                     }
+                    catch (Exception ex)
+                    {
+                        System.Diagnostics.Debug.WriteLine($"Error scanning scene in VAR {varName}: {ex.Message}");
+                    }
+                });
+
+                // Add all collected scenes to result
+                foreach (var scene in sceneInfos)
+                {
+                    scenes.Add(scene);
                 }
             }
             catch (Exception ex)
@@ -148,9 +166,9 @@ namespace VPM.Services
         /// <summary>
         /// Creates a SceneItem from a VAR archive entry
         /// </summary>
-        private SceneItem CreateSceneItemFromVarEntry(ZipEntry entry, string varPath, string varName)
+        private SceneItem CreateSceneItemFromVarEntry(IArchiveEntry entry, string varPath, string varName)
         {
-            var fileName = Path.GetFileName(entry.Name);
+            var fileName = Path.GetFileName(entry.Key);
             var fileNameWithoutExt = Path.GetFileNameWithoutExtension(fileName);
             var creator = ExtractCreatorFromFilename(fileNameWithoutExt);
 
@@ -158,25 +176,73 @@ namespace VPM.Services
             {
                 Name = fileName,
                 DisplayName = fileNameWithoutExt,
-                FilePath = $"{varPath}::{entry.Name}", // Virtual path
+                FilePath = $"{varPath}::{entry.Key}", // Virtual path
                 Creator = creator,
-                ModifiedDate = entry.DateTime,
+                ModifiedDate = (DateTime)(entry.LastModifiedTime ?? DateTime.UtcNow),
                 FileSize = entry.Size,
                 Source = "VAR",
                 SourcePackage = varName
             };
 
             // Try to find thumbnail in VAR
-            scene.ThumbnailPath = FindThumbnailInVar(varPath, entry.Name);
+            scene.ThumbnailPath = FindThumbnailInVar(varPath, entry.Key);
 
             // Try to parse metadata from VAR entry
             try
             {
-                using (var zipFile = new ZipFile(varPath))
+                using (var zipFile = ZipArchive.Open(varPath))
                 {
                     var jsonContent = SharpCompressHelper.ReadEntryAsString(zipFile, entry);
                     var metadata = ParseSceneMetadataFromJson(jsonContent);
                     ApplyMetadataToScene(scene, metadata);
+                }
+            }
+            catch
+            {
+                // If parsing fails, just use basic info
+            }
+
+            return scene;
+        }
+
+        /// <summary>
+        /// Creates a SceneItem from a VAR archive entry (parallel-safe version)
+        /// Each thread opens its own IArchive instance for thread safety
+        /// </summary>
+        private SceneItem CreateSceneItemFromVarEntryParallel(IArchiveEntry entry, string varPath, string varName)
+        {
+            var fileName = Path.GetFileName(entry.Key);
+            var fileNameWithoutExt = Path.GetFileNameWithoutExtension(fileName);
+            var creator = ExtractCreatorFromFilename(fileNameWithoutExt);
+
+            var scene = new SceneItem
+            {
+                Name = fileName,
+                DisplayName = fileNameWithoutExt,
+                FilePath = $"{varPath}::{entry.Key}", // Virtual path
+                Creator = creator,
+                ModifiedDate = (DateTime)(entry.LastModifiedTime ?? DateTime.UtcNow),
+                FileSize = entry.Size,
+                Source = "VAR",
+                SourcePackage = varName
+            };
+
+            // Try to find thumbnail in VAR
+            scene.ThumbnailPath = FindThumbnailInVar(varPath, entry.Key);
+
+            // Try to parse metadata from VAR entry
+            try
+            {
+                using (var zipFile = ZipArchive.Open(varPath))
+                {
+                    // Re-find the entry in the new ZipFile instance
+                    var entryInZip = SharpCompressHelper.FindEntryByPath(zipFile, entry.Key);
+                    if (entryInZip != null)
+                    {
+                        var jsonContent = SharpCompressHelper.ReadEntryAsString(zipFile, entryInZip);
+                        var metadata = ParseSceneMetadataFromJson(jsonContent);
+                        ApplyMetadataToScene(scene, metadata);
+                    }
                 }
             }
             catch
@@ -214,7 +280,7 @@ namespace VPM.Services
         {
             try
             {
-                using (var zipFile = new ZipFile(varPath))
+                using (var zipFile = ZipArchive.Open(varPath))
                 {
                     var basePath = Path.ChangeExtension(sceneEntryPath, null);
                     var extensions = new[] { ".jpg", ".jpeg", ".png", ".JPG", ".JPEG", ".PNG" };
@@ -520,7 +586,7 @@ namespace VPM.Services
 
                 // Extract thumbnail from VAR using streaming
                 // Benefit: Efficient memory usage for thumbnail extraction
-                using (var zipFile = new ZipFile(varPath))
+                using (var zipFile = ZipArchive.Open(varPath))
                 {
                     var entry = SharpCompressHelper.FindEntryByPath(zipFile, entryPath);
                     if (entry != null)

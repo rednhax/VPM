@@ -1,10 +1,13 @@
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.IO;
 using System.Linq;
 using System.Text.Json;
-using ICSharpCode.SharpZipLib.Zip;
+using System.Threading.Tasks;
+using SharpCompress.Archives;
+using SharpCompress.Archives.Zip;
 
 namespace VPM.Services
 {
@@ -320,7 +323,7 @@ namespace VPM.Services
                 
                 if (isVarFile)
                 {
-                    using (var zipFile = new ZipFile(packagePath))
+                    using (var zipFile = ZipArchive.Open(packagePath))
                     {
                         var metaEntry = SharpCompressHelper.FindEntryByPath(zipFile, "meta.json");
                         if (metaEntry == null)
@@ -378,16 +381,16 @@ namespace VPM.Services
                 
                 if (isVarFile)
                 {
-                    using (var zipFile = new ZipFile(packagePath))
+                    using (var zipFile = ZipArchive.Open(packagePath))
                     {
                         var allEntries = SharpCompressHelper.GetAllEntries(zipFile);
                         foreach (var entry in allEntries)
                         {
                             if (entry.IsDirectory) continue;
-                            string ext = System.IO.Path.GetExtension(entry.Name).ToLowerInvariant();
+                            string ext = System.IO.Path.GetExtension(entry.Key).ToLowerInvariant();
                             if (ext == ".png" || ext == ".jpg" || ext == ".jpeg")
                             {
-                                allImageFiles.Add(entry.Name);
+                                allImageFiles.Add(entry.Key);
                             }
                         }
                     }
@@ -422,10 +425,31 @@ namespace VPM.Services
                     archiveFileSizes = GetArchiveFileSizes(archivePackagePath);
                 }
 
-                // Process each image file and filter by size (> 512px = texture, <= 512px = preview)
-                foreach (string imagePath in allImageFiles)
+                // Process each image file in parallel for better performance
+                // Use thread-safe collection to gather results
+                var textureInfos = new ConcurrentBag<TextureInfo>();
+                var parallelOptions = new ParallelOptions
                 {
-                    ProcessTextureFile(packagePath, imagePath, isVarFile, result, hasArchiveSource, archiveTextureDimensions, archiveFileSizes);
+                    MaxDegreeOfParallelism = ParallelArchiveProcessor.GetOptimalParallelism("io")
+                };
+
+                Parallel.ForEach(allImageFiles, parallelOptions, imagePath =>
+                {
+                    try
+                    {
+                        ProcessTextureFileParallel(packagePath, imagePath, isVarFile, hasArchiveSource, 
+                            archiveTextureDimensions, archiveFileSizes, textureInfos);
+                    }
+                    catch
+                    {
+                        // Silently skip files that fail to process
+                    }
+                });
+
+                // Add all collected texture infos to result
+                foreach (var textureInfo in textureInfos)
+                {
+                    result.Textures.Add(textureInfo);
                 }
             }
             catch (Exception ex)
@@ -449,7 +473,7 @@ namespace VPM.Services
                 
                 if (isVarFile)
                 {
-                    using (var zipFile = new ZipFile(packagePath))
+                    using (var zipFile = ZipArchive.Open(packagePath))
                     {
                         exists = SharpCompressHelper.FindEntryByPath(zipFile, texturePath) != null;
                     }
@@ -544,6 +568,116 @@ namespace VPM.Services
         }
 
         /// <summary>
+        /// Processes a single texture file for parallel execution (thread-safe version)
+        /// Adds result to thread-safe collection instead of ValidationResult
+        /// </summary>
+        private void ProcessTextureFileParallel(string packagePath, string texturePath, bool isVarFile, 
+            bool hasArchiveSource, Dictionary<string, (int width, int height)> archiveTextureDimensions, 
+            Dictionary<string, long> archiveFileSizes, ConcurrentBag<TextureInfo> textureInfos)
+        {
+            try
+            {
+                // Check if file exists
+                bool exists = false;
+                
+                if (isVarFile)
+                {
+                    using (var zipFile = ZipArchive.Open(packagePath))
+                    {
+                        exists = SharpCompressHelper.FindEntryByPath(zipFile, texturePath) != null;
+                    }
+                }
+                else
+                {
+                    string fullPath = System.IO.Path.Combine(packagePath, texturePath);
+                    exists = File.Exists(fullPath);
+                }
+
+                if (!exists)
+                    return; // Skip non-existent files
+
+                // Get resolution and file size (always use thorough scan for accuracy)
+                var (resolution, fileSize, width, height) = GetTextureInfo(packagePath, texturePath, isVarFile);
+                
+                // Skip if we couldn't read dimensions
+                if (width == 0 || height == 0)
+                    return;
+
+                // Filter: Only include if max dimension > 512px (textures, not previews)
+                int maxDim = Math.Max(width, height);
+                if (maxDim <= 512)
+                    return; // Skip preview images
+
+                // Determine texture type based on suffix
+                string fileName = System.IO.Path.GetFileNameWithoutExtension(texturePath);
+                string textureType = "Texture";
+                
+                if (fileName.EndsWith("_D", StringComparison.OrdinalIgnoreCase))
+                    textureType = "Diffuse";
+                else if (fileName.EndsWith("_S", StringComparison.OrdinalIgnoreCase))
+                    textureType = "Specular";
+                else if (fileName.EndsWith("_G", StringComparison.OrdinalIgnoreCase))
+                    textureType = "Gloss";
+                else if (fileName.EndsWith("_N", StringComparison.OrdinalIgnoreCase))
+                    textureType = "Normal";
+                else if (fileName.EndsWith("_A", StringComparison.OrdinalIgnoreCase))
+                    textureType = "Alpha";
+
+                // Get archive dimensions if available
+                int archiveMaxDim = 0;
+                int archiveWidth = 0;
+                int archiveHeight = 0;
+                if (hasArchiveSource && archiveTextureDimensions != null && 
+                    archiveTextureDimensions.TryGetValue(texturePath, out var archiveDims))
+                {
+                    archiveMaxDim = Math.Max(archiveDims.width, archiveDims.height);
+                    archiveWidth = archiveDims.width;
+                    archiveHeight = archiveDims.height;
+                }
+
+                var textureInfo = new TextureInfo
+                {
+                    TextureType = textureType,
+                    ReferencedPath = texturePath,
+                    Exists = true,
+                    Resolution = resolution,
+                    FileSize = fileSize,
+                    Width = width,
+                    Height = height,
+                    HasArchiveSource = hasArchiveSource,
+                    ArchiveMaxDimension = archiveMaxDim
+                };
+                
+                // Set OriginalResolution and OriginalFileSize from archive if available
+                if (hasArchiveSource && archiveMaxDim > 0)
+                {
+                    // Create resolution label from archive dimensions
+                    string archiveResolution = "-";
+                    if (archiveMaxDim >= 7680) archiveResolution = "8K";
+                    else if (archiveMaxDim >= 4096) archiveResolution = "4K";
+                    else if (archiveMaxDim >= 2048) archiveResolution = "2K";
+                    else if (archiveMaxDim >= 1024) archiveResolution = "1K";
+                    else archiveResolution = $"{archiveMaxDim}px";
+                    
+                    textureInfo.OriginalResolution = archiveResolution;
+                    
+                    // Set original file size from archive
+                    if (archiveFileSizes != null && archiveFileSizes.TryGetValue(texturePath, out long archiveSize))
+                    {
+                        textureInfo.OriginalFileSize = archiveSize;
+                    }
+                }
+
+                // Set default conversion target to current resolution
+                textureInfo.SetDefaultConversionTarget();
+
+                // Add to thread-safe collection
+                textureInfos.Add(textureInfo);
+            }
+            catch { }
+        }
+
+        /// <summary>
         /// Extracts conversion flags from meta.json description
         /// </summary>
         private string GetConversionFlags(string packagePath, bool isVarFile)
@@ -552,7 +686,7 @@ namespace VPM.Services
             {
                 if (isVarFile)
                 {
-                    using (var zipFile = new ZipFile(packagePath))
+                    using (var zipFile = ZipArchive.Open(packagePath))
                     {
                         var metaEntry = SharpCompressHelper.FindEntryByPath(zipFile, "meta.json");
                         if (metaEntry != null)
@@ -646,7 +780,7 @@ namespace VPM.Services
                 
                 if (isVarFile)
                 {
-                    using (var zipFile = new ZipFile(packagePath))
+                    using (var zipFile = ZipArchive.Open(packagePath))
                     {
                         var entry = SharpCompressHelper.FindEntryByPath(zipFile, texturePath);
                         if (entry != null)
@@ -738,7 +872,7 @@ namespace VPM.Services
                     
                     if (isVarFile)
                     {
-                        using (var zipFile = new ZipFile(packagePath))
+                        using (var zipFile = ZipArchive.Open(packagePath))
                         {
                             var entry = SharpCompressHelper.FindEntryByPath(zipFile, texturePath);
                             if (entry != null)
@@ -847,7 +981,7 @@ namespace VPM.Services
 
                 if (isVarFile)
                 {
-                    using (var zipFile = new ZipFile(packagePath))
+                    using (var zipFile = ZipArchive.Open(packagePath))
                     {
                         var entry = SharpCompressHelper.FindEntryByPath(zipFile, texturePath);
                         if (entry != null)
@@ -1113,12 +1247,12 @@ namespace VPM.Services
             
             try
             {
-                using (var zipFile = new ZipFile(archivePackagePath))
+                using (var zipFile = ZipArchive.Open(archivePackagePath))
                 {
                     var allEntries = SharpCompressHelper.GetAllEntries(zipFile);
                     foreach (var entry in allEntries)
                     {
-                        string ext = Path.GetExtension(entry.Name).ToLowerInvariant();
+                        string ext = Path.GetExtension(entry.Key).ToLowerInvariant();
                         if (ext == ".png" || ext == ".jpg" || ext == ".jpeg")
                         {
                             try
@@ -1130,10 +1264,10 @@ namespace VPM.Services
                                 // Validate header data before processing
                                 if (headerData != null && headerData.Length > 0)
                                 {
-                                    var (width, height) = ReadImageDimensionsFromBuffer(headerData, headerData.Length, entry.Name);
+                                    var (width, height) = ReadImageDimensionsFromBuffer(headerData, headerData.Length, entry.Key);
                                     if (width > 0 && height > 0)
                                     {
-                                        dimensions[entry.Name] = (width, height);
+                                        dimensions[entry.Key] = (width, height);
                                     }
                                 }
                             }
@@ -1159,15 +1293,15 @@ namespace VPM.Services
             
             try
             {
-                using (var zipFile = new ZipFile(archivePackagePath))
+                using (var zipFile = ZipArchive.Open(archivePackagePath))
                 {
                     var allEntries = SharpCompressHelper.GetAllEntries(zipFile);
                     foreach (var entry in allEntries)
                     {
-                        string ext = Path.GetExtension(entry.Name).ToLowerInvariant();
+                        string ext = Path.GetExtension(entry.Key).ToLowerInvariant();
                         if (ext == ".png" || ext == ".jpg" || ext == ".jpeg")
                         {
-                            fileSizes[entry.Name] = entry.Size;
+                            fileSizes[entry.Key] = entry.Size;
                         }
                     }
                 }

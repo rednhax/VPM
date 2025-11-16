@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
-using System.IO.Compression;
 using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
@@ -446,16 +445,20 @@ namespace VPM
 
                 if (isVarFile)
                 {
-                    using (var archive = System.IO.Compression.ZipFile.OpenRead(packagePath))
+                    using (var archive = SharpCompressHelper.OpenForRead(packagePath))
                     {
-                        var entry = archive.GetEntry(texturePath);
+                        var entry = SharpCompressHelper.FindEntryByPath(archive, texturePath);
                         if (entry != null)
                         {
                             string tempPath = Path.Combine(Path.GetTempPath(), "VAM_Textures", packageName);
                             Directory.CreateDirectory(tempPath);
                             
                             string tempFile = Path.Combine(tempPath, Path.GetFileName(texturePath));
-                            entry.ExtractToFile(tempFile, true);
+                            using (var entryStream = entry.OpenEntryStream())
+                            using (var fileStream = new FileStream(tempFile, FileMode.Create, FileAccess.Write))
+                            {
+                                entryStream.CopyTo(fileStream);
+                            }
                             
                             System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
                             {

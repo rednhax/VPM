@@ -974,16 +974,15 @@ namespace VPM.Services
                 bool isValidVarPackage = false;
                 try
                 {
-                    using (var fileStream = new FileStream(destinationPath, FileMode.Open, FileAccess.Read, FileShare.Read))
-                    using (var zip = new System.IO.Compression.ZipArchive(fileStream, System.IO.Compression.ZipArchiveMode.Read, leaveOpen: false))
+                    using (var archive = SharpCompressHelper.OpenForRead(destinationPath))
                     {
                         // Check if ZIP can be read
-                        var entryCount = zip.Entries.Count;
+                        var entryCount = archive.Entries.Count();
                         Console.WriteLine($"[PackageDownloader] ZIP contains {entryCount} entries");
                         
                         // Check for meta.json file (required for VAR packages)
-                        var metaEntry = zip.Entries.FirstOrDefault(e => 
-                            e.Name.Equals("meta.json", StringComparison.OrdinalIgnoreCase));
+                        var metaEntry = archive.Entries.FirstOrDefault(e => 
+                            e.Key.Equals("meta.json", StringComparison.OrdinalIgnoreCase));
                         
                         if (metaEntry != null)
                         {

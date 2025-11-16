@@ -2,9 +2,10 @@ using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.IO;
-using System.IO.Compression;
 using System.Linq;
 using System.Text.Json;
+using SharpCompress.Archives;
+using SharpCompress.Archives.Zip;
 using Console = System.Console;
 
 namespace VPM.Services
@@ -396,13 +397,12 @@ namespace VPM.Services
 
                 if (isVarFile)
                 {
-                    using (var fileStream = new FileStream(packagePath, FileMode.Open, FileAccess.Read, FileShare.Read))
-                    using (var archive = new ZipArchive(fileStream, ZipArchiveMode.Read, leaveOpen: false))
+                    using (var archive = SharpCompressHelper.OpenForRead(packagePath))
                     {
                         // Find all scene JSON files in Saves/scene/
                         var sceneFiles = archive.Entries
-                            .Where(e => e.FullName.StartsWith("Saves/scene/", StringComparison.OrdinalIgnoreCase) &&
-                                       e.FullName.EndsWith(".json", StringComparison.OrdinalIgnoreCase))
+                            .Where(e => e.Key.StartsWith("Saves/scene/", StringComparison.OrdinalIgnoreCase) &&
+                                       e.Key.EndsWith(".json", StringComparison.OrdinalIgnoreCase))
                             .ToList();
 
                         foreach (var sceneFile in sceneFiles)
@@ -442,15 +442,15 @@ namespace VPM.Services
         /// <summary>
         /// Processes a scene file (from archive entry)
         /// </summary>
-        private void ProcessSceneFile(ZipArchiveEntry entry, OptimizationResult result)
+        private void ProcessSceneFile(IArchiveEntry entry, OptimizationResult result)
         {
             try
             {
-                using (var stream = entry.Open())
+                using (var stream = entry.OpenEntryStream())
                 using (var reader = new StreamReader(stream))
                 {
                     string jsonContent = reader.ReadToEnd();
-                    ParseHairFromJson(jsonContent, Path.GetFileName(entry.FullName), result);
+                    ParseHairFromJson(jsonContent, Path.GetFileName(entry.Key), result);
                 }
             }
             catch

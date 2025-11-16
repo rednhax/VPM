@@ -2,10 +2,10 @@
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
-using System.IO.Compression;
 using System.Threading;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
+using SharpCompress.Archives;
 using VPM.Models;
 using Microsoft.IO;
 
@@ -225,11 +225,9 @@ namespace VPM.Services
                 // Load image from VAR archive
                 if (!string.IsNullOrEmpty(qi.VarPath) && !string.IsNullOrEmpty(qi.InternalPath))
                 {
-                    using var stream = new FileStream(qi.VarPath, FileMode.Open, FileAccess.Read, 
-                        FileShare.ReadWrite | FileShare.Delete);
-                    using var archive = new ZipArchive(stream, ZipArchiveMode.Read, leaveOpen: false);
+                    using var archive = SharpCompressHelper.OpenForRead(qi.VarPath);
                     
-                    var entry = archive.GetEntry(qi.InternalPath);
+                    var entry = SharpCompressHelper.FindEntryByPath(archive, qi.InternalPath);
                     if (entry == null)
                     {
                         qi.HadError = true;
@@ -237,7 +235,7 @@ namespace VPM.Services
                         return;
                     }
                     
-                    using var entryStream = entry.Open();
+                    using var entryStream = entry.OpenEntryStream();
                     // Use non-pooled MemoryStream to avoid .NET 10 disposal issues with pooled streams
                     using var memoryStream = new MemoryStream();
                     

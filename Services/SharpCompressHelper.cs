@@ -2,12 +2,15 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using ICSharpCode.SharpZipLib.Zip;
+using SharpCompress.Archives;
+using SharpCompress.Archives.Zip;
+using SharpCompress.Common;
+using SharpCompress.Writers;
 
 namespace VPM.Services
 {
     /// <summary>
-    /// Helper class to provide a consistent interface for SharpCompress/SharpZipLib ZIP operations.
+    /// Helper class to provide a consistent interface for SharpCompress ZIP operations.
     /// Simplifies migration from System.IO.Compression.ZipArchive.
     /// </summary>
     public static class SharpCompressHelper
@@ -15,93 +18,76 @@ namespace VPM.Services
         /// <summary>
         /// Opens a ZIP file for reading
         /// </summary>
-        public static ZipFile OpenForRead(string filePath)
+        public static IArchive OpenForRead(string filePath)
         {
-            return new ZipFile(filePath);
+            return ZipArchive.Open(filePath);
         }
 
         /// <summary>
         /// Opens a ZIP file stream for reading
         /// </summary>
-        public static ZipFile OpenStreamForRead(Stream stream)
+        public static IArchive OpenStreamForRead(Stream stream)
         {
-            return new ZipFile(stream);
+            return ZipArchive.Open(stream);
         }
 
         /// <summary>
         /// Creates a new ZIP file at the specified path
         /// </summary>
-        public static ZipOutputStream CreateZipFile(string filePath)
+        public static IArchive CreateZipFile(string filePath)
         {
             var fileStream = new FileStream(filePath, FileMode.Create, FileAccess.Write, FileShare.None);
-            var zipStream = new ZipOutputStream(fileStream);
-            zipStream.SetLevel(9); // Maximum compression
-            return zipStream;
+            return ZipArchive.Create();
         }
 
         /// <summary>
         /// Creates a ZIP stream for writing to a stream
         /// </summary>
-        public static ZipOutputStream CreateZipStream(Stream stream)
+        public static IArchive CreateZipStream(Stream stream)
         {
-            var zipStream = new ZipOutputStream(stream);
-            zipStream.SetLevel(9); // Maximum compression
-            return zipStream;
+            return ZipArchive.Create();
         }
 
         /// <summary>
         /// Opens a ZIP file for updating (reading and writing)
         /// </summary>
-        public static ZipFile OpenForUpdate(string filePath)
+        public static IArchive OpenForUpdate(string filePath)
         {
-            return new ZipFile(filePath);
+            return ZipArchive.Open(filePath);
         }
 
         /// <summary>
         /// Gets all entries from a ZIP file
         /// </summary>
-        public static List<ZipEntry> GetAllEntries(ZipFile zipFile)
+        public static List<IArchiveEntry> GetAllEntries(IArchive archive)
         {
-            var entries = new List<ZipEntry>();
-            foreach (ZipEntry entry in zipFile)
-            {
-                entries.Add(entry);
-            }
-            return entries;
+            return archive.Entries.ToList();
         }
 
         /// <summary>
         /// Finds an entry by name (case-insensitive)
         /// </summary>
-        public static ZipEntry FindEntry(ZipFile zipFile, string entryName)
+        public static IArchiveEntry FindEntry(IArchive archive, string entryName)
         {
-            foreach (ZipEntry entry in zipFile)
-            {
-                if (entry.Name.Equals(entryName, StringComparison.OrdinalIgnoreCase))
-                    return entry;
-            }
-            return null;
+            return archive.Entries.FirstOrDefault(e => 
+                e.Key.Equals(entryName, StringComparison.OrdinalIgnoreCase));
         }
 
         /// <summary>
         /// Finds an entry by full path (case-insensitive)
         /// </summary>
-        public static ZipEntry FindEntryByPath(ZipFile zipFile, string fullPath)
+        public static IArchiveEntry FindEntryByPath(IArchive archive, string fullPath)
         {
-            foreach (ZipEntry entry in zipFile)
-            {
-                if (entry.Name.Equals(fullPath, StringComparison.OrdinalIgnoreCase))
-                    return entry;
-            }
-            return null;
+            return archive.Entries.FirstOrDefault(e => 
+                e.Key.Equals(fullPath, StringComparison.OrdinalIgnoreCase));
         }
 
         /// <summary>
         /// Reads the content of a ZIP entry as a string
         /// </summary>
-        public static string ReadEntryAsString(ZipFile zipFile, ZipEntry entry)
+        public static string ReadEntryAsString(IArchive archive, IArchiveEntry entry)
         {
-            using (var stream = zipFile.GetInputStream(entry))
+            using (var stream = entry.OpenEntryStream())
             using (var reader = new StreamReader(stream))
             {
                 return reader.ReadToEnd();
@@ -111,9 +97,9 @@ namespace VPM.Services
         /// <summary>
         /// Reads the content of a ZIP entry as bytes
         /// </summary>
-        public static byte[] ReadEntryAsBytes(ZipFile zipFile, ZipEntry entry)
+        public static byte[] ReadEntryAsBytes(IArchive archive, IArchiveEntry entry)
         {
-            using (var stream = zipFile.GetInputStream(entry))
+            using (var stream = entry.OpenEntryStream())
             {
                 var buffer = new byte[entry.Size];
                 stream.Read(buffer, 0, buffer.Length);
@@ -124,122 +110,78 @@ namespace VPM.Services
         /// <summary>
         /// Reads a ZIP entry into a provided buffer
         /// </summary>
-        public static int ReadEntryIntoBuffer(ZipFile zipFile, ZipEntry entry, byte[] buffer, int offset, int count)
+        public static int ReadEntryIntoBuffer(IArchive archive, IArchiveEntry entry, byte[] buffer, int offset, int count)
         {
-            using (var stream = zipFile.GetInputStream(entry))
+            using (var stream = entry.OpenEntryStream())
             {
                 return stream.Read(buffer, offset, count);
             }
         }
 
         /// <summary>
-        /// Writes a string entry to a ZIP output stream
+        /// Writes a string entry to a ZIP archive
         /// </summary>
-        public static void WriteStringEntry(ZipOutputStream zipStream, string entryName, string content)
+        public static void WriteStringEntry(IWritableArchive archive, string entryName, string content)
         {
             byte[] data = System.Text.Encoding.UTF8.GetBytes(content);
-            
-            var entry = new ZipEntry(entryName)
+            using (var ms = new MemoryStream(data))
             {
-                DateTime = DateTime.Now,
-                CompressionMethod = CompressionMethod.Deflated,
-                Size = data.Length
-            };
-            
-            // Calculate CRC for the data
-            var crc = new ICSharpCode.SharpZipLib.Checksum.Crc32();
-            crc.Update(data);
-            entry.Crc = crc.Value;
-            
-            zipStream.PutNextEntry(entry);
-            zipStream.Write(data, 0, data.Length);
-            zipStream.CloseEntry();
-        }
-
-        /// <summary>
-        /// Writes a byte array entry to a ZIP output stream
-        /// </summary>
-        public static void WriteByteEntry(ZipOutputStream zipStream, string entryName, byte[] data)
-        {
-            var entry = new ZipEntry(entryName)
-            {
-                DateTime = DateTime.Now,
-                CompressionMethod = CompressionMethod.Deflated,
-                Size = data.Length
-            };
-            
-            // Calculate CRC for the data
-            var crc = new ICSharpCode.SharpZipLib.Checksum.Crc32();
-            crc.Update(data);
-            entry.Crc = crc.Value;
-            
-            zipStream.PutNextEntry(entry);
-            zipStream.Write(data, 0, data.Length);
-            zipStream.CloseEntry();
-        }
-
-        /// <summary>
-        /// Writes a file entry to a ZIP output stream
-        /// </summary>
-        public static void WriteFileEntry(ZipOutputStream zipStream, string entryName, string filePath)
-        {
-            var fileInfo = new FileInfo(filePath);
-            var entry = new ZipEntry(entryName)
-            {
-                DateTime = fileInfo.LastWriteTime,
-                CompressionMethod = CompressionMethod.Deflated,
-                Size = fileInfo.Length
-            };
-            zipStream.PutNextEntry(entry);
-
-            using (var fileStream = new FileStream(filePath, FileMode.Open, FileAccess.Read))
-            {
-                fileStream.CopyTo(zipStream);
+                archive.AddEntry(entryName, ms, closeStream: true);
             }
-
-            zipStream.CloseEntry();
         }
 
         /// <summary>
-        /// Writes a stream entry to a ZIP output stream
+        /// Writes a byte array entry to a ZIP archive
         /// </summary>
-        public static void WriteStreamEntry(ZipOutputStream zipStream, string entryName, Stream sourceStream, DateTime? lastWriteTime = null)
+        public static void WriteByteEntry(IWritableArchive archive, string entryName, byte[] data)
         {
-            var entry = new ZipEntry(entryName)
+            using (var ms = new MemoryStream(data))
             {
-                DateTime = lastWriteTime ?? DateTime.Now,
-                CompressionMethod = CompressionMethod.Deflated
-            };
-            zipStream.PutNextEntry(entry);
-            sourceStream.CopyTo(zipStream);
-            zipStream.CloseEntry();
+                archive.AddEntry(entryName, ms, closeStream: true);
+            }
+        }
+
+        /// <summary>
+        /// Writes a file entry to a ZIP archive
+        /// </summary>
+        public static void WriteFileEntry(IWritableArchive archive, string entryName, string filePath)
+        {
+            archive.AddEntry(entryName, filePath);
+        }
+
+        /// <summary>
+        /// Writes a stream entry to a ZIP archive
+        /// </summary>
+        public static void WriteStreamEntry(IWritableArchive archive, string entryName, Stream sourceStream, DateTime? lastWriteTime = null)
+        {
+            archive.AddEntry(entryName, sourceStream, closeStream: true);
         }
 
         /// <summary>
         /// Filters entries by extension
         /// </summary>
-        public static List<ZipEntry> FilterByExtension(List<ZipEntry> entries, params string[] extensions)
+        public static List<IArchiveEntry> FilterByExtension(List<IArchiveEntry> entries, params string[] extensions)
         {
             var extensionSet = new HashSet<string>(extensions, StringComparer.OrdinalIgnoreCase);
             return entries
-                .Where(e => !e.IsDirectory && extensionSet.Contains(Path.GetExtension(e.Name)))
+                .Where(e => !e.IsDirectory && extensionSet.Contains(Path.GetExtension(e.Key)))
                 .ToList();
         }
 
         /// <summary>
         /// Filters entries by path prefix
         /// </summary>
-        public static List<ZipEntry> FilterByPath(List<ZipEntry> entries, string pathPrefix)
+        public static List<IArchiveEntry> FilterByPath(List<IArchiveEntry> entries, string pathPrefix)
         {
             return entries
-                .Where(e => e.Name.StartsWith(pathPrefix, StringComparison.OrdinalIgnoreCase) && !e.IsDirectory)
+                .Where(e => e.Key.StartsWith(pathPrefix, StringComparison.OrdinalIgnoreCase) && !e.IsDirectory)
                 .ToList();
         }
 
         /// <summary>
         /// Gets the uncompressed size of an entry
         /// </summary>
-        public static long GetEntrySize(ZipEntry entry)
+        public static long GetEntrySize(IArchiveEntry entry)
         {
             return entry.Size;
         }
@@ -247,7 +189,7 @@ namespace VPM.Services
         /// <summary>
         /// Gets the compressed size of an entry
         /// </summary>
-        public static long GetEntryCompressedSize(ZipEntry entry)
+        public static long GetEntryCompressedSize(IArchiveEntry entry)
         {
             return entry.CompressedSize;
         }
@@ -257,16 +199,16 @@ namespace VPM.Services
         /// This allows processing large files without loading them entirely into memory.
         /// IMPORTANT: The caller is responsible for disposing the stream.
         /// </summary>
-        public static Stream GetInputStream(ZipFile zipFile, ZipEntry entry)
+        public static Stream GetInputStream(IArchive archive, IArchiveEntry entry)
         {
-            return zipFile.GetInputStream(entry);
+            return entry.OpenEntryStream();
         }
 
         /// <summary>
         /// Reads only the header of an entry (useful for image dimension detection)
         /// Benefit: 40-60% memory reduction for large files + memory pooling for buffer reuse
         /// </summary>
-        public static byte[] ReadEntryHeader(ZipFile zipFile, ZipEntry entry, int headerSize = 65536)
+        public static byte[] ReadEntryHeader(IArchive archive, IArchiveEntry entry, int headerSize = 65536)
         {
             // Handle empty entries
             if (entry.Size <= 0)
@@ -282,7 +224,7 @@ namespace VPM.Services
             byte[] pooledBuffer = BufferPool.RentBuffer(bytesToRead);
             try
             {
-                using (var stream = zipFile.GetInputStream(entry))
+                using (var stream = entry.OpenEntryStream())
                 {
                     int bytesRead = stream.Read(pooledBuffer, 0, bytesToRead);
                     
@@ -304,9 +246,9 @@ namespace VPM.Services
         /// Reads entry data into a stream (for streaming processing)
         /// Benefit: Allows processing without loading entire file into memory
         /// </summary>
-        public static void ReadEntryToStream(ZipFile zipFile, ZipEntry entry, Stream outputStream)
+        public static void ReadEntryToStream(IArchive archive, IArchiveEntry entry, Stream outputStream)
         {
-            using (var inputStream = zipFile.GetInputStream(entry))
+            using (var inputStream = entry.OpenEntryStream())
             {
                 inputStream.CopyTo(outputStream);
             }
@@ -316,13 +258,13 @@ namespace VPM.Services
         /// Reads entry data with custom buffer size (for memory optimization)
         /// Benefit: Better control over memory usage during streaming + memory pooling
         /// </summary>
-        public static byte[] ReadEntryWithBuffer(ZipFile zipFile, ZipEntry entry, int bufferSize = 81920)
+        public static byte[] ReadEntryWithBuffer(IArchive archive, IArchiveEntry entry, int bufferSize = 81920)
         {
             // Rent buffer from pool for streaming operations
             byte[] pooledBuffer = BufferPool.RentBuffer(bufferSize);
             try
             {
-                using (var stream = zipFile.GetInputStream(entry))
+                using (var stream = entry.OpenEntryStream())
                 using (var memoryStream = new MemoryStream((int)entry.Size))
                 {
                     int bytesRead;
@@ -344,9 +286,9 @@ namespace VPM.Services
         /// Processes an entry stream with a custom action (for advanced streaming scenarios)
         /// Benefit: Maximum memory efficiency for custom processing
         /// </summary>
-        public static T ProcessEntryStream<T>(ZipFile zipFile, ZipEntry entry, Func<Stream, T> processor)
+        public static T ProcessEntryStream<T>(IArchive archive, IArchiveEntry entry, Func<Stream, T> processor)
         {
-            using (var stream = zipFile.GetInputStream(entry))
+            using (var stream = entry.OpenEntryStream())
             {
                 return processor(stream);
             }
@@ -357,9 +299,9 @@ namespace VPM.Services
         /// Benefit: Non-blocking streaming for large files
         /// </summary>
         public static async System.Threading.Tasks.Task<T> ProcessEntryStreamAsync<T>(
-            ZipFile zipFile, ZipEntry entry, Func<Stream, System.Threading.Tasks.Task<T>> processor)
+            IArchive archive, IArchiveEntry entry, Func<Stream, System.Threading.Tasks.Task<T>> processor)
         {
-            using (var stream = zipFile.GetInputStream(entry))
+            using (var stream = entry.OpenEntryStream())
             {
                 return await processor(stream);
             }

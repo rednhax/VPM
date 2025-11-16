@@ -1,13 +1,14 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.IO;
-using System.IO.Compression;
 using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Media;
+using SharpCompress.Archives;
+using VPM.Services;
 
 namespace VPM
 {
@@ -617,9 +618,9 @@ namespace VPM
                 string tempFilePath = System.IO.Path.Combine(tempFolder, tempFileName);
 
                 // Extract the texture from the VAR
-                using (var archive = ZipFile.OpenRead(packagePath))
+                using (var archive = SharpCompressHelper.OpenForRead(packagePath))
                 {
-                    var entry = archive.GetEntry(textureInfo.ReferencedPath);
+                    var entry = SharpCompressHelper.FindEntryByPath(archive, textureInfo.ReferencedPath);
                     if (entry == null)
                     {
                         MessageBox.Show($"Texture not found in package: {textureInfo.ReferencedPath}", "Error", 
@@ -628,7 +629,7 @@ namespace VPM
                     }
 
                     // Extract to temp file manually
-                    using (var entryStream = entry.Open())
+                    using (var entryStream = entry.OpenEntryStream())
                     using (var fileStream = File.Create(tempFilePath))
                     {
                         entryStream.CopyTo(fileStream);

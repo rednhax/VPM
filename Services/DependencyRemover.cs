@@ -1,10 +1,12 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.IO;
-using System.IO.Compression;
 using System.Linq;
 using System.Text;
 using System.Text.RegularExpressions;
+using SharpCompress.Archives;
+using SharpCompress.Archives.Zip;
+using SharpCompress.Common;
 using VPM.Models;
 
 namespace VPM.Services
@@ -59,43 +61,30 @@ namespace VPM.Services
 
             try
             {
-                using (var sourceFileStream = new FileStream(varPath, FileMode.Open, FileAccess.Read, FileShare.Read))
-                using (var sourceArchive = new ZipArchive(sourceFileStream, ZipArchiveMode.Read, leaveOpen: false))
-                using (var destFileStream = new FileStream(tempPath, FileMode.Create, FileAccess.Write, FileShare.None))
-                using (var destArchive = new ZipArchive(destFileStream, ZipArchiveMode.Create, false))
+                using (var sourceArchive = SharpCompressHelper.OpenForRead(varPath))
+                using (var destArchive = ZipArchive.Create())
                 {
                     foreach (var entry in sourceArchive.Entries)
                     {
-                        // Smart compression: use NoCompression for already-compressed formats
-                        var extension = Path.GetExtension(entry.FullName).ToLowerInvariant();
-                        bool isAlreadyCompressed = extension == ".jpg" || extension == ".jpeg" || 
-                                                  extension == ".png" || extension == ".mp3" || 
-                                                  extension == ".mp4" || extension == ".ogg" ||
-                                                  extension == ".assetbundle";
-                        
-                        var compression = isAlreadyCompressed ? CompressionLevel.NoCompression : CompressionLevel.Optimal;
-                        
-                        if (entry.Name.Equals("meta.json", StringComparison.OrdinalIgnoreCase))
+                        if (entry.Key.Equals("meta.json", StringComparison.OrdinalIgnoreCase))
                         {
-                            using var stream = entry.Open();
+                            using var stream = entry.OpenEntryStream();
                             using var reader = new StreamReader(stream);
                             var metaJson = reader.ReadToEnd();
 
                             var modifiedJson = RemoveDependenciesFromJson(metaJson, dependenciesToRemove, result);
-
-                            var newEntry = destArchive.CreateEntry(entry.FullName, CompressionLevel.Optimal);
-                            newEntry.LastWriteTime = entry.LastWriteTime;
-                            using var writer = new StreamWriter(newEntry.Open());
-                            writer.Write(modifiedJson);
+                            destArchive.AddEntry(entry.Key, new MemoryStream(Encoding.UTF8.GetBytes(modifiedJson)));
                         }
                         else
                         {
-                            var newEntry = destArchive.CreateEntry(entry.FullName, compression);
-                            newEntry.LastWriteTime = entry.LastWriteTime;
-                            using var sourceStream = entry.Open();
-                            using var destStream = newEntry.Open();
-                            sourceStream.CopyTo(destStream);
+                            destArchive.AddEntry(entry.Key, entry.OpenEntryStream());
                         }
+                    }
+                    
+                    // Save the archive inside the using block
+                    using (var destFileStream = new FileStream(tempPath, FileMode.Create, FileAccess.Write, FileShare.None))
+                    {
+                        destArchive.SaveTo(destFileStream, CompressionType.Deflate);
                     }
                 }
 

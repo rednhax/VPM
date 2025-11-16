@@ -1,9 +1,9 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
-using System.IO.Compression;
 using System.Linq;
 using System.Text.Json;
+using SharpCompress.Archives;
 using VPM.Models;
 
 namespace VPM.Services
@@ -56,10 +56,9 @@ namespace VPM.Services
 
             try
             {
-                using var fileStream = new FileStream(varPath, FileMode.Open, FileAccess.Read, FileShare.Read);
-                using var archive = new ZipArchive(fileStream, ZipArchiveMode.Read, leaveOpen: false);
+                using var archive = SharpCompressHelper.OpenForRead(varPath);
                 var metaEntry = archive.Entries.FirstOrDefault(e => 
-                    e.Name.Equals("meta.json", StringComparison.OrdinalIgnoreCase));
+                    e.Key.Equals("meta.json", StringComparison.OrdinalIgnoreCase));
 
                 if (metaEntry == null)
                 {
@@ -67,7 +66,7 @@ namespace VPM.Services
                     return result;
                 }
 
-                using var stream = metaEntry.Open();
+                using var stream = metaEntry.OpenEntryStream();
                 using var reader = new StreamReader(stream);
                 var metaJson = reader.ReadToEnd();
 

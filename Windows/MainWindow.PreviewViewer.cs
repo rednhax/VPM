@@ -1,7 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.IO;
-using System.IO.Compression;
 using System.Linq;
 using System.Text;
 using System.Windows;
@@ -12,8 +11,9 @@ using System.Windows.Media.Imaging;
 using System.Windows.Documents;
 using System.Text.Json;
 using System.Windows.Media.Animation;
-using VPM.Models;
+using SharpCompress.Archives;
 using VPM.Services;
+using VPM.Models;
 
 namespace VPM
 {
@@ -871,16 +871,16 @@ namespace VPM
                 if (string.IsNullOrEmpty(packageVarPath))
                     return null;
 
-                using (var archive = ZipFile.OpenRead(packageVarPath))
+                using (var archive = SharpCompressHelper.OpenForRead(packageVarPath))
                 {
                     var entry = archive.Entries.FirstOrDefault(e => 
-                        e.FullName.Equals(filePath, StringComparison.OrdinalIgnoreCase) ||
-                        e.FullName.Replace("\\", "/").Equals(filePath.Replace("\\", "/"), StringComparison.OrdinalIgnoreCase));
+                        e.Key.Equals(filePath, StringComparison.OrdinalIgnoreCase) ||
+                        e.Key.Replace("\\", "/").Equals(filePath.Replace("\\", "/"), StringComparison.OrdinalIgnoreCase));
                     
                     if (entry == null)
                         return null;
 
-                    using (var stream = entry.Open())
+                    using (var stream = entry.OpenEntryStream())
                     using (var memoryStream = new MemoryStream())
                     {
                         stream.CopyTo(memoryStream);

@@ -1,11 +1,13 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
-using System.IO.Compression;
 using System.Linq;
 using System.Text;
 using System.Text.Json;
 using System.Threading.Tasks;
+using SharpCompress.Archives;
+using SharpCompress.Archives.Zip;
+using SharpCompress.Common;
 
 namespace VPM.Services
 {
@@ -181,10 +183,8 @@ namespace VPM.Services
                     var conversionDetails = new System.Collections.Concurrent.ConcurrentBag<string>();
 
                     // Open source VAR (from archive or after moving to archive)
-                    using (var sourceFileStream = new FileStream(sourcePathForProcessing, FileMode.Open, FileAccess.Read, FileShare.Read))
-                    using (var sourceArchive = new ZipArchive(sourceFileStream, ZipArchiveMode.Read, false))
-                    using (var outputFileStream = new FileStream(tempOutputPath, FileMode.Create, FileAccess.Write, FileShare.None))
-                    using (var outputArchive = new ZipArchive(outputFileStream, ZipArchiveMode.Create, false))
+                    using (var sourceArchive = SharpCompressHelper.OpenForRead(sourcePathForProcessing))
+                    using (var outputArchive = ZipArchive.Create())
                     {
                         string originalMetaJson = null;
 
@@ -195,9 +195,9 @@ namespace VPM.Services
 
                         foreach (var entry in allEntries)
                         {
-                            if (entry.FullName.Equals("meta.json", StringComparison.OrdinalIgnoreCase))
+                            if (entry.Key.Equals("meta.json", StringComparison.OrdinalIgnoreCase))
                             {
-                                using (var stream = entry.Open())
+                                using (var stream = entry.OpenEntryStream())
                                 using (var reader = new StreamReader(stream))
                                 {
                                     originalMetaJson = reader.ReadToEnd();
@@ -205,13 +205,13 @@ namespace VPM.Services
                                 continue;
                             }
 
-                            if (textureConversions.TryGetValue(entry.FullName, out var conversionInfo))
+                            if (textureConversions.TryGetValue(entry.Key, out var conversionInfo))
                             {
-                                using (var stream = entry.Open())
+                                using (var stream = entry.OpenEntryStream())
                                 using (var ms = new MemoryStream())
                                 {
                                     stream.CopyTo(ms);
-                                    conversionInputs.Add((entry.FullName, entry.LastWriteTime, ms.ToArray(), conversionInfo));
+                                    conversionInputs.Add((entry.Key, entry.LastModifiedTime ?? DateTimeOffset.Now, ms.ToArray(), conversionInfo));
                                 }
                             }
                         }
@@ -261,7 +261,7 @@ namespace VPM.Services
                         
                         foreach (var entry in allEntries)
                         {
-                            if (entry.FullName.Equals("meta.json", StringComparison.OrdinalIgnoreCase))
+                            if (entry.Key.Equals("meta.json", StringComparison.OrdinalIgnoreCase))
                             {
                                 continue;
                             }
@@ -272,54 +272,31 @@ namespace VPM.Services
                                 progressCallback?.Invoke($"📝 Writing files... ({writeIndex}/{totalWrites})", totalConversions, totalConversions);
                             }
 
-                            // Smart compression: use NoCompression for already-compressed formats
-                            var extension = Path.GetExtension(entry.FullName).ToLowerInvariant();
-                            bool isAlreadyCompressed = extension == ".jpg" || extension == ".jpeg" || 
-                                                      extension == ".png" || extension == ".mp3" || 
-                                                      extension == ".mp4" || extension == ".ogg" ||
-                                                      extension == ".assetbundle";
-                            
-                            var compression = isAlreadyCompressed ? CompressionLevel.NoCompression : CompressionLevel.Optimal;
-                            
-                            if (convertedTextures.TryGetValue(entry.FullName, out var converted))
+                            if (convertedTextures.TryGetValue(entry.Key, out var converted))
                             {
-                                var newEntry = outputArchive.CreateEntry(entry.FullName, compression);
-                                newEntry.LastWriteTime = converted.lastWriteTime;
-
-                                using (var newStream = newEntry.Open())
-                                {
-                                    newStream.Write(converted.data, 0, converted.data.Length);
-                                }
+                                outputArchive.AddEntry(entry.Key, new MemoryStream(converted.data));
                             }
                             else
                             {
                                 // Try to read source first before creating entry to prevent corrupted empty entries
                                 try
                                 {
-                                    using (var sourceStream = entry.Open())
+                                    using (var sourceStream = entry.OpenEntryStream())
                                     using (var ms = new MemoryStream())
                                     {
                                         sourceStream.CopyTo(ms);
-                                        byte[] sourceData = ms.ToArray();
-                                        
-                                        var newEntry = outputArchive.CreateEntry(entry.FullName, compression);
-                                        newEntry.LastWriteTime = entry.LastWriteTime;
-
-                                        using (var newStream = newEntry.Open())
-                                        {
-                                            newStream.Write(sourceData, 0, sourceData.Length);
-                                        }
+                                        outputArchive.AddEntry(entry.Key, new MemoryStream(ms.ToArray()));
                                     }
                                 }
                                 catch (InvalidDataException ex)
                                 {
                                     // Skip entries with unsupported compression methods
-                                    Console.WriteLine($"[WRITE-SKIP] Skipping {entry.FullName} due to unsupported compression: {ex.Message}");
+                                    Console.WriteLine($"[WRITE-SKIP] Skipping {entry.Key} due to unsupported compression: {ex.Message}");
                                 }
                                 catch (Exception ex)
                                 {
                                     // Skip entries that cannot be read
-                                    Console.WriteLine($"[WRITE-SKIP] Skipping {entry.FullName}: {ex.GetType().Name}: {ex.Message}");
+                                    Console.WriteLine($"[WRITE-SKIP] Skipping {entry.Key}: {ex.GetType().Name}: {ex.Message}");
                                 }
                             }
                         }
@@ -329,11 +306,13 @@ namespace VPM.Services
                             progressCallback?.Invoke("📋 Updating package metadata...", totalConversions, totalConversions);
                             string updatedMetaJson = UpdateMetaJsonDescription(originalMetaJson, conversionDetails, originalTotalSize, newTotalSize);
 
-                            var metaEntry = outputArchive.CreateEntry("meta.json", CompressionLevel.Optimal);
-                            using (var writer = new StreamWriter(metaEntry.Open()))
-                            {
-                                writer.Write(updatedMetaJson);
-                            }
+                            outputArchive.AddEntry("meta.json", new MemoryStream(Encoding.UTF8.GetBytes(updatedMetaJson)));
+                        }
+                        
+                        // Save the archive
+                        using (var outputFileStream = new FileStream(tempOutputPath, FileMode.Create, FileAccess.Write, FileShare.None))
+                        {
+                            outputArchive.SaveTo(outputFileStream, CompressionType.Deflate);
                         }
                     }
 
@@ -512,11 +491,10 @@ namespace VPM.Services
                 }
 
                 // Try to open as ZIP archive
-                using (var fileStream = new FileStream(varPath, FileMode.Open, FileAccess.Read, FileShare.Read))
-                using (var archive = new ZipArchive(fileStream, ZipArchiveMode.Read, leaveOpen: false))
+                using (var archive = SharpCompressHelper.OpenForRead(varPath))
                 {
                     // Check for meta.json
-                    var metaEntry = archive.GetEntry("meta.json");
+                    var metaEntry = SharpCompressHelper.FindEntry(archive, "meta.json");
                     if (metaEntry == null)
                     {
                         errorMessage = "VAR file is missing meta.json";

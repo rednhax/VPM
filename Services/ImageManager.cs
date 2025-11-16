@@ -3,12 +3,13 @@ using System.Buffers;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
-using System.IO.Compression;
 using System.Linq;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Media.Imaging;
+using SharpCompress.Archives;
+using SharpCompress.Archives.Zip;
 using VPM.Models;
 using Microsoft.IO;
 
@@ -199,23 +200,22 @@ namespace VPM.Services
                     }
                 }
 
-                using var stream = new FileStream(varPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
-                using var archive = new ZipArchive(stream, ZipArchiveMode.Read, leaveOpen: false);
+                using var archive = SharpCompressHelper.OpenForRead(varPath);
 
                 foreach (var entry in archive.Entries)
                 {
-                    if (entry.FullName.EndsWith("/")) continue;
+                    if (entry.Key.EndsWith("/")) continue;
 
-                    var ext = Path.GetExtension(entry.FullName).ToLower();
+                    var ext = Path.GetExtension(entry.Key).ToLower();
                     if (ext != ".jpg" && ext != ".jpeg") continue;
 
-                    var pathNorm = entry.FullName.Replace('\\', '/').ToLower();
+                    var pathNorm = entry.Key.Replace('\\', '/').ToLower();
                     
                     if (pathNorm.Contains("/textures/") || pathNorm.Contains("/texture/"))
                         continue;
 
                     // Size filter: 1KB - 1MB (allow larger images, validation happens during load)
-                    if (entry.Length < 1024 || entry.Length > 1024 * 1024) continue;
+                    if (entry.Size < 1024 || entry.Size > 1024 * 1024) continue;
                     
                     // Only index if it looks like a preview based on path
                     if (!IsPreviewImage(pathNorm)) continue;
@@ -223,8 +223,8 @@ namespace VPM.Services
                     imageLocations.Add(new ImageLocation
                     {
                         VarFilePath = varPath,
-                        InternalPath = entry.FullName,
-                        FileSize = entry.Length
+                        InternalPath = entry.Key,
+                        FileSize = entry.Size
                     });
                 }
 
@@ -300,10 +300,9 @@ namespace VPM.Services
         {
             try
             {
-                using var stream = new FileStream(varPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
-                using var archive = new ZipArchive(stream, ZipArchiveMode.Read, leaveOpen: false);
+                using var archive = SharpCompressHelper.OpenForRead(varPath);
 
-                var entry = archive.GetEntry(internalPath);
+                var entry = SharpCompressHelper.FindEntryByPath(archive, internalPath);
 
                 if (entry == null) return null;
 
@@ -313,7 +312,7 @@ namespace VPM.Services
                 try
                 {
                     byte[] imageData;
-                    using (var entryStream = entry.Open())
+                    using (var entryStream = entry.OpenEntryStream())
                     {
                         // Use non-pooled MemoryStream to avoid .NET 10 disposal issues
                         using (var ms = new MemoryStream())
@@ -379,10 +378,10 @@ namespace VPM.Services
         /// <summary>
         /// Validates image size, path, and basic properties
         /// </summary>
-        private bool IsValidImageEntry(ZipArchiveEntry entry, string pathNorm)
+        private bool IsValidImageEntry(IArchiveEntry entry, string pathNorm)
         {
             // Size validation (1KB to 1MB)
-            if (entry.Length < 1024 || entry.Length > 1024 * 1024) return false;
+            if (entry.Size < 1024 || entry.Size > 1024 * 1024) return false;
             
             // Exclude images in Textures subdirectories
             if (pathNorm.Contains("/textures/")) return false;
@@ -451,14 +450,13 @@ namespace VPM.Services
             
             try
             {
-                using var stream = new FileStream(varPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
-                using var archive = new ZipArchive(stream, ZipArchiveMode.Read, leaveOpen: false);
+                using var archive = SharpCompressHelper.OpenForRead(varPath);
 
                 foreach (var internalPath in uncachedPaths)
                 {
                     try
                     {
-                        var entry = archive.GetEntry(internalPath);
+                        var entry = SharpCompressHelper.FindEntryByPath(archive, internalPath);
                         if (entry == null)
                         {
                             continue;
@@ -471,7 +469,7 @@ namespace VPM.Services
                         }
 
                         byte[] imageData;
-                        using (var entryStream = entry.Open())
+                        using (var entryStream = entry.OpenEntryStream())
                         {
                             // Use non-pooled MemoryStream to avoid .NET 10 disposal issues
                             using (var ms = new MemoryStream())
