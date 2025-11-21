@@ -18,6 +18,8 @@ namespace VPM.Windows
         private bool _isLoaded = false;
         private bool _isLoadingInProgress = false;
         private Image _imageControl;
+        private Grid _overlayGrid;
+        private Button _extractButton;
         
         // Image data
         public string PackageKey { get; set; }
@@ -31,9 +33,14 @@ namespace VPM.Windows
         // Callback for loading the actual image
         public Func<Task<BitmapImage>> LoadImageCallback { get; set; }
         
+        // Extraction data
+        public string VarFilePath { get; set; }
+        public string InternalImagePath { get; set; }
+        
         // Events
         public event EventHandler ImageLoaded;
         public event EventHandler ImageUnloaded;
+        public event EventHandler<ExtractionRequestedEventArgs> ExtractionRequested;
         
         public LazyLoadImage()
         {
@@ -47,8 +54,46 @@ namespace VPM.Windows
                 Opacity = 0 // Start invisible for fade-in animation
             };
             
-            // Set child directly - no Grid overlay needed
-            this.Child = _imageControl;
+            // Create overlay grid for buttons
+            _overlayGrid = new Grid();
+            _overlayGrid.Children.Add(_imageControl);
+            
+            // Create extract button at bottom-right
+            _extractButton = new Button
+            {
+                Padding = new Thickness(8, 4, 8, 4),
+                Background = new SolidColorBrush(Color.FromArgb(140, 0, 120, 215)), // Semi-transparent blue
+                Foreground = new SolidColorBrush(Colors.White),
+                FontSize = 11,
+                FontWeight = FontWeights.SemiBold,
+                VerticalAlignment = VerticalAlignment.Bottom,
+                HorizontalAlignment = HorizontalAlignment.Right,
+                Margin = new Thickness(0, 0, 6, 6),
+                Visibility = Visibility.Collapsed,
+                ToolTip = "Extract files from archive",
+                BorderThickness = new Thickness(0),
+                Cursor = System.Windows.Input.Cursors.Hand
+            };
+            
+            // Style the button with rounded corners
+            var buttonStyle = new System.Windows.Style(typeof(Button));
+            buttonStyle.Setters.Add(new System.Windows.Setter(Button.TemplateProperty, CreateButtonTemplate()));
+            _extractButton.Style = buttonStyle;
+            
+            _extractButton.Click += (s, e) =>
+            {
+                e.Handled = true;
+                ExtractionRequested?.Invoke(this, new ExtractionRequestedEventArgs
+                {
+                    VarFilePath = this.VarFilePath,
+                    InternalImagePath = this.InternalImagePath
+                });
+            };
+            
+            _overlayGrid.Children.Add(_extractButton);
+            
+            // Set child to overlay grid
+            this.Child = _overlayGrid;
             
             // Light background visible until image loads
             this.Background = new SolidColorBrush(Color.FromArgb(15, 100, 149, 237));
@@ -205,5 +250,93 @@ namespace VPM.Windows
         /// Gets whether the image is currently loaded
         /// </summary>
         public bool IsImageLoaded => _isLoaded;
+        
+        /// <summary>
+        /// Updates the extract button state (shows button or checkmark)
+        /// </summary>
+        public void SetExtractionState(bool isExtracted)
+        {
+            try
+            {
+                Dispatcher.Invoke(() =>
+                {
+                    if (isExtracted)
+                    {
+                        // Show checkmark
+                        _extractButton.Content = "✓";
+                        _extractButton.Background = new SolidColorBrush(Color.FromArgb(140, 34, 177, 76)); // Semi-transparent green
+                        _extractButton.ToolTip = "Files already extracted";
+                        _extractButton.IsEnabled = false;
+                    }
+                    else
+                    {
+                        // Show extract button with full category name
+                        var category = VarContentExtractor.GetCategoryFromPath(InternalImagePath);
+                        _extractButton.Content = category;
+                        _extractButton.Background = new SolidColorBrush(Color.FromArgb(140, 0, 120, 215)); // Semi-transparent blue
+                        _extractButton.ToolTip = $"Extract {category} files";
+                        _extractButton.IsEnabled = true;
+                    }
+                    
+                    _extractButton.Visibility = Visibility.Visible;
+                });
+            }
+            catch (Exception)
+            {
+                // Ignore errors during state update
+            }
+        }
+        
+        /// <summary>
+        /// Creates a custom button template with rounded corners and hover effects
+        /// </summary>
+        private ControlTemplate CreateButtonTemplate()
+        {
+            var template = new ControlTemplate(typeof(Button));
+            
+            // Main border with rounded corners
+            var border = new FrameworkElementFactory(typeof(Border));
+            border.SetValue(Border.BackgroundProperty, new TemplateBindingExtension(Button.BackgroundProperty));
+            border.SetValue(Border.CornerRadiusProperty, new CornerRadius(4));
+            border.SetValue(Border.PaddingProperty, new TemplateBindingExtension(Button.PaddingProperty));
+            
+            // Content presenter
+            var contentPresenter = new FrameworkElementFactory(typeof(ContentPresenter));
+            contentPresenter.SetValue(ContentPresenter.HorizontalAlignmentProperty, HorizontalAlignment.Center);
+            contentPresenter.SetValue(ContentPresenter.VerticalAlignmentProperty, VerticalAlignment.Center);
+            
+            border.AppendChild(contentPresenter);
+            template.VisualTree = border;
+            
+            // Hover trigger - increase opacity
+            var hoverTrigger = new Trigger
+            {
+                Property = Button.IsMouseOverProperty,
+                Value = true
+            };
+            hoverTrigger.Setters.Add(new Setter(Button.BackgroundProperty, 
+                new SolidColorBrush(Color.FromArgb(220, 0, 120, 215))));
+            template.Triggers.Add(hoverTrigger);
+            
+            // Pressed trigger
+            var pressedTrigger = new Trigger
+            {
+                Property = Button.IsPressedProperty,
+                Value = true
+            };
+            pressedTrigger.Setters.Add(new Setter(Button.OpacityProperty, 0.8));
+            template.Triggers.Add(pressedTrigger);
+            
+            return template;
+        }
+    }
+    
+    /// <summary>
+    /// Event args for extraction requests
+    /// </summary>
+    public class ExtractionRequestedEventArgs : EventArgs
+    {
+        public string VarFilePath { get; set; }
+        public string InternalImagePath { get; set; }
     }
 }

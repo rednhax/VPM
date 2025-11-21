@@ -569,6 +569,13 @@ namespace VPM
                 // Create image tiles for this package using lazy loading
                 var packageImageTiles = new List<LazyLoadImage>();
                 
+                // Get image locations for extraction feature
+                var imageLocations = new List<ImageLocation>();
+                if (_imageManager?.ImageIndex != null && _imageManager.ImageIndex.TryGetValue(packageBase, out var locations))
+                {
+                    imageLocations = locations;
+                }
+                
                 for (int i = 0; i < images.Count; i++)
                 {
                     try
@@ -587,6 +594,14 @@ namespace VPM
                             Margin = new Thickness(3),
                             ToolTip = $"{packageItem.Name}\nDouble-click to open in image viewer"
                         };
+                        
+                        // Set extraction data if available
+                        if (i < imageLocations.Count)
+                        {
+                            var location = imageLocations[i];
+                            lazyImageTile.VarFilePath = location.VarFilePath;
+                            lazyImageTile.InternalImagePath = location.InternalPath;
+                        }
                         
                         // Apply clip geometry that updates with size changes
                         void ApplyClipGeometry(LazyLoadImage border)
@@ -619,6 +634,12 @@ namespace VPM
                             }
                         };
                         
+                        // Wire up extraction event
+                        lazyImageTile.ExtractionRequested += async (s, e) =>
+                        {
+                            await HandleImageExtractionAsync(e.VarFilePath, e.InternalImagePath);
+                        };
+                        
                         // Register with virtualization manager
                         _virtualizedImageManager?.RegisterImage(lazyImageTile);
                         
@@ -634,6 +655,10 @@ namespace VPM
                 {
                     var imageGrid = await CreatePackageImageGrid(packageImageTiles);
                     packageGroupContainer.Children.Add(imageGrid);
+                    
+                    // Check extraction states asynchronously
+                    _ = Task.Run(() => CheckAndUpdateExtractionStatesAsync(packageImageTiles, packageMetadata?.FilePath));
+                    
                     return packageGroupContainer;
                 }
                 
@@ -2294,6 +2319,137 @@ namespace VPM
             catch (Exception ex)
             {
                 MessageBox.Show($"Error opening image: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
+        /// <summary>
+        /// Checks and updates extraction states for all images in a package
+        /// </summary>
+        private async Task CheckAndUpdateExtractionStatesAsync(List<LazyLoadImage> imageTiles, string varFilePath)
+        {
+            try
+            {
+                if (string.IsNullOrWhiteSpace(varFilePath) || !File.Exists(varFilePath))
+                    return;
+
+                var gameFolder = _settingsManager?.Settings?.SelectedFolder;
+                if (string.IsNullOrWhiteSpace(gameFolder) || !Directory.Exists(gameFolder))
+                    return;
+
+                // Check each image
+                foreach (var tile in imageTiles)
+                {
+                    if (string.IsNullOrWhiteSpace(tile.InternalImagePath))
+                        continue;
+
+                    try
+                    {
+                        bool isExtracted = await VarContentExtractor.AreRelatedFilesExtractedAsync(
+                            varFilePath, 
+                            tile.InternalImagePath, 
+                            gameFolder
+                        );
+
+                        if (isExtracted)
+                        {
+                            tile.SetExtractionState(true);
+                        }
+                        else
+                        {
+                            tile.SetExtractionState(false);
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        System.Diagnostics.Debug.WriteLine($"Error checking extraction state: {ex.Message}");
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Error in CheckAndUpdateExtractionStatesAsync: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// Handles extraction of files from VAR archive when user clicks extract button
+        /// </summary>
+        private async Task HandleImageExtractionAsync(string varFilePath, string internalImagePath)
+        {
+            try
+            {
+                // Get the game folder from settings
+                var gameFolder = _settingsManager?.Settings?.SelectedFolder;
+                if (string.IsNullOrWhiteSpace(gameFolder) || !Directory.Exists(gameFolder))
+                {
+                    MessageBox.Show("Game folder not configured or does not exist.", "Error", MessageBoxButton.OK, MessageBoxImage.Warning);
+                    return;
+                }
+
+                // Extract the files
+                int extractedCount = await VarContentExtractor.ExtractRelatedFilesAsync(varFilePath, internalImagePath, gameFolder);
+
+                if (extractedCount > 0)
+                {
+                    // Update the button state for this image
+                    UpdateImageExtractionState(internalImagePath, true);
+                    
+                    // Show success message
+                    MessageBox.Show($"Successfully extracted {extractedCount} file(s).", "Success", MessageBoxButton.OK, MessageBoxImage.Information);
+                }
+                else
+                {
+                    MessageBox.Show("No related files found to extract.", "Info", MessageBoxButton.OK, MessageBoxImage.Information);
+                }
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Error extracting files: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
+        /// <summary>
+        /// Updates the extraction state for all images with the given internal path
+        /// </summary>
+        private void UpdateImageExtractionState(string internalImagePath, bool isExtracted)
+        {
+            try
+            {
+                // Find and update all LazyLoadImage controls with this internal path
+                foreach (UIElement child in ImagesPanel.Children)
+                {
+                    if (child is StackPanel container)
+                    {
+                        FindAndUpdateImageExtractionState(container, internalImagePath, isExtracted);
+                    }
+                }
+            }
+            catch (Exception)
+            {
+                // Ignore errors during UI update
+            }
+        }
+
+        /// <summary>
+        /// Recursively finds and updates LazyLoadImage controls
+        /// </summary>
+        private void FindAndUpdateImageExtractionState(DependencyObject parent, string internalImagePath, bool isExtracted)
+        {
+            for (int i = 0; i < VisualTreeHelper.GetChildrenCount(parent); i++)
+            {
+                var child = VisualTreeHelper.GetChild(parent, i);
+
+                if (child is LazyLoadImage lazyImage)
+                {
+                    if (lazyImage.InternalImagePath?.Equals(internalImagePath, StringComparison.OrdinalIgnoreCase) == true)
+                    {
+                        lazyImage.SetExtractionState(isExtracted);
+                    }
+                }
+                else
+                {
+                    FindAndUpdateImageExtractionState(child, internalImagePath, isExtracted);
+                }
             }
         }
 

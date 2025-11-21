@@ -223,12 +223,16 @@
                     <ControlTemplate TargetType="{x:Type DataGridRow}">
                         <Grid SnapsToDevicePixels="True">
                             <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="3" />
+                                <ColumnDefinition Width="8" />
                                 <ColumnDefinition Width="*" />
                             </Grid.ColumnDefinitions>
                             <!--  Left Status Line  -->
                             <Border
                                 Grid.Column="0"
+                                Width="4"
+                                HorizontalAlignment="Left"
+                                Margin="2,3,0,3"
+                                CornerRadius="2"
                                 Background="{Binding StatusColor, Converter={x:Static local:ColorToBrushConverter.Instance}}" />
                             <!--  Main Row Content  -->
                             <Border
@@ -4242,18 +4246,8 @@
                                         <Border
                                             Padding="0"
                                             Background="Transparent">
-                                            <Grid>
-                                                <Grid.ColumnDefinitions>
-                                                    <ColumnDefinition Width="3" />
-                                                    <ColumnDefinition Width="*" />
-                                                </Grid.ColumnDefinitions>
-                                                <!--  Left Status Border  -->
-                                                <Border
-                                                    Grid.Column="0"
-                                                    Margin="0,2,0,2"
-                                                    Background="{Binding StatusColor, Converter={x:Static local:ColorToBrushConverter.Instance}}" />
-                                                <!--  Content  -->
-                                                <StackPanel Grid.Column="1" Margin="6,2,4,2" VerticalAlignment="Center">
+                                            <!--  Content  -->
+                                            <StackPanel Margin="6,2,4,2" VerticalAlignment="Center">
                                             <TextBlock
                                                 FontWeight="SemiBold"
                                                 Text="{Binding DisplayName}"
@@ -4376,7 +4370,6 @@
                                                 Text="{Binding Converter={StaticResource ContentCountsConverter}}"
                                                 TextWrapping="Wrap" />
                                                 </StackPanel>
-                                            </Grid>
                                         </Border>
                                     </DataTemplate>
                                 </DataGridTemplateColumn.CellTemplate>
@@ -5453,7 +5446,7 @@
                             <DataGrid.Columns>
                                 <!--  Status Column with Left Line  -->
                                 <DataGridTemplateColumn
-                                    Width="0"
+                                    Width="8"
                                     CanUserResize="False"
                                     CanUserSort="True"
                                     Header="Status"
@@ -5462,12 +5455,16 @@
                                         <DataTemplate>
                                             <Grid>
                                                 <Grid.ColumnDefinitions>
-                                                    <ColumnDefinition Width="3" />
+                                                    <ColumnDefinition Width="8" />
                                                     <ColumnDefinition Width="*" />
                                                 </Grid.ColumnDefinitions>
                                                 <!--  Left Status Line  -->
                                                 <Border
                                                     Grid.Column="0"
+                                                    Width="4"
+                                                    HorizontalAlignment="Left"
+                                                    Margin="2,2,0,2"
+                                                    CornerRadius="2"
                                                     Background="{Binding StatusColor, Converter={x:Static local:ColorToBrushConverter.Instance}}" />
                                                 <!--  Empty content area  -->
                                                 <Border Grid.Column="1" Background="Transparent" />
@@ -5486,7 +5483,7 @@
                                     <DataGridTextColumn.ElementStyle>
                                         <Style TargetType="TextBlock">
                                             <Setter Property="VerticalAlignment" Value="Center" />
-                                            <Setter Property="Padding" Value="0,0,0,0" />
+                                            <Setter Property="Padding" Value="6,0,0,0" />
                                         </Style>
                                     </DataGridTextColumn.ElementStyle>
                                 </DataGridTextColumn>
