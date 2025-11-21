@@ -405,6 +405,13 @@ namespace VPM
         /// </summary>
         private void ApplyFilterVisibilityStates(AppSettings settings)
         {
+            // First, ensure the correct filter container is visible based on mode
+            if (PackageFiltersContainer != null)
+                PackageFiltersContainer.Visibility = (_currentContentMode == "Packages") ? System.Windows.Visibility.Visible : System.Windows.Visibility.Collapsed;
+            if (SceneFiltersContainer != null)
+                SceneFiltersContainer.Visibility = (_currentContentMode == "Scenes") ? System.Windows.Visibility.Visible : System.Windows.Visibility.Collapsed;
+            if (PresetFiltersContainer != null)
+                PresetFiltersContainer.Visibility = (_currentContentMode == "Presets" || _currentContentMode == "Custom") ? System.Windows.Visibility.Visible : System.Windows.Visibility.Collapsed;
             
             // Only apply package filters in Packages mode
             if (_currentContentMode == "Packages")
@@ -524,10 +531,12 @@ namespace VPM
                 }
             }
             
-            // Only apply preset filters in Presets mode
-            if (_currentContentMode == "Presets")
+            // Apply preset filters in Presets mode and Custom mode (unified presets + scenes)
+            if (_currentContentMode == "Presets" || _currentContentMode == "Custom")
             {
                 // Preset Category Filter
+                if (PresetCategoryFilterSection != null)
+                    PresetCategoryFilterSection.Visibility = settings.PresetCategoryFilterVisible ? System.Windows.Visibility.Visible : System.Windows.Visibility.Collapsed;
                 if (PresetCategoryFilterList != null && PresetCategoryFilterTextBoxGrid != null && PresetCategoryFilterCollapsedGrid != null)
                 {
                     PresetCategoryFilterList.Visibility = settings.PresetCategoryFilterVisible ? System.Windows.Visibility.Visible : System.Windows.Visibility.Collapsed;
@@ -536,6 +545,8 @@ namespace VPM
                 }
                 
                 // Preset Subfolder Filter
+                if (PresetSubfolderFilterSection != null)
+                    PresetSubfolderFilterSection.Visibility = settings.PresetSubfolderFilterVisible ? System.Windows.Visibility.Visible : System.Windows.Visibility.Collapsed;
                 if (PresetSubfolderFilterList != null && PresetSubfolderFilterTextBoxGrid != null && PresetSubfolderFilterCollapsedGrid != null)
                 {
                     PresetSubfolderFilterList.Visibility = settings.PresetSubfolderFilterVisible ? System.Windows.Visibility.Visible : System.Windows.Visibility.Collapsed;
@@ -544,6 +555,8 @@ namespace VPM
                 }
                 
                 // Preset Date Filter
+                if (PresetDateFilterSection != null)
+                    PresetDateFilterSection.Visibility = settings.PresetDateFilterVisible ? System.Windows.Visibility.Visible : System.Windows.Visibility.Collapsed;
                 if (PresetDateFilterList != null && PresetDateFilterExpandedGrid != null && PresetDateFilterCollapsedGrid != null)
                 {
                     PresetDateFilterList.Visibility = settings.PresetDateFilterVisible ? System.Windows.Visibility.Visible : System.Windows.Visibility.Collapsed;
@@ -552,6 +565,8 @@ namespace VPM
                 }
                 
                 // Preset File Size Filter
+                if (PresetFileSizeFilterSection != null)
+                    PresetFileSizeFilterSection.Visibility = settings.PresetFileSizeFilterVisible ? System.Windows.Visibility.Visible : System.Windows.Visibility.Collapsed;
                 if (PresetFileSizeFilterList != null && PresetFileSizeFilterExpandedGrid != null && PresetFileSizeFilterCollapsedGrid != null)
                 {
                     PresetFileSizeFilterList.Visibility = settings.PresetFileSizeFilterVisible ? System.Windows.Visibility.Visible : System.Windows.Visibility.Collapsed;
@@ -560,6 +575,8 @@ namespace VPM
                 }
                 
                 // Preset Status Filter
+                if (PresetStatusFilterSection != null)
+                    PresetStatusFilterSection.Visibility = settings.PresetStatusFilterVisible ? System.Windows.Visibility.Visible : System.Windows.Visibility.Collapsed;
                 if (PresetStatusFilterList != null && PresetStatusFilterExpandedGrid != null && PresetStatusFilterCollapsedGrid != null)
                 {
                     PresetStatusFilterList.Visibility = settings.PresetStatusFilterVisible ? System.Windows.Visibility.Visible : System.Windows.Visibility.Collapsed;
@@ -615,6 +632,9 @@ namespace VPM
                         ApplyFilterOrder(_settingsManager.Settings.SceneFilterOrder, SceneFiltersContainer);
                         break;
                     case "Presets":
+                        ApplyFilterOrder(_settingsManager.Settings.PresetFilterOrder, PresetFiltersContainer);
+                        break;
+                    case "Custom":
                         ApplyFilterOrder(_settingsManager.Settings.PresetFilterOrder, PresetFiltersContainer);
                         break;
                 }

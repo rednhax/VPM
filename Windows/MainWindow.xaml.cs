@@ -62,6 +62,7 @@ namespace VPM
         private PackageFileManager _packageFileManager;
         private SceneScanner _sceneScanner;
         private CustomAtomPersonScanner _customAtomPersonScanner;
+        private UnifiedCustomContentScanner _unifiedCustomContentScanner;
 
         private string _cacheFolder;
         
@@ -154,11 +155,12 @@ namespace VPM
             // Initialize PackageFileManager if we have a selected folder
             InitializePackageFileManager();
 
-            // Initialize SceneScanner and CustomAtomPersonScanner
+            // Initialize SceneScanner, CustomAtomPersonScanner, and UnifiedCustomContentScanner
             if (!string.IsNullOrEmpty(_settingsManager.Settings.SelectedFolder))
             {
                 _sceneScanner = new SceneScanner(_settingsManager.Settings.SelectedFolder);
                 _customAtomPersonScanner = new CustomAtomPersonScanner(_settingsManager.Settings.SelectedFolder);
+                _unifiedCustomContentScanner = new UnifiedCustomContentScanner(_settingsManager.Settings.SelectedFolder);
             }
 
             // Initialize keyboard navigation manager

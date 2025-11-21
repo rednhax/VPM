@@ -33,8 +33,7 @@ namespace VPM
                 string newMode = content switch
                 {
                     "📦 Packages" => "Packages",
-                    "🎬 Scenes" => "Scenes",
-                    "🎨 Presets" => "Presets",
+                    "🎨 Custom" => "Custom",
                     _ => "Packages"
                 };
                 
@@ -47,12 +46,11 @@ namespace VPM
         /// </summary>
         private void ContentModeDropdown_PreviewMouseRightButtonDown(object sender, MouseButtonEventArgs e)
         {
-            // Get the next mode in the cycle: Packages -> Scenes -> Presets -> Packages
+            // Get the next mode in the cycle: Packages -> Custom -> Packages
             string nextMode = _currentContentMode switch
             {
-                "Packages" => "Scenes",
-                "Scenes" => "Presets",
-                "Presets" => "Packages",
+                "Packages" => "Custom",
+                "Custom" => "Packages",
                 _ => "Packages"
             };
 
@@ -72,7 +70,7 @@ namespace VPM
         }
 
         /// <summary>
-        /// Switches between Packages, Scenes, and Presets content mode
+        /// Switches between Packages and Custom (unified Presets + Scenes) content mode
         /// </summary>
         private void SwitchContentMode(string mode)
         {
@@ -83,17 +81,11 @@ namespace VPM
 
             // Clear selections for all DataGrids
             if (PackageDataGrid != null)
-            {
                 PackageDataGrid.SelectedItems.Clear();
-            }
             if (ScenesDataGrid != null)
-            {
                 ScenesDataGrid.SelectedItems.Clear();
-            }
             if (CustomAtomDataGrid != null)
-            {
                 CustomAtomDataGrid.SelectedItems.Clear();
-            }
 
             // Clear details area
             Dependencies.Clear();
@@ -101,25 +93,16 @@ namespace VPM
             ClearCategoryTabs();
             ClearImageGrid();
 
-            // Restore original custom atom items when leaving Presets mode
-            if (mode != "Presets" && CustomAtomItems.Count > 0)
-            {
-                // This ensures the collection is reset to show all items, not filtered ones
-                CustomAtomItems.ReplaceAll(CustomAtomItems.ToList());
-            }
-
             // Update the dropdown to select the current mode
             if (ContentModeDropdown != null)
             {
                 string displayText = mode switch
                 {
                     "Packages" => "📦 Packages",
-                    "Scenes" => "🎬 Scenes",
-                    "Presets" => "🎨 Presets",
+                    "Custom" => "🎨 Custom",
                     _ => "📦 Packages"
                 };
                 
-                // Find and select the matching ComboBoxItem
                 for (int i = 0; i < ContentModeDropdown.Items.Count; i++)
                 {
                     if (ContentModeDropdown.Items[i] is ComboBoxItem item && item.Content.ToString() == displayText)
@@ -130,7 +113,6 @@ namespace VPM
                 }
             }
 
-            // Update button styles
             if (mode == "Packages")
             {
                 PackageDataGrid.Visibility = Visibility.Visible;
@@ -138,9 +120,7 @@ namespace VPM
                 if (CustomAtomDataGrid != null)
                     CustomAtomDataGrid.Visibility = Visibility.Collapsed;
                 
-                // Show package search, hide scene search
                 PackageSearchBox.Visibility = Visibility.Visible;
-                // Reset package search box to placeholder
                 PackageSearchBox.Text = "📦 Filter packages, descriptions, tags...";
                 PackageSearchBox.Foreground = (System.Windows.Media.SolidColorBrush)FindResource(System.Windows.SystemColors.GrayTextBrushKey);
                 PackageSearchClearButton.Visibility = Visibility.Collapsed;
@@ -151,10 +131,8 @@ namespace VPM
                 if (CustomAtomSearchClearButton != null)
                     CustomAtomSearchClearButton.Visibility = Visibility.Collapsed;
                 
-                // Make sorting button context-aware for packages
                 PackageSortButton.IsEnabled = true;
                 
-                // Enable Favorite and AutoInstall buttons in packages mode, hide Hide button
                 if (FavoriteToggleButton != null)
                     FavoriteToggleButton.IsEnabled = true;
                 if (AutoInstallToggleButton != null)
@@ -162,34 +140,24 @@ namespace VPM
                 if (HideToggleButton != null)
                     HideToggleButton.Visibility = Visibility.Collapsed;
                 
-                // Show both dependencies and dependents tabs in packages mode
                 DependenciesTabsContainer.Visibility = Visibility.Visible;
                 DependentsTab.Visibility = Visibility.Visible;
                 DependentsTabColumn.Width = new GridLength(1, GridUnitType.Star);
                 DependenciesTab.Margin = new Thickness(0, 0, 1, 0);
                 
-                // Show package filters, hide scene and preset filters
                 if (PackageFiltersContainer != null)
                     PackageFiltersContainer.Visibility = Visibility.Visible;
                 if (SceneFiltersContainer != null)
                     SceneFiltersContainer.Visibility = Visibility.Collapsed;
                 if (PresetFiltersContainer != null)
                     PresetFiltersContainer.Visibility = Visibility.Collapsed;
-                if (SceneTypeFilterSection != null)
-                    SceneTypeFilterSection.Visibility = Visibility.Collapsed;
-                if (SceneCreatorFilterSection != null)
-                    SceneCreatorFilterSection.Visibility = Visibility.Collapsed;
-                if (SceneSourceFilterSection != null)
-                    SceneSourceFilterSection.Visibility = Visibility.Collapsed;
 
-                // Apply filter visibility states to ensure package filters are properly shown/hidden based on settings
                 if (_settingsManager?.Settings != null)
                 {
                     ApplyFilterVisibilityStates(_settingsManager.Settings);
                     ApplyFilterPositions();
                 }
                 
-                // Enable optimize button in packages mode
                 if (OptimizeToggleButton != null)
                 {
                     OptimizeToggleButton.IsEnabled = true;
@@ -197,111 +165,8 @@ namespace VPM
                     OptimizeToggleButton.ToolTip = "Optimize selected packages";
                 }
             }
-            else if (mode == "Scenes")
+            else if (mode == "Custom")
             {
-                
-                PackageDataGrid.Visibility = Visibility.Collapsed;
-                ScenesDataGrid.Visibility = Visibility.Visible;
-                if (CustomAtomDataGrid != null)
-                    CustomAtomDataGrid.Visibility = Visibility.Collapsed;
-                
-                // Show scene search, hide package search
-                PackageSearchBox.Visibility = Visibility.Collapsed;
-                PackageSearchClearButton.Visibility = Visibility.Collapsed;
-                SceneSearchBox.Visibility = Visibility.Visible;
-                // Reset scene search box to placeholder
-                SceneSearchBox.Text = "📝 Filter scenes by name, creator, type...";
-                SceneSearchBox.Foreground = (System.Windows.Media.SolidColorBrush)FindResource(System.Windows.SystemColors.GrayTextBrushKey);
-                SceneSearchClearButton.Visibility = Visibility.Collapsed;
-                if (CustomAtomSearchBox != null)
-                    CustomAtomSearchBox.Visibility = Visibility.Collapsed;
-                if (CustomAtomSearchClearButton != null)
-                    CustomAtomSearchClearButton.Visibility = Visibility.Collapsed;
-
-                // Enable sorting for scenes mode
-                PackageSortButton.IsEnabled = true;
-                PackageSortButton.ToolTip = "Sort (Scroll to navigate)";
-
-                // Enable Favorite button in scene mode, hide AutoInstall button and show Hide button
-                if (FavoriteToggleButton != null)
-                    FavoriteToggleButton.IsEnabled = true;
-                if (AutoInstallToggleButton != null)
-                    AutoInstallToggleButton.Visibility = Visibility.Collapsed;
-                if (HideToggleButton != null)
-                {
-                    HideToggleButton.Visibility = Visibility.Visible;
-                    HideToggleButton.IsEnabled = true;
-                }
-
-                // Show dependencies tabs but hide Dependents tab in scenes mode
-                DependenciesTabsContainer.Visibility = Visibility.Visible;
-                DependentsTab.Visibility = Visibility.Collapsed;
-                DependentsTabColumn.Width = new GridLength(0);
-                DependenciesTab.Margin = new Thickness(0);
-                
-                // Hide package filters, show scene filters
-                if (PackageFiltersContainer != null)
-                    PackageFiltersContainer.Visibility = Visibility.Collapsed;
-                if (PresetFiltersContainer != null)
-                    PresetFiltersContainer.Visibility = Visibility.Collapsed;
-                if (SceneFiltersContainer != null)
-                    SceneFiltersContainer.Visibility = Visibility.Visible;
-                if (SceneTypeFilterSection != null)
-                    SceneTypeFilterSection.Visibility = Visibility.Visible;
-                if (SceneCreatorFilterSection != null)
-                    SceneCreatorFilterSection.Visibility = Visibility.Visible;
-                if (SceneSourceFilterSection != null)
-                    SceneSourceFilterSection.Visibility = Visibility.Visible;
-                if (SceneDateFilterSection != null)
-                    SceneDateFilterSection.Visibility = Visibility.Visible;
-                if (SceneFileSizeFilterSection != null)
-                    SceneFileSizeFilterSection.Visibility = Visibility.Visible;
-                if (SceneStatusFilterSection != null)
-                    SceneStatusFilterSection.Visibility = Visibility.Visible;
-
-                // Load scenes if not already loaded
-                if (Scenes.Count == 0)
-                {
-                    _ = LoadScenesAsync();
-                }
-                else
-                {
-                    // Populate scene filters if scenes are already loaded
-                    PopulateSceneTypeFilter();
-                    PopulateSceneCreatorFilter();
-                    PopulateSceneSourceFilter();
-                    PopulateSceneDateFilter();
-                    PopulateSceneFileSizeFilter();
-                    PopulateSceneStatusFilter();
-                }
-
-                // Apply filter visibility states AFTER populating filters
-                if (_settingsManager?.Settings != null)
-                {
-                    ApplyFilterVisibilityStates(_settingsManager.Settings);
-                    ApplyFilterPositions();
-                    
-                    // Ensure at least one scene filter is visible to avoid blank filter area
-                    if (!_settingsManager.Settings.SceneTypeFilterVisible && 
-                        !_settingsManager.Settings.SceneCreatorFilterVisible && 
-                        !_settingsManager.Settings.SceneSourceFilterVisible)
-                    {
-                        if (SceneTypeFilterSection != null)
-                            SceneTypeFilterSection.Visibility = Visibility.Visible;
-                    }
-                }
-                
-                // Enable optimize button in scenes mode
-                if (OptimizeToggleButton != null)
-                {
-                    OptimizeToggleButton.IsEnabled = true;
-                    OptimizeToggleButton.Opacity = 1.0;
-                    OptimizeToggleButton.ToolTip = "Optimize selected scenes";
-                }
-            }
-            else if (mode == "Presets")
-            {
-                
                 // Show custom atom data grid, hide others
                 PackageDataGrid.Visibility = Visibility.Collapsed;
                 ScenesDataGrid.Visibility = Visibility.Collapsed;
@@ -316,18 +181,15 @@ namespace VPM
                 if (CustomAtomSearchBox != null)
                 {
                     CustomAtomSearchBox.Visibility = Visibility.Visible;
-                    // Reset presets search box to placeholder
-                    CustomAtomSearchBox.Text = "🔍 Filter presets by name...";
+                    CustomAtomSearchBox.Text = "🔍 Filter presets & scenes by name...";
                     CustomAtomSearchBox.Foreground = (System.Windows.Media.SolidColorBrush)FindResource(System.Windows.SystemColors.GrayTextBrushKey);
                 }
                 if (CustomAtomSearchClearButton != null)
                     CustomAtomSearchClearButton.Visibility = Visibility.Collapsed;
                 
-                // Enable sorting button
                 PackageSortButton.IsEnabled = true;
                 PackageSortButton.ToolTip = "Sort (Scroll to navigate)";
                 
-                // Enable Favorite and Hide buttons in presets mode
                 if (FavoriteToggleButton != null)
                     FavoriteToggleButton.IsEnabled = true;
                 if (AutoInstallToggleButton != null)
@@ -338,40 +200,19 @@ namespace VPM
                     HideToggleButton.IsEnabled = true;
                 }
                 
-                // Show dependencies tab for presets, hide dependents tab
                 DependenciesTabsContainer.Visibility = Visibility.Visible;
                 DependentsTab.Visibility = Visibility.Collapsed;
                 DependentsTabColumn.Width = new GridLength(0);
                 DependenciesTab.Margin = new Thickness(0);
                 
-                // Hide package and scene filters, show preset-specific filters
                 if (PackageFiltersContainer != null)
                     PackageFiltersContainer.Visibility = Visibility.Collapsed;
                 if (SceneFiltersContainer != null)
                     SceneFiltersContainer.Visibility = Visibility.Collapsed;
-                if (SceneTypeFilterSection != null)
-                    SceneTypeFilterSection.Visibility = Visibility.Collapsed;
-                if (SceneCreatorFilterSection != null)
-                    SceneCreatorFilterSection.Visibility = Visibility.Collapsed;
-                if (SceneSourceFilterSection != null)
-                    SceneSourceFilterSection.Visibility = Visibility.Collapsed;
-
-                // Show preset filters
                 if (PresetFiltersContainer != null)
                     PresetFiltersContainer.Visibility = Visibility.Visible;
-                if (PresetCategoryFilterSection != null)
-                    PresetCategoryFilterSection.Visibility = Visibility.Visible;
-                if (PresetSubfolderFilterSection != null)
-                    PresetSubfolderFilterSection.Visibility = Visibility.Visible;
-                if (PresetDateFilterSection != null)
-                    PresetDateFilterSection.Visibility = Visibility.Visible;
-                if (PresetFileSizeFilterSection != null)
-                    PresetFileSizeFilterSection.Visibility = Visibility.Visible;
-                if (PresetStatusFilterSection != null)
-                    PresetStatusFilterSection.Visibility = Visibility.Visible;
-                
 
-                // Populate preset filters
+                // Populate custom content filters
                 if (CustomAtomItems.Count > 0)
                 {
                     PopulatePresetCategoryFilter();
@@ -381,25 +222,23 @@ namespace VPM
                     PopulatePresetStatusFilter();
                 }
 
-                // Load presets if not already loaded
+                // Load unified custom content if not already loaded
                 if (CustomAtomItems.Count == 0)
                 {
                     _ = LoadCustomAtomItemsAsync();
                 }
 
-                // Apply filter visibility states AFTER populating filters
                 if (_settingsManager?.Settings != null)
                 {
                     ApplyFilterVisibilityStates(_settingsManager.Settings);
                     ApplyFilterPositions();
                 }
                 
-                // Enable optimize button in presets mode
                 if (OptimizeToggleButton != null)
                 {
                     OptimizeToggleButton.IsEnabled = true;
                     OptimizeToggleButton.Opacity = 1.0;
-                    OptimizeToggleButton.ToolTip = "Optimize selected presets";
+                    OptimizeToggleButton.ToolTip = "Optimize selected items";
                 }
             }
         }

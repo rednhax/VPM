@@ -548,6 +548,11 @@ namespace VPM.Models
         /// </summary>
         public List<string> TextureItems { get; set; } = new List<string>();
 
+        /// <summary>
+        /// Content type: "Preset" or "Scene"
+        /// </summary>
+        public string ContentType { get; set; } = "Preset";
+
         // Display properties
         public int DependencyCount => Dependencies?.Count ?? 0;
         public string FileSizeFormatted => SceneItem.FormatFileSize(FileSize);

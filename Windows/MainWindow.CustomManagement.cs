@@ -18,11 +18,11 @@ namespace VPM
     {
         private List<CustomAtomItem> _originalCustomAtomItems = new List<CustomAtomItem>();
         /// <summary>
-        /// Loads all custom atom person files from the Custom\Atom\Person folder
+        /// Loads all custom content (presets and scenes) from both Custom\Atom\Person and Saves\scene folders
         /// </summary>
         public async Task LoadCustomAtomItemsAsync()
         {
-            if (_customAtomPersonScanner == null)
+            if (_unifiedCustomContentScanner == null)
             {
                 return;
             }
@@ -31,7 +31,8 @@ namespace VPM
             {
                 await Task.Run(() =>
                 {
-                    var items = _customAtomPersonScanner.ScanCustomAtomPerson();
+                    // Scan both presets and scenes locations
+                    var items = _unifiedCustomContentScanner.ScanAllCustomContent();
                     
                     Application.Current.Dispatcher.Invoke(() =>
                     {
@@ -41,20 +42,20 @@ namespace VPM
                         // Check if each item is marked as favorite or hidden
                         foreach (var item in items)
                         {
-                            // For custom atoms, favorites are stored as .vap.fav
+                            // For custom atoms, favorites are stored as .vap.fav or .json.fav
                             var favPath = item.FilePath + ".fav";
                             item.IsFavorite = File.Exists(favPath);
                             
-                            // For custom atoms, hidden items are stored as .vap.hide
+                            // For custom atoms, hidden items are stored as .vap.hide or .json.hide
                             var hidePath = item.FilePath + ".hide";
                             item.IsHidden = File.Exists(hidePath);
                         }
                         
                         CustomAtomItems.ReplaceAll(items);
-                        SetStatus($"Loaded {items.Count} custom atom item(s)");
+                        SetStatus($"Loaded {items.Count} custom item(s) (presets & scenes)");
                         
-                        // Populate preset filters if we're in Presets mode
-                        if (_currentContentMode == "Presets")
+                        // Populate custom content filters if we're in Custom mode
+                        if (_currentContentMode == "Custom")
                         {
                             PopulatePresetCategoryFilter();
                             PopulatePresetSubfolderFilter();
@@ -67,7 +68,7 @@ namespace VPM
             }
             catch (Exception ex)
             {
-                SetStatus($"Error loading custom atom items: {ex.Message}");
+                SetStatus($"Error loading custom items: {ex.Message}");
             }
         }
 

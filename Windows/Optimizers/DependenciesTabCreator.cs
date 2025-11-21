@@ -741,29 +741,42 @@ namespace VPM
                 HeaderStyle = CreateCenteredHeaderStyle()
             };
 
-            // Create cell template with clickable bubble
+            // Create cell template with left status line
             var cellTemplate = new DataTemplate();
             var borderFactory = new FrameworkElementFactory(typeof(Border));
             borderFactory.SetValue(Border.BackgroundProperty, Brushes.Transparent);
-            borderFactory.SetValue(Border.HorizontalAlignmentProperty, HorizontalAlignment.Center);
-            borderFactory.SetValue(Border.VerticalAlignmentProperty, VerticalAlignment.Center);
+            borderFactory.SetValue(Border.HorizontalAlignmentProperty, HorizontalAlignment.Stretch);
+            borderFactory.SetValue(Border.VerticalAlignmentProperty, VerticalAlignment.Stretch);
             borderFactory.SetValue(Border.CursorProperty, System.Windows.Input.Cursors.Hand);
-            borderFactory.SetValue(Border.PaddingProperty, new Thickness(5));
 
-            var ellipseFactory = new FrameworkElementFactory(typeof(System.Windows.Shapes.Ellipse));
-            ellipseFactory.SetValue(System.Windows.Shapes.Ellipse.WidthProperty, 16.0);
-            ellipseFactory.SetValue(System.Windows.Shapes.Ellipse.HeightProperty, 16.0);
-            ellipseFactory.SetValue(System.Windows.Shapes.Ellipse.StrokeProperty, new SolidColorBrush(color));
-            ellipseFactory.SetValue(System.Windows.Shapes.Ellipse.StrokeThicknessProperty, 2.0);
+            var gridFactory = new FrameworkElementFactory(typeof(Grid));
 
-            // Bind fill based on IsEnabled state
-            var fillBinding = new Binding("IsEnabled");
-            fillBinding.Converter = new DependencyStateToFillConverter(targetState, color);
-            ellipseFactory.SetBinding(System.Windows.Shapes.Ellipse.FillProperty, fillBinding);
+            // Add column definitions: 3px line + rest
+            var col1 = new FrameworkElementFactory(typeof(ColumnDefinition));
+            col1.SetValue(ColumnDefinition.WidthProperty, new GridLength(3));
+            var col2 = new FrameworkElementFactory(typeof(ColumnDefinition));
+            col2.SetValue(ColumnDefinition.WidthProperty, new GridLength(1, GridUnitType.Star));
+            gridFactory.AppendChild(col1);
+            gridFactory.AppendChild(col2);
 
-            borderFactory.AppendChild(ellipseFactory);
+            // Left status line
+            var lineFactory = new FrameworkElementFactory(typeof(Border));
+            lineFactory.SetValue(Grid.ColumnProperty, 0);
+            lineFactory.SetValue(Border.BackgroundProperty, new SolidColorBrush(color));
+            gridFactory.AppendChild(lineFactory);
 
-            // Add click handler
+            // Center content area
+            var contentBorderFactory = new FrameworkElementFactory(typeof(Border));
+            contentBorderFactory.SetValue(Grid.ColumnProperty, 1);
+            contentBorderFactory.SetValue(Border.BackgroundProperty, Brushes.Transparent);
+            contentBorderFactory.SetValue(Border.HorizontalAlignmentProperty, HorizontalAlignment.Center);
+            contentBorderFactory.SetValue(Border.VerticalAlignmentProperty, VerticalAlignment.Center);
+            contentBorderFactory.SetValue(Border.PaddingProperty, new Thickness(5));
+            gridFactory.AppendChild(contentBorderFactory);
+
+            borderFactory.AppendChild(gridFactory);
+
+            // Add click handler to the outer border
             borderFactory.AddHandler(Border.MouseLeftButtonDownEvent, new System.Windows.Input.MouseButtonEventHandler((s, e) =>
             {
                 if (s is Border border && border.DataContext is DependencyItemModel dep)

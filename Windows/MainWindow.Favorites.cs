@@ -69,8 +69,8 @@ namespace VPM
 
         private void FavoriteToggleButton_Click(object sender, RoutedEventArgs e)
         {
-            // Handle presets favorites
-            if (_currentContentMode == "Presets")
+            // Handle presets and custom favorites
+            if (_currentContentMode == "Presets" || _currentContentMode == "Custom")
             {
                 var selectedItems = CustomAtomDataGrid?.SelectedItems?.Cast<CustomAtomItem>()?.ToList() ?? new List<CustomAtomItem>();
                 if (selectedItems.Count == 0)
@@ -169,8 +169,8 @@ namespace VPM
 
         private void FavoriteToggleButton_PreviewMouseRightButtonDown(object sender, MouseButtonEventArgs e)
         {
-            // Handle presets favorites removal
-            if (_currentContentMode == "Presets")
+            // Handle presets and custom favorites removal
+            if (_currentContentMode == "Presets" || _currentContentMode == "Custom")
             {
                 var selectedItems = CustomAtomDataGrid?.SelectedItems?.Cast<CustomAtomItem>()?.ToList() ?? new List<CustomAtomItem>();
                 if (selectedItems.Count == 0)
@@ -261,8 +261,8 @@ namespace VPM
 
         private void HideToggleButton_Click(object sender, RoutedEventArgs e)
         {
-            // Handle presets hide
-            if (_currentContentMode == "Presets")
+            // Handle presets and custom hide
+            if (_currentContentMode == "Presets" || _currentContentMode == "Custom")
             {
                 var selectedItems = CustomAtomDataGrid?.SelectedItems?.Cast<CustomAtomItem>()?.ToList() ?? new List<CustomAtomItem>();
                 if (selectedItems.Count == 0)
@@ -312,8 +312,8 @@ namespace VPM
 
         private void HideToggleButton_PreviewMouseRightButtonDown(object sender, MouseButtonEventArgs e)
         {
-            // Handle presets hide removal
-            if (_currentContentMode == "Presets")
+            // Handle presets and custom hide removal
+            if (_currentContentMode == "Presets" || _currentContentMode == "Custom")
             {
                 var selectedItems = CustomAtomDataGrid?.SelectedItems?.Cast<CustomAtomItem>()?.ToList() ?? new List<CustomAtomItem>();
                 if (selectedItems.Count == 0)
@@ -410,9 +410,9 @@ namespace VPM
                     }
                 }
             }
-            else if (_currentContentMode == "Presets")
+            else if (_currentContentMode == "Presets" || _currentContentMode == "Custom")
             {
-                // Count selected presets
+                // Count selected presets and scenes
                 if (CustomAtomDataGrid?.SelectedItems != null)
                 {
                     foreach (var item in CustomAtomDataGrid.SelectedItems)
@@ -470,9 +470,9 @@ namespace VPM
                     }
                 }
             }
-            else if (_currentContentMode == "Presets")
+            else if (_currentContentMode == "Presets" || _currentContentMode == "Custom")
             {
-                // Count selected presets
+                // Count selected presets and scenes
                 if (CustomAtomDataGrid?.SelectedItems != null)
                 {
                     foreach (var item in CustomAtomDataGrid.SelectedItems)
@@ -530,9 +530,9 @@ namespace VPM
                     }
                 }
             }
-            else if (_currentContentMode == "Presets")
+            else if (_currentContentMode == "Presets" || _currentContentMode == "Custom")
             {
-                // Count selected presets
+                // Count selected presets and scenes
                 if (CustomAtomDataGrid?.SelectedItems != null)
                 {
                     foreach (var item in CustomAtomDataGrid.SelectedItems)
@@ -590,9 +590,9 @@ namespace VPM
                     }
                 }
             }
-            else if (_currentContentMode == "Presets")
+            else if (_currentContentMode == "Presets" || _currentContentMode == "Custom")
             {
-                // Count selected presets
+                // Count selected presets and scenes
                 if (CustomAtomDataGrid?.SelectedItems != null)
                 {
                     foreach (var item in CustomAtomDataGrid.SelectedItems)

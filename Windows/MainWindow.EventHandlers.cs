@@ -4269,7 +4269,7 @@ namespace VPM
             {
                 OptimizeSelectedScenes_Click(sender, e);
             }
-            else if (_currentContentMode == "Presets")
+            else if (_currentContentMode == "Presets" || _currentContentMode == "Custom")
             {
                 OptimizeSelectedPresets_Click(sender, e);
             }

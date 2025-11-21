@@ -350,7 +350,7 @@ namespace VPM
                 ShowSortMenu("Scenes", SortingManager.GetSceneSortOptions(), 
                             PackageSortButton, SceneSortMenuItem_Click);
             }
-            else if (_currentContentMode == "Presets")
+            else if (_currentContentMode == "Presets" || _currentContentMode == "Custom")
             {
                 ShowSortMenu("Presets", SortingManager.GetPresetSortOptions(), 
                             PackageSortButton, PresetSortMenuItem_Click);

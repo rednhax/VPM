@@ -1009,8 +1009,8 @@ namespace VPM
         {
             try
             {
-                // Context-aware: if in Scenes or Presets mode, show scene/preset info instead
-                if (_currentContentMode == "Scenes" || _currentContentMode == "Presets")
+                // Context-aware: if in Scenes, Presets, or Custom mode, show scene/preset info instead
+                if (_currentContentMode == "Scenes" || _currentContentMode == "Presets" || _currentContentMode == "Custom")
                 {
                     var selectedItems = _currentContentMode == "Scenes" 
                         ? ScenesDataGrid?.SelectedItems?.Cast<object>()?.ToList() ?? new List<object>()

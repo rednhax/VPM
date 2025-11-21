@@ -213,7 +213,7 @@
             <Setter Property="Padding" Value="3" />
         </Style>
 
-        <!--  DataGrid Row Style with Rounded Corners  -->
+        <!--  DataGrid Row Style with Left Status Line  -->
         <Style x:Key="RoundedDataGridRowStyle" TargetType="{x:Type DataGridRow}">
             <Setter Property="Background" Value="{DynamicResource {x:Static SystemColors.WindowBrushKey}}" />
             <Setter Property="Foreground" Value="{DynamicResource {x:Static SystemColors.WindowTextBrushKey}}" />
@@ -221,31 +221,38 @@
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="{x:Type DataGridRow}">
-                        <Border
-                            Margin="0,0,0,0"
-                            Background="{TemplateBinding Background}"
-                            BorderBrush="{TemplateBinding BorderBrush}"
-                            BorderThickness="{TemplateBinding BorderThickness}"
-                            ClipToBounds="False"
-                            CornerRadius="6"
-                            SnapsToDevicePixels="True">
-                            <SelectiveScrollingGrid>
-                                <SelectiveScrollingGrid.ColumnDefinitions>
-                                    <ColumnDefinition Width="Auto" />
-                                    <ColumnDefinition Width="*" />
-                                </SelectiveScrollingGrid.ColumnDefinitions>
-                                <SelectiveScrollingGrid.RowDefinitions>
-                                    <RowDefinition Height="*" />
-                                    <RowDefinition Height="Auto" />
-                                </SelectiveScrollingGrid.RowDefinitions>
-                                <DataGridRowHeader SelectiveScrollingGrid.SelectiveScrollingOrientation="Vertical" Visibility="Collapsed" />
-                                <DataGridCellsPresenter Grid.Column="1" ItemsPanel="{TemplateBinding ItemsPanel}" />
-                                <DataGridDetailsPresenter
-                                    Grid.Row="1"
-                                    Grid.Column="1"
-                                    Visibility="{TemplateBinding DetailsVisibility}" />
-                            </SelectiveScrollingGrid>
-                        </Border>
+                        <Grid SnapsToDevicePixels="True">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="3" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <!--  Left Status Line  -->
+                            <Border
+                                Grid.Column="0"
+                                Background="{Binding Item.StatusColor, Converter={x:Static local:ColorToBrushConverter.Instance}}" />
+                            <!--  Main Row Content  -->
+                            <Border
+                                Grid.Column="1"
+                                Background="{TemplateBinding Background}"
+                                ClipToBounds="False">
+                                <SelectiveScrollingGrid>
+                                    <SelectiveScrollingGrid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="*" />
+                                    </SelectiveScrollingGrid.ColumnDefinitions>
+                                    <SelectiveScrollingGrid.RowDefinitions>
+                                        <RowDefinition Height="*" />
+                                        <RowDefinition Height="Auto" />
+                                    </SelectiveScrollingGrid.RowDefinitions>
+                                    <DataGridRowHeader SelectiveScrollingGrid.SelectiveScrollingOrientation="Vertical" Visibility="Collapsed" />
+                                    <DataGridCellsPresenter Grid.Column="1" ItemsPanel="{TemplateBinding ItemsPanel}" />
+                                    <DataGridDetailsPresenter
+                                        Grid.Row="1"
+                                        Grid.Column="1"
+                                        Visibility="{TemplateBinding DetailsVisibility}" />
+                                </SelectiveScrollingGrid>
+                            </Border>
+                        </Grid>
                     </ControlTemplate>
                 </Setter.Value>
             </Setter>
@@ -994,8 +1001,7 @@
                                 </ControlTemplate>
                             </ComboBox.Template>
                             <ComboBoxItem Content="📦 Packages" />
-                            <ComboBoxItem Content="🎬 Scenes" />
-                            <ComboBoxItem Content="🎨 Presets" />
+                            <ComboBoxItem Content="🎨 Custom" />
                         </ComboBox>
 
                         <!--  Linked Filters Button (Icon + Status)  -->
@@ -4225,9 +4231,9 @@
                             </Style>
                         </DataGrid.ColumnHeaderStyle>
                         <DataGrid.Columns>
-                            <!--  Status Column with Colored Bubbles  -->
+                            <!--  Status Column with Icons  -->
                             <DataGridTemplateColumn
-                                Width="48"
+                                Width="28"
                                 CanUserReorder="False"
                                 CanUserResize="False"
                                 CanUserSort="True"
@@ -4235,12 +4241,57 @@
                                 SortMemberPath="Status">
                                 <DataGridTemplateColumn.CellTemplate>
                                     <DataTemplate>
-                                        <Ellipse
-                                            Width="12"
-                                            Height="12"
-                                            HorizontalAlignment="Center"
-                                            VerticalAlignment="Center"
-                                            Fill="{Binding StatusColor, Converter={x:Static local:ColorToBrushConverter.Instance}}" />
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="3" />
+                                                <ColumnDefinition Width="*" />
+                                            </Grid.ColumnDefinitions>
+                                            <!--  Left Status Line  -->
+                                            <Border
+                                                Grid.Column="0"
+                                                Background="{Binding StatusColor, Converter={x:Static local:ColorToBrushConverter.Instance}}" />
+                                            <!--  Icons Container  -->
+                                            <Border
+                                                Grid.Column="1"
+                                                Padding="2,0,2,0"
+                                                Background="{DynamicResource {x:Static SystemColors.WindowBrushKey}}">
+                                                <StackPanel
+                                                    HorizontalAlignment="Center"
+                                                    VerticalAlignment="Center"
+                                                    Orientation="Vertical">
+                                                    <!--  Favorite star  -->
+                                                    <TextBlock
+                                                        Margin="0,1,0,1"
+                                                        HorizontalAlignment="Center"
+                                                        FontSize="11"
+                                                        FontWeight="Bold"
+                                                        Foreground="#FF1493"
+                                                        Text="❤️"
+                                                        ToolTip="Favorite package"
+                                                        Visibility="{Binding IsFavorite, Converter={StaticResource BoolToVis}}" />
+                                                    <!--  AutoInstall A icon  -->
+                                                    <TextBlock
+                                                        Margin="0,1,0,1"
+                                                        HorizontalAlignment="Center"
+                                                        FontSize="11"
+                                                        FontWeight="Bold"
+                                                        Foreground="#00CED1"
+                                                        Text="A"
+                                                        ToolTip="AutoInstall package"
+                                                        Visibility="{Binding IsAutoInstall, Converter={StaticResource BoolToVis}}" />
+                                                    <!--  Optimized lightning bolt  -->
+                                                    <TextBlock
+                                                        Margin="0,1,0,1"
+                                                        HorizontalAlignment="Center"
+                                                        FontSize="11"
+                                                        FontWeight="Bold"
+                                                        Foreground="#FFC107"
+                                                        Text="⚡"
+                                                        ToolTip="Package has been optimized by VPM"
+                                                        Visibility="{Binding IsOptimized, Converter={StaticResource BoolToVis}}" />
+                                                </StackPanel>
+                                            </Border>
+                                        </Grid>
                                     </DataTemplate>
                                 </DataGridTemplateColumn.CellTemplate>
                             </DataGridTemplateColumn>
@@ -4253,57 +4304,12 @@
                                 SortMemberPath="DisplayName">
                                 <DataGridTemplateColumn.CellTemplate>
                                     <DataTemplate>
-                                        <StackPanel Margin="4,2" VerticalAlignment="Center">
+                                        <StackPanel Margin="0,2,4,2" VerticalAlignment="Center">
                                             <TextBlock
                                                 FontWeight="SemiBold"
                                                 Text="{Binding DisplayName}"
                                                 TextTrimming="CharacterEllipsis" />
                                             <StackPanel Orientation="Horizontal">
-                                                <!--  Favorite star  -->
-                                                <TextBlock
-                                                    Margin="0,0,0,0"
-                                                    FontSize="12"
-                                                    FontWeight="Bold"
-                                                    Foreground="#FF1493"
-                                                    RenderTransformOrigin="0,0.6"
-                                                    Text="❤️"
-                                                    ToolTip="Favorite package"
-                                                    Visibility="{Binding IsFavorite, Converter={StaticResource BoolToVis}}">
-                                                    <TextBlock.RenderTransform>
-                                                        <ScaleTransform ScaleX="1" ScaleY="1" />
-                                                    </TextBlock.RenderTransform>
-                                                </TextBlock>
-
-                                                <!--  AutoInstall A icon  -->
-                                                <TextBlock
-                                                    Margin="2,0,2,0"
-                                                    FontSize="12"
-                                                    FontWeight="Bold"
-                                                    Foreground="#FFA500"
-                                                    RenderTransformOrigin="0,0.6"
-                                                    Text=" A"
-                                                    ToolTip="AutoInstall package"
-                                                    Visibility="{Binding IsAutoInstall, Converter={StaticResource BoolToVis}}">
-                                                    <TextBlock.RenderTransform>
-                                                        <ScaleTransform ScaleX="1.3" ScaleY="1.3" />
-                                                    </TextBlock.RenderTransform>
-                                                </TextBlock>
-
-                                                <!--  Optimized lightning bolt  -->
-                                                <TextBlock
-                                                    Margin="2,0,2,0"
-                                                    FontSize="12"
-                                                    FontWeight="Bold"
-                                                    Foreground="#FFC107"
-                                                    RenderTransformOrigin="0.5,0.8"
-                                                    Text="⚡"
-                                                    ToolTip="Package has been optimized by VPM"
-                                                    Visibility="{Binding IsOptimized, Converter={StaticResource BoolToVis}}">
-                                                    <TextBlock.RenderTransform>
-                                                        <ScaleTransform ScaleX="1.2" ScaleY="1.2" />
-                                                    </TextBlock.RenderTransform>
-                                                </TextBlock>
-
                                                 <!--  Old Version indicator  -->
                                                 <TextBlock
                                                     Margin="-3,0,2,0"
@@ -5456,21 +5462,27 @@
                                 </Style>
                             </DataGrid.RowStyle>
                             <DataGrid.Columns>
-                                <!--  Status Column  -->
+                                <!--  Status Column with Left Line  -->
                                 <DataGridTemplateColumn
-                                    Width="28"
+                                    Width="0"
                                     CanUserResize="False"
                                     CanUserSort="True"
                                     Header="Status"
                                     SortMemberPath="Status">
                                     <DataGridTemplateColumn.CellTemplate>
                                         <DataTemplate>
-                                            <Ellipse
-                                                Width="12"
-                                                Height="12"
-                                                HorizontalAlignment="Center"
-                                                VerticalAlignment="Center"
-                                                Fill="{Binding StatusColor, Converter={x:Static local:ColorToBrushConverter.Instance}}" />
+                                            <Grid>
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="3" />
+                                                    <ColumnDefinition Width="*" />
+                                                </Grid.ColumnDefinitions>
+                                                <!--  Left Status Line  -->
+                                                <Border
+                                                    Grid.Column="0"
+                                                    Background="{Binding StatusColor, Converter={x:Static local:ColorToBrushConverter.Instance}}" />
+                                                <!--  Empty content area  -->
+                                                <Border Grid.Column="1" Background="Transparent" />
+                                            </Grid>
                                         </DataTemplate>
                                     </DataGridTemplateColumn.CellTemplate>
                                 </DataGridTemplateColumn>
@@ -5485,6 +5497,7 @@
                                     <DataGridTextColumn.ElementStyle>
                                         <Style TargetType="TextBlock">
                                             <Setter Property="VerticalAlignment" Value="Center" />
+                                            <Setter Property="Padding" Value="0,0,0,0" />
                                         </Style>
                                     </DataGridTextColumn.ElementStyle>
                                 </DataGridTextColumn>
