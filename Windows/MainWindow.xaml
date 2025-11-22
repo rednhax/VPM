@@ -4289,13 +4289,9 @@
                                         <Border Padding="0" Background="Transparent">
                                             <!--  Content  -->
                                             <StackPanel Margin="6,2,4,2" VerticalAlignment="Center">
-                                                <TextBlock
-                                                    FontWeight="SemiBold"
-                                                    Text="{Binding DisplayName}"
-                                                    TextTrimming="CharacterEllipsis" />
-                                                <StackPanel Orientation="Horizontal">
+                                                <DockPanel HorizontalAlignment="Left" LastChildFill="True">
                                                     <!--  Status Icons Container  -->
-                                                    <StackPanel Margin="0,0,6,0" Orientation="Horizontal">
+                                                    <StackPanel DockPanel.Dock="Right" Margin="6,0,0,0" Orientation="Horizontal" VerticalAlignment="Center">
                                                         <!--  Favorite heart  -->
                                                         <TextBlock
                                                             Margin="0,0,3,0"
@@ -4324,10 +4320,17 @@
                                                             ToolTip="Package has been optimized by VPM"
                                                             Visibility="{Binding IsOptimized, Converter={StaticResource BoolToVis}}" />
                                                     </StackPanel>
+                                                    <TextBlock
+                                                        FontSize="16"
+                                                        FontWeight="SemiBold"
+                                                        Text="{Binding DisplayName}"
+                                                        TextTrimming="CharacterEllipsis" />
+                                                </DockPanel>
+                                                <StackPanel Orientation="Horizontal">
 
                                                     <!--  Old Version indicator  -->
                                                     <TextBlock
-                                                        Margin="-3,0,2,0"
+                                                        Margin="0,0,2,0"
                                                         FontSize="12"
                                                         Foreground="#FF5722"
                                                         RenderTransformOrigin="0,0.5"
@@ -4368,45 +4371,48 @@
                                                     </TextBlock>
 
                                                     <TextBlock
-                                                        FontSize="11"
+                                                        FontSize="13"
                                                         Foreground="{DynamicResource {x:Static SystemColors.GrayTextBrushKey}}"
                                                         Text="Deps: " />
                                                     <TextBlock
-                                                        FontSize="11"
+                                                        FontSize="13"
                                                         FontWeight="Bold"
                                                         Foreground="{DynamicResource {x:Static SystemColors.GrayTextBrushKey}}"
                                                         Text="{Binding DependencyCount}" />
                                                     <TextBlock
-                                                        FontSize="11"
+                                                        Margin="10,0,0,0"
+                                                        FontSize="13"
                                                         Foreground="{DynamicResource {x:Static SystemColors.GrayTextBrushKey}}"
-                                                        Text="  •  Dependents: " />
+                                                        Text="•  Dependents: " />
                                                     <TextBlock
-                                                        FontSize="11"
+                                                        FontSize="13"
                                                         FontWeight="Bold"
                                                         Foreground="{DynamicResource {x:Static SystemColors.GrayTextBrushKey}}"
                                                         Text="{Binding DependentsCount}" />
                                                     <TextBlock
-                                                        FontSize="11"
+                                                        Margin="10,0,0,0"
+                                                        FontSize="13"
                                                         Foreground="{DynamicResource {x:Static SystemColors.GrayTextBrushKey}}"
-                                                        Text="  •  Size: " />
+                                                        Text="•  Size: " />
                                                     <TextBlock
-                                                        FontSize="11"
+                                                        FontSize="13"
                                                         FontWeight="Bold"
                                                         Foreground="{DynamicResource {x:Static SystemColors.GrayTextBrushKey}}"
                                                         Text="{Binding FileSizeFormatted}" />
                                                     <TextBlock
-                                                        FontSize="11"
+                                                        Margin="10,0,0,0"
+                                                        FontSize="13"
                                                         Foreground="{DynamicResource {x:Static SystemColors.GrayTextBrushKey}}"
-                                                        Text="  •  Date: " />
+                                                        Text="•  Date: " />
                                                     <TextBlock
-                                                        FontSize="11"
+                                                        FontSize="13"
                                                         FontWeight="Bold"
                                                         Foreground="{DynamicResource {x:Static SystemColors.GrayTextBrushKey}}"
                                                         Text="{Binding DateFormatted}" />
                                                 </StackPanel>
                                                 <TextBlock
-                                                    Margin="0,2,0,0"
-                                                    FontSize="10"
+                                                    Margin="0,4,0,0"
+                                                    FontSize="13"
                                                     Foreground="{DynamicResource {x:Static SystemColors.GrayTextBrushKey}}"
                                                     Text="{Binding Converter={StaticResource ContentCountsConverter}}"
                                                     TextWrapping="Wrap" />
@@ -4768,8 +4774,7 @@
                                                         x:Name="PresetDisplayBorder"
                                                         Background="Transparent"
                                                         Cursor="Hand"
-                                                        PreviewMouseDown="PresetName_PreviewMouseDown"
-                                                        ToolTip="Double-click to rename preset">
+                                                        ToolTip="Double-click to open file location">
                                                         <TextBlock
                                                             x:Name="PresetDisplayTextBlock"
                                                             VerticalAlignment="Center"
