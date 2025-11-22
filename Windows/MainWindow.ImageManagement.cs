@@ -411,6 +411,9 @@ namespace VPM
                 if (images.Count == 0)
                     return null;
                 
+                // Create image tiles list early for reference in button handlers
+                var packageImageTiles = new List<LazyLoadImage>();
+
                 // Create package group container
                 var packageGroupContainer = new StackPanel
                 {
@@ -454,6 +457,87 @@ namespace VPM
                     VerticalAlignment = VerticalAlignment.Center,
                     Tag = packageItem.Name // Store package name for reference
                 };
+
+                // Clear Extracted Button
+                var clearExtractedButton = new Button
+                {
+                    Content = "X",
+                    ToolTip = "Clear all extracted files for this package",
+                    Width = 30,
+                    Height = 28,
+                    FontSize = 10,
+                    FontWeight = FontWeights.SemiBold,
+                    Padding = new Thickness(6, 4, 6, 4),
+                    Margin = new Thickness(0, 0, 5, 0),
+                    VerticalAlignment = VerticalAlignment.Center,
+                    Visibility = Visibility.Collapsed,
+                    Background = new SolidColorBrush(Color.FromArgb(180, 180, 40, 40)), // Semi-transparent red
+                    Foreground = new SolidColorBrush(Colors.White),
+                    BorderThickness = new Thickness(0)
+                };
+
+                // Add rounded corners style
+                var clearBtnTemplate = new ControlTemplate(typeof(Button));
+                var clearBtnBorder = new FrameworkElementFactory(typeof(Border));
+                clearBtnBorder.SetValue(Border.BackgroundProperty, new TemplateBindingExtension(Button.BackgroundProperty));
+                clearBtnBorder.SetValue(Border.CornerRadiusProperty, new CornerRadius(4));
+                clearBtnBorder.SetValue(Border.PaddingProperty, new TemplateBindingExtension(Button.PaddingProperty));
+                var clearBtnContent = new FrameworkElementFactory(typeof(ContentPresenter));
+                clearBtnContent.SetValue(ContentPresenter.HorizontalAlignmentProperty, HorizontalAlignment.Center);
+                clearBtnContent.SetValue(ContentPresenter.VerticalAlignmentProperty, VerticalAlignment.Center);
+                clearBtnBorder.AppendChild(clearBtnContent);
+                clearBtnTemplate.VisualTree = clearBtnBorder;
+                clearExtractedButton.Template = clearBtnTemplate;
+
+                void UpdateHeaderButtonVisibility()
+                {
+                    if (packageImageTiles != null)
+                    {
+                        bool anyExtracted = packageImageTiles.Any(t => t.IsExtracted);
+                        clearExtractedButton.Visibility = anyExtracted ? Visibility.Visible : Visibility.Collapsed;
+                    }
+                }
+
+                clearExtractedButton.Click += async (s, e) =>
+                {
+                     var extractedTiles = packageImageTiles?.Where(t => t.IsExtracted).ToList();
+                     if (extractedTiles == null || extractedTiles.Count == 0) return;
+
+                     var categories = extractedTiles
+                        .Select(t => VarContentExtractor.GetCategoryFromPath(t.InternalImagePath))
+                        .GroupBy(c => c)
+                        .Select(g => $"{g.Count()} {g.Key}")
+                        .OrderBy(c => c)
+                        .ToList();
+                    
+                     string info = string.Join(", ", categories);
+
+                     var result = CustomMessageBox.Show($"Are you sure you want to remove all extracted files for this package?\n\nItems to remove: {info}", 
+                        "Confirm Cleanup", MessageBoxButton.YesNo, MessageBoxImage.Question);
+                        
+                     if (result == MessageBoxResult.Yes)
+                     {
+                         if (packageImageTiles != null)
+                         {
+                             bool anyRemoved = false;
+                             foreach (var tile in packageImageTiles)
+                             {
+                                 if (!string.IsNullOrEmpty(tile.VarFilePath) && !string.IsNullOrEmpty(tile.InternalImagePath))
+                                 {
+                                     await HandleImageExtractionAsync(tile.VarFilePath, tile.InternalImagePath, true);
+                                     anyRemoved = true;
+                                 }
+                             }
+                             
+                             if (anyRemoved)
+                             {
+                                 UpdateHeaderButtonVisibility();
+                             }
+                         }
+                     }
+                };
+                
+                buttonPanel.Children.Add(clearExtractedButton);
 
                 // Load button - visible only for available packages (not archived)
                 var loadButton = new Button
@@ -567,7 +651,7 @@ namespace VPM
                 packageGroupContainer.Children.Add(packageHeader);
                 
                 // Create image tiles for this package using lazy loading
-                var packageImageTiles = new List<LazyLoadImage>();
+                // var packageImageTiles = new List<LazyLoadImage>(); // Variable already declared at function start
                 
                 // Get image locations for extraction feature
                 var imageLocations = new List<ImageLocation>();
@@ -638,6 +722,7 @@ namespace VPM
                         lazyImageTile.ExtractionRequested += async (s, e) =>
                         {
                             await HandleImageExtractionAsync(e.VarFilePath, e.InternalImagePath, e.IsRemoval);
+                            UpdateHeaderButtonVisibility();
                         };
                         
                         // Register with virtualization manager
@@ -657,7 +742,7 @@ namespace VPM
                     packageGroupContainer.Children.Add(imageGrid);
                     
                     // Check extraction states asynchronously
-                    _ = Task.Run(() => CheckAndUpdateExtractionStatesAsync(packageImageTiles, packageMetadata?.FilePath));
+                    _ = Task.Run(() => CheckAndUpdateExtractionStatesAsync(packageImageTiles, packageMetadata?.FilePath, clearExtractedButton));
                     
                     return packageGroupContainer;
                 }
@@ -2325,7 +2410,7 @@ namespace VPM
         /// <summary>
         /// Checks and updates extraction states for all images in a package
         /// </summary>
-        private async Task CheckAndUpdateExtractionStatesAsync(List<LazyLoadImage> imageTiles, string varFilePath)
+        private async Task CheckAndUpdateExtractionStatesAsync(List<LazyLoadImage> imageTiles, string varFilePath, Button clearExtractedButton = null)
         {
             try
             {
@@ -2335,6 +2420,8 @@ namespace VPM
                 var gameFolder = _settingsManager?.Settings?.SelectedFolder;
                 if (string.IsNullOrWhiteSpace(gameFolder) || !Directory.Exists(gameFolder))
                     return;
+
+                bool anyExtracted = false;
 
                 // Check each image
                 foreach (var tile in imageTiles)
@@ -2353,6 +2440,7 @@ namespace VPM
                         if (isExtracted)
                         {
                             tile.SetExtractionState(true);
+                            anyExtracted = true;
                         }
                         else
                         {
@@ -2363,6 +2451,14 @@ namespace VPM
                     {
                         System.Diagnostics.Debug.WriteLine($"Error checking extraction state: {ex.Message}");
                     }
+                }
+
+                if (clearExtractedButton != null)
+                {
+                    await Dispatcher.InvokeAsync(() =>
+                    {
+                        clearExtractedButton.Visibility = anyExtracted ? Visibility.Visible : Visibility.Collapsed;
+                    });
                 }
             }
             catch (Exception ex)

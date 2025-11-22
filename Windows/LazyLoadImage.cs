@@ -102,7 +102,7 @@ namespace VPM.Windows
                 Height = 28,
                 Background = new SolidColorBrush(Color.FromArgb(180, 180, 40, 40)), // Semi-transparent red
                 Foreground = new SolidColorBrush(Colors.White),
-                FontSize = 12,
+                FontSize = 11,
                 FontWeight = FontWeights.SemiBold,
                 VerticalAlignment = VerticalAlignment.Bottom,
                 HorizontalAlignment = HorizontalAlignment.Left,
@@ -111,7 +111,7 @@ namespace VPM.Windows
                 ToolTip = "Remove extracted files",
                 BorderThickness = new Thickness(0),
                 Cursor = System.Windows.Input.Cursors.Hand,
-                Content = "❌"
+                Content = "X"
             };
 
             // Style the button with rounded corners
@@ -289,6 +289,8 @@ namespace VPM.Windows
         /// </summary>
         public bool IsImageLoaded => _isLoaded;
         
+        public bool IsExtracted { get; private set; }
+
         /// <summary>
         /// Updates the extract button state (shows button or checkmark)
         /// </summary>
@@ -296,6 +298,7 @@ namespace VPM.Windows
         {
             try
             {
+                IsExtracted = isExtracted;
                 Dispatcher.Invoke(() =>
                 {
                     // Get category name

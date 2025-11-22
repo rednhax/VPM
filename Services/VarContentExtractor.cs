@@ -209,14 +209,11 @@ namespace VPM.Services
             int removedCount = 0;
             try
             {
-                string vajContent;
+                List<string> dependencies;
                 using (var stream = vajEntry.OpenEntryStream())
-                using (var reader = new StreamReader(stream))
                 {
-                    vajContent = reader.ReadToEnd();
+                    dependencies = ExtractTextureDependenciesFromVaj(stream);
                 }
-
-                var dependencies = ExtractTextureDependenciesFromVaj(vajContent);
                 foreach (var dependency in dependencies)
                 {
                     var dependencyPath = string.IsNullOrEmpty(directoryPath) 
@@ -324,6 +321,37 @@ namespace VPM.Services
             return removedCount;
         }
 
+        private static string ResolveDependencyPath(string dependency, string directoryPath)
+        {
+            // Handle relative paths starting with ./
+            if (dependency.StartsWith("./"))
+            {
+                return Path.Combine(directoryPath, dependency.Substring(2)).Replace('\\', '/');
+            }
+
+            // Handle absolute paths (starting with Custom/ or Saves/)
+            if (dependency.StartsWith("Custom/", StringComparison.OrdinalIgnoreCase) ||
+                dependency.StartsWith("Saves/", StringComparison.OrdinalIgnoreCase))
+            {
+                return dependency;
+            }
+
+            // Handle simple filenames (assume relative)
+            if (!dependency.Contains("/") && !dependency.Contains("\\"))
+            {
+                return string.IsNullOrEmpty(directoryPath)
+                   ? dependency
+                   : $"{directoryPath}/{dependency}";
+            }
+
+            // If it has slashes but doesn't start with ./ or Custom/ or Saves/
+            // It's ambiguous. It could be relative "Textures/foo.jpg" or absolute "Assets/foo.jpg"
+            // In VAM, usually non-absolute paths are relative.
+            return string.IsNullOrEmpty(directoryPath)
+                ? dependency
+                : $"{directoryPath}/{dependency}";
+        }
+
         /// <summary>
         /// Extracts texture dependencies found in a .vaj file
         /// </summary>
@@ -338,16 +366,12 @@ namespace VPM.Services
 
             try
             {
-                // Read the .vaj file content
-                string vajContent;
-                using (var stream = vajEntry.OpenEntryStream())
-                using (var reader = new StreamReader(stream))
-                {
-                    vajContent = reader.ReadToEnd();
-                }
-
                 // Parse the JSON to find texture dependencies
-                var dependencies = ExtractTextureDependenciesFromVaj(vajContent);
+                List<string> dependencies;
+                using (var stream = vajEntry.OpenEntryStream())
+                {
+                    dependencies = ExtractTextureDependenciesFromVaj(stream);
+                }
 
                 if (dependencies.Count == 0)
                     return 0;
@@ -358,9 +382,7 @@ namespace VPM.Services
                     try
                     {
                         // Construct the full path within the archive
-                        var dependencyPath = string.IsNullOrEmpty(directoryPath) 
-                            ? dependency 
-                            : $"{directoryPath}/{dependency}";
+                        var dependencyPath = ResolveDependencyPath(dependency, directoryPath);
 
                         // Find the dependency file in the archive
                         var depEntry = archive.Entries
@@ -472,15 +494,15 @@ namespace VPM.Services
         /// <summary>
         /// Extracts texture file names from .vaj JSON content
         /// </summary>
-        /// <param name="vajContent">JSON content of the .vaj file</param>
+        /// <param name="vajStream">Stream of the .vaj file content</param>
         /// <returns>List of texture file names</returns>
-        private static List<string> ExtractTextureDependenciesFromVaj(string vajContent)
+        private static List<string> ExtractTextureDependenciesFromVaj(Stream vajStream)
         {
             var dependencies = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
             try
             {
-                using var document = JsonDocument.Parse(vajContent);
+                using var document = JsonDocument.Parse(vajStream);
                 RecursivelyFindDependencies(document.RootElement, dependencies);
             }
             catch (Exception ex)
@@ -586,16 +608,12 @@ namespace VPM.Services
         {
             try
             {
-                // Read the .vaj file content
-                string vajContent;
-                using (var stream = vajEntry.OpenEntryStream())
-                using (var reader = new StreamReader(stream))
-                {
-                    vajContent = reader.ReadToEnd();
-                }
-
                 // Parse the JSON to find texture dependencies
-                var dependencies = ExtractTextureDependenciesFromVaj(vajContent);
+                List<string> dependencies;
+                using (var stream = vajEntry.OpenEntryStream())
+                {
+                    dependencies = ExtractTextureDependenciesFromVaj(stream);
+                }
 
                 if (dependencies.Count == 0)
                     return true; // No dependencies, so they're all "extracted"
@@ -604,9 +622,7 @@ namespace VPM.Services
                 foreach (var dependency in dependencies)
                 {
                     // Construct the full path within the archive
-                    var dependencyPath = string.IsNullOrEmpty(directoryPath)
-                        ? dependency
-                        : $"{directoryPath}/{dependency}";
+                    var dependencyPath = ResolveDependencyPath(dependency, directoryPath);
 
                     // Find the dependency file in the archive
                     var depEntry = archive.Entries
@@ -705,16 +721,12 @@ namespace VPM.Services
 
             try
             {
-                // Read the .vap file content
-                string vapContent;
-                using (var stream = vapEntry.OpenEntryStream())
-                using (var reader = new StreamReader(stream))
-                {
-                    vapContent = reader.ReadToEnd();
-                }
-
                 // Parse the JSON to find dependencies
-                var dependencies = ExtractFileDependenciesFromVap(vapContent);
+                List<string> dependencies;
+                using (var stream = vapEntry.OpenEntryStream())
+                {
+                    dependencies = ExtractFileDependenciesFromVap(stream);
+                }
 
                 if (dependencies.Count == 0)
                     return 0;
@@ -725,21 +737,7 @@ namespace VPM.Services
                     try
                     {
                         // Handle relative paths
-                        var dependencyPath = dependency;
-                        if (dependency.StartsWith("./"))
-                        {
-                            dependencyPath = Path.Combine(directoryPath, dependency.Substring(2)).Replace('\\', '/');
-                        }
-                        else if (!dependency.Contains("/"))
-                        {
-                             // If just a filename, assume same directory
-                             dependencyPath = string.IsNullOrEmpty(directoryPath) 
-                                ? dependency 
-                                : $"{directoryPath}/{dependency}";
-                        }
-
-                        // Normalize path
-                        dependencyPath = dependencyPath.Replace('\\', '/');
+                        var dependencyPath = ResolveDependencyPath(dependency, directoryPath);
 
                         // Find the dependency file in the archive
                         var depEntry = archive.Entries
@@ -921,63 +919,82 @@ namespace VPM.Services
         /// <summary>
         /// Extracts file dependencies from .vap JSON content
         /// </summary>
+        private static List<string> ExtractFileDependenciesFromVap(Stream vapStream)
+        {
+            try
+            {
+                using var document = JsonDocument.Parse(vapStream);
+                return ExtractFileDependenciesFromVap(document);
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Error parsing .vap file: {ex.Message}");
+                return new List<string>();
+            }
+        }
+
         private static List<string> ExtractFileDependenciesFromVap(string vapContent)
         {
-            var dependencies = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-
             try
             {
                 using var document = JsonDocument.Parse(vapContent);
-                var root = document.RootElement;
+                return ExtractFileDependenciesFromVap(document);
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Error parsing .vap file: {ex.Message}");
+                return new List<string>();
+            }
+        }
 
-                // 1. General recursive scan for any file paths
-                RecursivelyFindDependencies(root, dependencies);
+        private static List<string> ExtractFileDependenciesFromVap(JsonDocument document)
+        {
+            var dependencies = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var root = document.RootElement;
 
-                // 2. Keep existing heuristic for IDs without extensions
-                if (root.TryGetProperty("storables", out var storables) && storables.ValueKind == JsonValueKind.Array)
+            // 1. General recursive scan for any file paths
+            RecursivelyFindDependencies(root, dependencies);
+
+            // 2. Keep existing heuristic for IDs without extensions
+            if (root.TryGetProperty("storables", out var storables) && storables.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var storable in storables.EnumerateArray())
                 {
-                    foreach (var storable in storables.EnumerateArray())
+                    // Check for ID to infer .vab and sim files
+                    if (storable.TryGetProperty("id", out var idProp) && idProp.ValueKind == JsonValueKind.String)
                     {
-                        // Check for ID to infer .vab and sim files
-                        if (storable.TryGetProperty("id", out var idProp) && idProp.ValueKind == JsonValueKind.String)
+                        var id = idProp.GetString();
+                        if (!string.IsNullOrEmpty(id) && !id.Contains('.')) // Only if no extension found
                         {
-                            var id = idProp.GetString();
-                            if (!string.IsNullOrEmpty(id) && !id.Contains('.')) // Only if no extension found
+                            // Format: "package:AssetStyle" or "package:AssetSim"
+                            var parts = id.Split(':');
+                            if (parts.Length > 1)
                             {
-                                // Format: "package:AssetStyle" or "package:AssetSim"
-                                var parts = id.Split(':');
-                                if (parts.Length > 1)
+                                var assetName = parts[1];
+                                
+                                // Heuristic: Strip common suffixes to find the base asset name
+                                var suffixes = new[] { "Style", "Sim", "WrapControl", "ItemControl", "ItemDeleter", "ItemReloader", "MaterialCombined" };
+                                foreach (var suffix in suffixes)
                                 {
-                                    var assetName = parts[1];
-                                    
-                                    // Heuristic: Strip common suffixes to find the base asset name
-                                    var suffixes = new[] { "Style", "Sim", "WrapControl", "ItemControl", "ItemDeleter", "ItemReloader", "MaterialCombined" };
-                                    foreach (var suffix in suffixes)
+                                    if (assetName.EndsWith(suffix))
                                     {
-                                        if (assetName.EndsWith(suffix))
-                                        {
-                                            assetName = assetName.Substring(0, assetName.Length - suffix.Length);
-                                            break; // Only strip one suffix
-                                        }
+                                        assetName = assetName.Substring(0, assetName.Length - suffix.Length);
+                                        break; // Only strip one suffix
                                     }
-                                    
-                                    if (!string.IsNullOrEmpty(assetName))
-                                    {
-                                        dependencies.Add($"{assetName}.vab");
-                                        dependencies.Add($"{assetName}.vaj");
-                                        dependencies.Add($"{assetName}.vam");
-                                        dependencies.Add($"{assetName}.jpg");
-                                        dependencies.Add($"{assetName} sim.jpg");
-                                    }
+                                }
+                                
+                                if (!string.IsNullOrEmpty(assetName))
+                                {
+                                    dependencies.Add($"{assetName}.vab");
+                                    dependencies.Add($"{assetName}.vaj");
+                                    dependencies.Add($"{assetName}.vam");
+                                    dependencies.Add($"{assetName}.jpg");
+                                    dependencies.Add($"{assetName} sim.jpg");
                                 }
                             }
                         }
                     }
                 }
-            }
-            catch (Exception ex)
-            {
-                System.Diagnostics.Debug.WriteLine($"Error parsing .vap file: {ex.Message}");
             }
 
             return dependencies.ToList();

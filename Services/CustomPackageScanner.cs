@@ -76,28 +76,69 @@ namespace VPM.Services
         private List<CustomAtomItem> ScanFolderForPackages(string folderPath, string customBasePath, string[] extensions)
         {
             var items = new List<CustomAtomItem>();
+            var foundFiles = new List<string>();
 
             try
             {
+                // 1. Collect all relevant files
                 foreach (var ext in extensions)
                 {
-                    // Get all files recursively from this folder and its subfolders matching the extension
-                    var files = Directory.GetFiles(folderPath, ext, SearchOption.AllDirectories);
+                    foundFiles.AddRange(Directory.GetFiles(folderPath, ext, SearchOption.AllDirectories));
+                }
 
-                    foreach (var filePath in files)
+                // 2. Group by Directory and FileName (without extension)
+                var groupedFiles = foundFiles
+                    .Select(f => new { Path = f, Dir = Path.GetDirectoryName(f), Name = Path.GetFileNameWithoutExtension(f) })
+                    .GroupBy(x => new { x.Dir, x.Name });
+
+                foreach (var group in groupedFiles)
+                {
+                    try
                     {
-                        try
+                        // 3. Determine primary file
+                        string primaryFile = null;
+
+                        // Priority: .vam > .vaj > .vab > .vap
+                        var groupFiles = group.Select(x => x.Path).ToList();
+
+                        if (groupFiles.Any(f => f.EndsWith(".vam", StringComparison.OrdinalIgnoreCase)))
+                            primaryFile = groupFiles.First(f => f.EndsWith(".vam", StringComparison.OrdinalIgnoreCase));
+                        else if (groupFiles.Any(f => f.EndsWith(".vaj", StringComparison.OrdinalIgnoreCase)))
+                            primaryFile = groupFiles.First(f => f.EndsWith(".vaj", StringComparison.OrdinalIgnoreCase));
+                        else if (groupFiles.Any(f => f.EndsWith(".vab", StringComparison.OrdinalIgnoreCase)))
+                            primaryFile = groupFiles.First(f => f.EndsWith(".vab", StringComparison.OrdinalIgnoreCase));
+                        else if (groupFiles.Any(f => f.EndsWith(".vap", StringComparison.OrdinalIgnoreCase)))
+                            primaryFile = groupFiles.First(f => f.EndsWith(".vap", StringComparison.OrdinalIgnoreCase));
+
+                        if (primaryFile == null) continue;
+
+                        // 4. Calculate total size
+                        // Get ALL files with this name in the directory (including .jpg, etc)
+                        var dir = group.Key.Dir;
+                        var name = group.Key.Name;
+                        var allRelatedFiles = Directory.GetFiles(dir, name + ".*");
+
+                        long totalSize = 0;
+                        foreach (var f in allRelatedFiles)
                         {
-                            var item = CreateCustomPackageItemFromFile(filePath, customBasePath);
-                            if (item != null)
+                            // Ensure strict name matching (ignore case)
+                            if (Path.GetFileNameWithoutExtension(f).Equals(name, StringComparison.OrdinalIgnoreCase))
                             {
-                                items.Add(item);
+                                totalSize += new FileInfo(f).Length;
                             }
                         }
-                        catch (Exception ex)
+
+                        // 5. Create Item
+                        var item = CreateCustomPackageItemFromFile(primaryFile, customBasePath);
+                        if (item != null)
                         {
-                            System.Diagnostics.Debug.WriteLine($"Error processing file {filePath}: {ex.Message}");
+                            item.FileSize = totalSize;
+                            items.Add(item);
                         }
+                    }
+                    catch (Exception ex)
+                    {
+                        System.Diagnostics.Debug.WriteLine($"Error processing group {group.Key.Name}: {ex.Message}");
                     }
                 }
             }
