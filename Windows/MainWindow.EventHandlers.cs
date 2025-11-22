@@ -591,6 +591,7 @@ namespace VPM
                 {
                     "Scenes" => ScenesDataGrid,
                     "Presets" => CustomAtomDataGrid,
+                    "Custom" => CustomAtomDataGrid,
                     _ => PackageDataGrid
                 };
                 

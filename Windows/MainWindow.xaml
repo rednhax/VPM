@@ -10,8 +10,8 @@
     Height="800"
     Background="{DynamicResource {x:Static SystemColors.WindowBrushKey}}"
     Icon="pack://application:,,,/icon.ico"
-    WindowStartupLocation="CenterScreen"
-    PreviewKeyDown="MainWindow_PreviewKeyDown">
+    PreviewKeyDown="MainWindow_PreviewKeyDown"
+    WindowStartupLocation="CenterScreen">
     <WindowChrome.WindowChrome>
         <WindowChrome
             CaptionHeight="32"
@@ -230,10 +230,10 @@
                             <Border
                                 Grid.Column="0"
                                 Width="4"
-                                HorizontalAlignment="Left"
                                 Margin="2,3,0,3"
-                                CornerRadius="2"
-                                Background="{Binding StatusColor, Converter={x:Static local:ColorToBrushConverter.Instance}}" />
+                                HorizontalAlignment="Left"
+                                Background="{Binding StatusColor, Converter={x:Static local:ColorToBrushConverter.Instance}}"
+                                CornerRadius="2" />
                             <!--  Main Row Content  -->
                             <Border
                                 Grid.Column="1"
@@ -263,6 +263,49 @@
             <Style.Triggers>
                 <Trigger Property="IsMouseOver" Value="True">
                     <Setter Property="Background" Value="{DynamicResource {x:Static SystemColors.ControlBrushKey}}" />
+                </Trigger>
+                <Trigger Property="IsSelected" Value="True">
+                    <Setter Property="Background" Value="{DynamicResource {x:Static SystemColors.HighlightBrushKey}}" />
+                    <Setter Property="Foreground" Value="{DynamicResource {x:Static SystemColors.HighlightTextBrushKey}}" />
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+
+        <!--  Dependency DataGrid Row Style (Tighter spacing, smaller height)  -->
+        <Style x:Key="DependencyDataGridRowStyle" TargetType="{x:Type DataGridRow}">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="Foreground" Value="{DynamicResource {x:Static SystemColors.ControlTextBrushKey}}" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="{x:Type DataGridRow}">
+                        <Grid SnapsToDevicePixels="True">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="6" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <!--  Left Status Line  -->
+                            <Border
+                                Grid.Column="0"
+                                Width="4"
+                                Margin="2,2,0,2"
+                                HorizontalAlignment="Left"
+                                Background="{Binding StatusColor, Converter={x:Static local:ColorToBrushConverter.Instance}}"
+                                CornerRadius="2" />
+                            <!--  Main Row Content  -->
+                            <Border
+                                Grid.Column="1"
+                                Padding="0"
+                                Background="{TemplateBinding Background}">
+                                <DataGridCellsPresenter ItemsPanel="{TemplateBinding ItemsPanel}" />
+                            </Border>
+                        </Grid>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+            <Style.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter Property="Background" Value="#1A1A1A" />
                 </Trigger>
                 <Trigger Property="IsSelected" Value="True">
                     <Setter Property="Background" Value="{DynamicResource {x:Static SystemColors.HighlightBrushKey}}" />
@@ -903,8 +946,8 @@
                             BorderBrush="#404040"
                             BorderThickness="1"
                             Foreground="White"
-                            SelectionChanged="ContentModeDropdown_SelectionChanged"
                             PreviewMouseRightButtonDown="ContentModeDropdown_PreviewMouseRightButtonDown"
+                            SelectionChanged="ContentModeDropdown_SelectionChanged"
                             ToolTip="Left-click: Open dropdown | Right-click: Cycle to next mode">
                             <ComboBox.Template>
                                 <ControlTemplate TargetType="ComboBox">
@@ -4243,133 +4286,131 @@
                                 SortMemberPath="DisplayName">
                                 <DataGridTemplateColumn.CellTemplate>
                                     <DataTemplate>
-                                        <Border
-                                            Padding="0"
-                                            Background="Transparent">
+                                        <Border Padding="0" Background="Transparent">
                                             <!--  Content  -->
                                             <StackPanel Margin="6,2,4,2" VerticalAlignment="Center">
-                                            <TextBlock
-                                                FontWeight="SemiBold"
-                                                Text="{Binding DisplayName}"
-                                                TextTrimming="CharacterEllipsis" />
-                                            <StackPanel Orientation="Horizontal">
-                                                <!--  Status Icons Container  -->
-                                                <StackPanel Orientation="Horizontal" Margin="0,0,6,0">
-                                                    <!--  Favorite heart  -->
+                                                <TextBlock
+                                                    FontWeight="SemiBold"
+                                                    Text="{Binding DisplayName}"
+                                                    TextTrimming="CharacterEllipsis" />
+                                                <StackPanel Orientation="Horizontal">
+                                                    <!--  Status Icons Container  -->
+                                                    <StackPanel Margin="0,0,6,0" Orientation="Horizontal">
+                                                        <!--  Favorite heart  -->
+                                                        <TextBlock
+                                                            Margin="0,0,3,0"
+                                                            FontSize="11"
+                                                            FontWeight="Bold"
+                                                            Foreground="#FF1493"
+                                                            Text="❤️"
+                                                            ToolTip="Favorite package"
+                                                            Visibility="{Binding IsFavorite, Converter={StaticResource BoolToVis}}" />
+                                                        <!--  AutoInstall A icon  -->
+                                                        <TextBlock
+                                                            Margin="0,0,3,0"
+                                                            FontSize="11"
+                                                            FontWeight="Bold"
+                                                            Foreground="#00CED1"
+                                                            Text="A"
+                                                            ToolTip="AutoInstall package"
+                                                            Visibility="{Binding IsAutoInstall, Converter={StaticResource BoolToVis}}" />
+                                                        <!--  Optimized lightning bolt  -->
+                                                        <TextBlock
+                                                            Margin="0,0,3,0"
+                                                            FontSize="11"
+                                                            FontWeight="Bold"
+                                                            Foreground="#FFC107"
+                                                            Text="⚡"
+                                                            ToolTip="Package has been optimized by VPM"
+                                                            Visibility="{Binding IsOptimized, Converter={StaticResource BoolToVis}}" />
+                                                    </StackPanel>
+
+                                                    <!--  Old Version indicator  -->
                                                     <TextBlock
-                                                        Margin="0,0,3,0"
+                                                        Margin="-3,0,2,0"
+                                                        FontSize="12"
+                                                        Foreground="#FF5722"
+                                                        RenderTransformOrigin="0,0.5"
+                                                        Text="⏳"
+                                                        ToolTip="Old version available">
+                                                        <TextBlock.Style>
+                                                            <Style TargetType="TextBlock">
+                                                                <Setter Property="Visibility" Value="Collapsed" />
+                                                                <Style.Triggers>
+                                                                    <DataTrigger Binding="{Binding IsOldVersion}" Value="True">
+                                                                        <Setter Property="Visibility" Value="Visible" />
+                                                                    </DataTrigger>
+                                                                </Style.Triggers>
+                                                            </Style>
+                                                        </TextBlock.Style>
+                                                        <TextBlock.RenderTransform>
+                                                            <ScaleTransform ScaleX="1.0" ScaleY="1.0" />
+                                                        </TextBlock.RenderTransform>
+                                                    </TextBlock>
+
+                                                    <!--  Damaged Package indicator  -->
+                                                    <TextBlock
+                                                        Margin="0,0,2,0"
+                                                        FontSize="12"
+                                                        Foreground="#F44336"
+                                                        Text="{Binding DamageIndicator}"
+                                                        ToolTip="{Binding DamageTooltip}">
+                                                        <TextBlock.Style>
+                                                            <Style TargetType="TextBlock">
+                                                                <Setter Property="Visibility" Value="Collapsed" />
+                                                                <Style.Triggers>
+                                                                    <DataTrigger Binding="{Binding IsDamaged}" Value="True">
+                                                                        <Setter Property="Visibility" Value="Visible" />
+                                                                    </DataTrigger>
+                                                                </Style.Triggers>
+                                                            </Style>
+                                                        </TextBlock.Style>
+                                                    </TextBlock>
+
+                                                    <TextBlock
+                                                        FontSize="11"
+                                                        Foreground="{DynamicResource {x:Static SystemColors.GrayTextBrushKey}}"
+                                                        Text="Deps: " />
+                                                    <TextBlock
                                                         FontSize="11"
                                                         FontWeight="Bold"
-                                                        Foreground="#FF1493"
-                                                        Text="❤️"
-                                                        ToolTip="Favorite package"
-                                                        Visibility="{Binding IsFavorite, Converter={StaticResource BoolToVis}}" />
-                                                    <!--  AutoInstall A icon  -->
+                                                        Foreground="{DynamicResource {x:Static SystemColors.GrayTextBrushKey}}"
+                                                        Text="{Binding DependencyCount}" />
                                                     <TextBlock
-                                                        Margin="0,0,3,0"
+                                                        FontSize="11"
+                                                        Foreground="{DynamicResource {x:Static SystemColors.GrayTextBrushKey}}"
+                                                        Text="  •  Dependents: " />
+                                                    <TextBlock
                                                         FontSize="11"
                                                         FontWeight="Bold"
-                                                        Foreground="#00CED1"
-                                                        Text="A"
-                                                        ToolTip="AutoInstall package"
-                                                        Visibility="{Binding IsAutoInstall, Converter={StaticResource BoolToVis}}" />
-                                                    <!--  Optimized lightning bolt  -->
+                                                        Foreground="{DynamicResource {x:Static SystemColors.GrayTextBrushKey}}"
+                                                        Text="{Binding DependentsCount}" />
                                                     <TextBlock
-                                                        Margin="0,0,3,0"
+                                                        FontSize="11"
+                                                        Foreground="{DynamicResource {x:Static SystemColors.GrayTextBrushKey}}"
+                                                        Text="  •  Size: " />
+                                                    <TextBlock
                                                         FontSize="11"
                                                         FontWeight="Bold"
-                                                        Foreground="#FFC107"
-                                                        Text="⚡"
-                                                        ToolTip="Package has been optimized by VPM"
-                                                        Visibility="{Binding IsOptimized, Converter={StaticResource BoolToVis}}" />
+                                                        Foreground="{DynamicResource {x:Static SystemColors.GrayTextBrushKey}}"
+                                                        Text="{Binding FileSizeFormatted}" />
+                                                    <TextBlock
+                                                        FontSize="11"
+                                                        Foreground="{DynamicResource {x:Static SystemColors.GrayTextBrushKey}}"
+                                                        Text="  •  Date: " />
+                                                    <TextBlock
+                                                        FontSize="11"
+                                                        FontWeight="Bold"
+                                                        Foreground="{DynamicResource {x:Static SystemColors.GrayTextBrushKey}}"
+                                                        Text="{Binding DateFormatted}" />
                                                 </StackPanel>
-
-                                                <!--  Old Version indicator  -->
                                                 <TextBlock
-                                                    Margin="-3,0,2,0"
-                                                    FontSize="12"
-                                                    Foreground="#FF5722"
-                                                    RenderTransformOrigin="0,0.5"
-                                                    Text="⏳"
-                                                    ToolTip="Old version available">
-                                                    <TextBlock.Style>
-                                                        <Style TargetType="TextBlock">
-                                                            <Setter Property="Visibility" Value="Collapsed" />
-                                                            <Style.Triggers>
-                                                                <DataTrigger Binding="{Binding IsOldVersion}" Value="True">
-                                                                    <Setter Property="Visibility" Value="Visible" />
-                                                                </DataTrigger>
-                                                            </Style.Triggers>
-                                                        </Style>
-                                                    </TextBlock.Style>
-                                                    <TextBlock.RenderTransform>
-                                                        <ScaleTransform ScaleX="1.0" ScaleY="1.0" />
-                                                    </TextBlock.RenderTransform>
-                                                </TextBlock>
-
-                                                <!--  Damaged Package indicator  -->
-                                                <TextBlock
-                                                    Margin="0,0,2,0"
-                                                    FontSize="12"
-                                                    Foreground="#F44336"
-                                                    Text="{Binding DamageIndicator}"
-                                                    ToolTip="{Binding DamageTooltip}">
-                                                    <TextBlock.Style>
-                                                        <Style TargetType="TextBlock">
-                                                            <Setter Property="Visibility" Value="Collapsed" />
-                                                            <Style.Triggers>
-                                                                <DataTrigger Binding="{Binding IsDamaged}" Value="True">
-                                                                    <Setter Property="Visibility" Value="Visible" />
-                                                                </DataTrigger>
-                                                            </Style.Triggers>
-                                                        </Style>
-                                                    </TextBlock.Style>
-                                                </TextBlock>
-
-                                                <TextBlock
-                                                    FontSize="11"
+                                                    Margin="0,2,0,0"
+                                                    FontSize="10"
                                                     Foreground="{DynamicResource {x:Static SystemColors.GrayTextBrushKey}}"
-                                                    Text="Deps: " />
-                                                <TextBlock
-                                                    FontSize="11"
-                                                    FontWeight="Bold"
-                                                    Foreground="{DynamicResource {x:Static SystemColors.GrayTextBrushKey}}"
-                                                    Text="{Binding DependencyCount}" />
-                                                <TextBlock
-                                                    FontSize="11"
-                                                    Foreground="{DynamicResource {x:Static SystemColors.GrayTextBrushKey}}"
-                                                    Text="  •  Dependents: " />
-                                                <TextBlock
-                                                    FontSize="11"
-                                                    FontWeight="Bold"
-                                                    Foreground="{DynamicResource {x:Static SystemColors.GrayTextBrushKey}}"
-                                                    Text="{Binding DependentsCount}" />
-                                                <TextBlock
-                                                    FontSize="11"
-                                                    Foreground="{DynamicResource {x:Static SystemColors.GrayTextBrushKey}}"
-                                                    Text="  •  Size: " />
-                                                <TextBlock
-                                                    FontSize="11"
-                                                    FontWeight="Bold"
-                                                    Foreground="{DynamicResource {x:Static SystemColors.GrayTextBrushKey}}"
-                                                    Text="{Binding FileSizeFormatted}" />
-                                                <TextBlock
-                                                    FontSize="11"
-                                                    Foreground="{DynamicResource {x:Static SystemColors.GrayTextBrushKey}}"
-                                                    Text="  •  Date: " />
-                                                <TextBlock
-                                                    FontSize="11"
-                                                    FontWeight="Bold"
-                                                    Foreground="{DynamicResource {x:Static SystemColors.GrayTextBrushKey}}"
-                                                    Text="{Binding DateFormatted}" />
+                                                    Text="{Binding Converter={StaticResource ContentCountsConverter}}"
+                                                    TextWrapping="Wrap" />
                                             </StackPanel>
-                                            <TextBlock
-                                                Margin="0,2,0,0"
-                                                FontSize="10"
-                                                Foreground="{DynamicResource {x:Static SystemColors.GrayTextBrushKey}}"
-                                                Text="{Binding Converter={StaticResource ContentCountsConverter}}"
-                                                TextWrapping="Wrap" />
-                                                </StackPanel>
                                         </Border>
                                     </DataTemplate>
                                 </DataGridTemplateColumn.CellTemplate>
@@ -5566,17 +5607,19 @@
                             CanUserSortColumns="True"
                             EnableColumnVirtualization="False"
                             EnableRowVirtualization="True"
-                            FontSize="12"
+                            FontSize="11"
                             Foreground="{DynamicResource {x:Static SystemColors.ControlTextBrushKey}}"
                             GridLinesVisibility="Horizontal"
                             HeadersVisibility="None"
                             IsReadOnly="True"
                             RowHeaderWidth="0"
                             RowHeight="24"
+                            RowStyle="{StaticResource DependencyDataGridRowStyle}"
                             ScrollViewer.CanContentScroll="True"
                             ScrollViewer.HorizontalScrollBarVisibility="Disabled"
                             ScrollViewer.IsDeferredScrollingEnabled="False"
                             SelectionMode="Extended"
+                            TextOptions.TextFormattingMode="Display"
                             VirtualizingPanel.CacheLength="10,10"
                             VirtualizingPanel.CacheLengthUnit="Item"
                             VirtualizingPanel.IsContainerVirtualizable="True"
@@ -5599,66 +5642,25 @@
                                     <Setter Property="VerticalContentAlignment" Value="Center" />
                                 </Style>
                             </DataGrid.ColumnHeaderStyle>
-                            <DataGrid.RowStyle>
-                                <Style TargetType="DataGridRow">
-                                    <Setter Property="Background" Value="Transparent" />
-                                    <Setter Property="Foreground" Value="{DynamicResource {x:Static SystemColors.ControlTextBrushKey}}" />
-                                    <Setter Property="BorderThickness" Value="0" />
-                                    <Style.Triggers>
-                                        <Trigger Property="IsMouseOver" Value="True">
-                                            <Setter Property="Background" Value="#1A1A1A" />
-                                        </Trigger>
-                                        <Trigger Property="IsSelected" Value="True">
-                                            <Setter Property="Background" Value="{DynamicResource {x:Static SystemColors.HighlightBrushKey}}" />
-                                            <Setter Property="Foreground" Value="{DynamicResource {x:Static SystemColors.HighlightTextBrushKey}}" />
-                                        </Trigger>
-                                    </Style.Triggers>
-                                </Style>
-                            </DataGrid.RowStyle>
                             <DataGrid.Columns>
-                                <!--  Status Column with Left Line  -->
-                                <DataGridTemplateColumn
-                                    Width="8"
-                                    CanUserResize="False"
-                                    CanUserSort="True"
-                                    Header="Status"
-                                    SortMemberPath="Status">
-                                    <DataGridTemplateColumn.CellTemplate>
-                                        <DataTemplate>
-                                            <Grid>
-                                                <Grid.ColumnDefinitions>
-                                                    <ColumnDefinition Width="8" />
-                                                    <ColumnDefinition Width="*" />
-                                                </Grid.ColumnDefinitions>
-                                                <!--  Left Status Line  -->
-                                                <Border
-                                                    Grid.Column="0"
-                                                    Width="4"
-                                                    HorizontalAlignment="Left"
-                                                    Margin="2,2,0,2"
-                                                    CornerRadius="2"
-                                                    Background="{Binding StatusColor, Converter={x:Static local:ColorToBrushConverter.Instance}}" />
-                                                <!--  Empty content area  -->
-                                                <Border Grid.Column="1" Background="Transparent" />
-                                            </Grid>
-                                        </DataTemplate>
-                                    </DataGridTemplateColumn.CellTemplate>
-                                </DataGridTemplateColumn>
 
                                 <!--  Dependency Name Column  -->
-                                <DataGridTextColumn
+                                <DataGridTemplateColumn
                                     Width="*"
-                                    Binding="{Binding DisplayName}"
                                     CanUserSort="True"
                                     Header="Dependency Name"
                                     SortMemberPath="DisplayName">
-                                    <DataGridTextColumn.ElementStyle>
-                                        <Style TargetType="TextBlock">
-                                            <Setter Property="VerticalAlignment" Value="Center" />
-                                            <Setter Property="Padding" Value="6,0,0,0" />
-                                        </Style>
-                                    </DataGridTextColumn.ElementStyle>
-                                </DataGridTextColumn>
+                                    <DataGridTemplateColumn.CellTemplate>
+                                        <DataTemplate>
+                                            <TextBlock
+                                                Margin="6,0,0,0"
+                                                Padding="0"
+                                                VerticalAlignment="Center"
+                                                Text="{Binding DisplayName}"
+                                                TextTrimming="CharacterEllipsis" />
+                                        </DataTemplate>
+                                    </DataGridTemplateColumn.CellTemplate>
+                                </DataGridTemplateColumn>
                             </DataGrid.Columns>
                         </DataGrid>
 
