@@ -108,6 +108,13 @@ namespace VPM.Services
                     extractedCount += ExtractVajDependencies(archive, vajEntry, gameFolder, directoryPath);
                 }
 
+                // Check for .vap files and extract their dependencies
+                var vapEntry = relatedEntries.FirstOrDefault(e => e.Key.EndsWith(".vap", StringComparison.OrdinalIgnoreCase));
+                if (vapEntry != null)
+                {
+                    extractedCount += ExtractVapDependencies(archive, vapEntry, gameFolder, directoryPath);
+                }
+
                 return extractedCount;
             }
             catch (Exception ex)
@@ -115,6 +122,206 @@ namespace VPM.Services
                 System.Diagnostics.Debug.WriteLine($"Error during extraction: {ex.Message}");
                 throw;
             }
+        }
+
+        /// <summary>
+        /// Removes all files related to the image from the game folder.
+        /// </summary>
+        public static async Task<int> RemoveRelatedFilesAsync(string varFilePath, string internalImagePath, string gameFolder)
+        {
+            return await Task.Run(() => RemoveRelatedFiles(varFilePath, internalImagePath, gameFolder));
+        }
+
+        /// <summary>
+        /// Synchronous version of RemoveRelatedFilesAsync
+        /// </summary>
+        public static int RemoveRelatedFiles(string varFilePath, string internalImagePath, string gameFolder)
+        {
+            if (!File.Exists(varFilePath))
+                throw new FileNotFoundException($"VAR file not found: {varFilePath}");
+
+            if (string.IsNullOrWhiteSpace(internalImagePath) || string.IsNullOrWhiteSpace(gameFolder))
+                return 0;
+
+            int removedCount = 0;
+
+            try
+            {
+                using var archive = SharpCompressHelper.OpenForRead(varFilePath);
+
+                // Get the base name without extension
+                var baseName = Path.GetFileNameWithoutExtension(internalImagePath);
+                var directoryPath = Path.GetDirectoryName(internalImagePath);
+                directoryPath = directoryPath?.Replace('\\', '/') ?? "";
+
+                // Find all files in the archive with the same base name
+                var relatedEntries = archive.Entries
+                    .Where(e => !e.Key.EndsWith("/"))
+                    .Where(e =>
+                    {
+                        var entryBaseName = Path.GetFileNameWithoutExtension(e.Key);
+                        var entryDir = Path.GetDirectoryName(e.Key)?.Replace('\\', '/') ?? "";
+
+                        return entryBaseName.Equals(baseName, StringComparison.OrdinalIgnoreCase) &&
+                               entryDir.Equals(directoryPath, StringComparison.OrdinalIgnoreCase);
+                    })
+                    .ToList();
+
+                if (relatedEntries.Count == 0)
+                    return 0;
+
+                // Remove each related file
+                foreach (var entry in relatedEntries)
+                {
+                    var targetPath = Path.Combine(gameFolder, entry.Key.Replace('/', Path.DirectorySeparatorChar));
+                    if (File.Exists(targetPath))
+                    {
+                        File.Delete(targetPath);
+                        removedCount++;
+                    }
+                }
+
+                // Check for .vaj files and remove their dependencies
+                var vajEntry = relatedEntries.FirstOrDefault(e => e.Key.EndsWith(".vaj", StringComparison.OrdinalIgnoreCase));
+                if (vajEntry != null)
+                {
+                    removedCount += RemoveVajDependencies(archive, vajEntry, gameFolder, directoryPath);
+                }
+
+                // Check for .vap files and remove their dependencies
+                var vapEntry = relatedEntries.FirstOrDefault(e => e.Key.EndsWith(".vap", StringComparison.OrdinalIgnoreCase));
+                if (vapEntry != null)
+                {
+                    removedCount += RemoveVapDependencies(archive, vapEntry, gameFolder, directoryPath);
+                }
+
+                return removedCount;
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Error removing files: {ex.Message}");
+                return removedCount;
+            }
+        }
+
+        private static int RemoveVajDependencies(IArchive archive, IArchiveEntry vajEntry, string gameFolder, string directoryPath)
+        {
+            int removedCount = 0;
+            try
+            {
+                string vajContent;
+                using (var stream = vajEntry.OpenEntryStream())
+                using (var reader = new StreamReader(stream))
+                {
+                    vajContent = reader.ReadToEnd();
+                }
+
+                var dependencies = ExtractTextureDependenciesFromVaj(vajContent);
+                foreach (var dependency in dependencies)
+                {
+                    var dependencyPath = string.IsNullOrEmpty(directoryPath) 
+                        ? dependency 
+                        : $"{directoryPath}/{dependency}";
+                    
+                    var depEntry = archive.Entries.FirstOrDefault(e => e.Key.Equals(dependencyPath, StringComparison.OrdinalIgnoreCase) ||
+                                         e.Key.Equals(dependencyPath.Replace('/', '\\'), StringComparison.OrdinalIgnoreCase));
+
+                    if (depEntry != null)
+                    {
+                        var targetPath = Path.Combine(gameFolder, depEntry.Key.Replace('/', Path.DirectorySeparatorChar));
+                        if (File.Exists(targetPath))
+                        {
+                            // Only remove if it's not used by other things (simplified check: just remove for now as requested)
+                            // Ideally we'd check if other installed items need this, but for now we follow instructions
+                            // However, user said "if only preset is removed then dont remove parent item"
+                            // This function is for .vaj dependencies (textures), not parent items themselves.
+                            File.Delete(targetPath);
+                            removedCount++;
+                        }
+                    }
+                }
+            }
+            catch (Exception) { }
+            return removedCount;
+        }
+
+        private static int RemoveVapDependencies(IArchive archive, IArchiveEntry vapEntry, string gameFolder, string directoryPath)
+        {
+            int removedCount = 0;
+            try
+            {
+                string vapContent;
+                using (var stream = vapEntry.OpenEntryStream())
+                using (var reader = new StreamReader(stream))
+                {
+                    vapContent = reader.ReadToEnd();
+                }
+
+                var dependencies = ExtractFileDependenciesFromVap(vapContent);
+                foreach (var dependency in dependencies)
+                {
+                    // Skip removing parent items (.vaj, .vab, .vam) if we are just removing a preset
+                    // The user requirement: "if only preset is removed then dont remove parent item"
+                    // We can identify parent items by extension
+                    if (dependency.EndsWith(".vaj", StringComparison.OrdinalIgnoreCase) ||
+                        dependency.EndsWith(".vab", StringComparison.OrdinalIgnoreCase) ||
+                        dependency.EndsWith(".vam", StringComparison.OrdinalIgnoreCase))
+                    {
+                        continue;
+                    }
+
+                    // Handle relative paths logic similar to extraction
+                    var dependencyPath = dependency;
+                    if (dependency.StartsWith("./"))
+                    {
+                        dependencyPath = Path.Combine(directoryPath, dependency.Substring(2)).Replace('\\', '/');
+                    }
+                    else if (!dependency.Contains("/"))
+                    {
+                         dependencyPath = string.IsNullOrEmpty(directoryPath) 
+                            ? dependency 
+                            : $"{directoryPath}/{dependency}";
+                    }
+                    dependencyPath = dependencyPath.Replace('\\', '/');
+
+                    var depEntry = archive.Entries.FirstOrDefault(e => e.Key.Equals(dependencyPath, StringComparison.OrdinalIgnoreCase) ||
+                                         e.Key.EndsWith("/" + dependency, StringComparison.OrdinalIgnoreCase) ||
+                                         e.Key.Equals(dependencyPath.Replace('/', '\\'), StringComparison.OrdinalIgnoreCase));
+
+                    if (depEntry != null)
+                    {
+                        var targetPath = Path.Combine(gameFolder, depEntry.Key.Replace('/', Path.DirectorySeparatorChar));
+                        if (File.Exists(targetPath))
+                        {
+                            File.Delete(targetPath);
+                            removedCount++;
+                        }
+                    }
+                    else
+                    {
+                         // Try sibling check
+                         if (!dependencyPath.StartsWith(directoryPath))
+                         {
+                            var siblingPath = string.IsNullOrEmpty(directoryPath) 
+                                ? Path.GetFileName(dependency)
+                                : $"{directoryPath}/{Path.GetFileName(dependency)}";
+                            
+                            depEntry = archive.Entries.FirstOrDefault(e => e.Key.Equals(siblingPath, StringComparison.OrdinalIgnoreCase));
+                            if (depEntry != null)
+                            {
+                                var targetPath = Path.Combine(gameFolder, depEntry.Key.Replace('/', Path.DirectorySeparatorChar));
+                                if (File.Exists(targetPath))
+                                {
+                                    File.Delete(targetPath);
+                                    removedCount++;
+                                }
+                            }
+                         }
+                    }
+                }
+            }
+            catch (Exception) { }
+            return removedCount;
         }
 
         /// <summary>
@@ -183,7 +390,6 @@ namespace VPM.Services
                             }
 
                             extractedCount++;
-                            System.Diagnostics.Debug.WriteLine($"Extracted dependency: {dependency}");
                         }
                         else
                         {
@@ -204,6 +410,65 @@ namespace VPM.Services
             return extractedCount;
         }
 
+        private static readonly HashSet<string> DependencyExtensions = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ".vam", ".vmi", ".vaj", ".vab", ".vac",
+            ".jpg", ".jpeg", ".png", ".tiff", ".tif", ".bmp", ".tga", ".dds",
+            ".mp3", ".wav", ".ogg"
+        };
+
+        private static void RecursivelyFindDependencies(JsonElement element, HashSet<string> dependencies)
+        {
+            switch (element.ValueKind)
+            {
+                case JsonValueKind.Object:
+                    foreach (var property in element.EnumerateObject())
+                    {
+                        RecursivelyFindDependencies(property.Value, dependencies);
+                    }
+                    break;
+                case JsonValueKind.Array:
+                    foreach (var item in element.EnumerateArray())
+                    {
+                        RecursivelyFindDependencies(item, dependencies);
+                    }
+                    break;
+                case JsonValueKind.String:
+                    var value = element.GetString();
+                    if (!string.IsNullOrWhiteSpace(value))
+                    {
+                        try
+                        {
+                            // Quick check for extension separator
+                            if (value.Contains('.'))
+                            {
+                                var ext = Path.GetExtension(value);
+                                if (!string.IsNullOrEmpty(ext) && DependencyExtensions.Contains(ext))
+                                {
+                                    // Handle "Package:Path" format
+                                    var path = value;
+                                    int colonIndex = value.IndexOf(':');
+                                    if (colonIndex >= 0)
+                                    {
+                                        path = value.Substring(colonIndex + 1);
+                                    }
+
+                                    // Trim leading slashes to match archive entry keys
+                                    path = path.TrimStart('/', '\\');
+
+                                    if (!string.IsNullOrWhiteSpace(path))
+                                    {
+                                        dependencies.Add(path);
+                                    }
+                                }
+                            }
+                        }
+                        catch { }
+                    }
+                    break;
+            }
+        }
+
         /// <summary>
         /// Extracts texture file names from .vaj JSON content
         /// </summary>
@@ -216,33 +481,7 @@ namespace VPM.Services
             try
             {
                 using var document = JsonDocument.Parse(vajContent);
-                var root = document.RootElement;
-
-                // Look for "storables" array
-                if (root.TryGetProperty("storables", out var storables) && storables.ValueKind == JsonValueKind.Array)
-                {
-                    foreach (var storable in storables.EnumerateArray())
-                    {
-                        // Look for customTexture properties
-                        foreach (var property in storable.EnumerateObject())
-                        {
-                            if (property.Name.StartsWith("customTexture_", StringComparison.OrdinalIgnoreCase) &&
-                                property.Value.ValueKind == JsonValueKind.String)
-                            {
-                                var textureFile = property.Value.GetString();
-                                if (!string.IsNullOrWhiteSpace(textureFile))
-                                {
-                                    // Support common texture file formats
-                                    var ext = Path.GetExtension(textureFile).ToLowerInvariant();
-                                    if (ext == ".jpg" || ext == ".jpeg" || ext == ".png" || ext == ".tga" || ext == ".dds" || ext == ".bmp")
-                                    {
-                                        dependencies.Add(textureFile);
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
+                RecursivelyFindDependencies(document.RootElement, dependencies);
             }
             catch (Exception ex)
             {
@@ -314,6 +553,15 @@ namespace VPM.Services
                 {
                     // Check if dependency files exist
                     if (!AreDependenciesExtracted(archive, vajEntry, gameFolder, directoryPath))
+                        return false;
+                }
+
+                // Also check for .vap dependencies
+                var vapEntry = relatedEntries.FirstOrDefault(e => e.Key.EndsWith(".vap", StringComparison.OrdinalIgnoreCase));
+                if (vapEntry != null)
+                {
+                    // Check if dependency files exist
+                    if (!AreVapDependenciesExtracted(archive, vapEntry, gameFolder, directoryPath))
                         return false;
                 }
 
@@ -447,6 +695,292 @@ namespace VPM.Services
                 return "?";
 
             return category.Substring(0, 1).ToUpper();
+        }
+        /// <summary>
+        /// Extracts dependencies found in a .vap file (textures, .vab, sim files)
+        /// </summary>
+        private static int ExtractVapDependencies(IArchive archive, IArchiveEntry vapEntry, string gameFolder, string directoryPath)
+        {
+            int extractedCount = 0;
+
+            try
+            {
+                // Read the .vap file content
+                string vapContent;
+                using (var stream = vapEntry.OpenEntryStream())
+                using (var reader = new StreamReader(stream))
+                {
+                    vapContent = reader.ReadToEnd();
+                }
+
+                // Parse the JSON to find dependencies
+                var dependencies = ExtractFileDependenciesFromVap(vapContent);
+
+                if (dependencies.Count == 0)
+                    return 0;
+
+                // Extract each dependency file
+                foreach (var dependency in dependencies)
+                {
+                    try
+                    {
+                        // Handle relative paths
+                        var dependencyPath = dependency;
+                        if (dependency.StartsWith("./"))
+                        {
+                            dependencyPath = Path.Combine(directoryPath, dependency.Substring(2)).Replace('\\', '/');
+                        }
+                        else if (!dependency.Contains("/"))
+                        {
+                             // If just a filename, assume same directory
+                             dependencyPath = string.IsNullOrEmpty(directoryPath) 
+                                ? dependency 
+                                : $"{directoryPath}/{dependency}";
+                        }
+
+                        // Normalize path
+                        dependencyPath = dependencyPath.Replace('\\', '/');
+
+                        // Find the dependency file in the archive
+                        var depEntry = archive.Entries
+                            .FirstOrDefault(e => e.Key.Equals(dependencyPath, StringComparison.OrdinalIgnoreCase) ||
+                                                 e.Key.EndsWith("/" + dependency, StringComparison.OrdinalIgnoreCase) ||
+                                                 e.Key.Equals(dependencyPath.Replace('/', '\\'), StringComparison.OrdinalIgnoreCase));
+                        
+                        if (depEntry != null)
+                        {
+                            var targetPath = Path.Combine(gameFolder, depEntry.Key.Replace('/', Path.DirectorySeparatorChar));
+
+                            // Skip if file already exists
+                            if (File.Exists(targetPath))
+                                continue;
+
+                            // Ensure target directory exists
+                            var targetDirectory = Path.GetDirectoryName(targetPath);
+                            if (!Directory.Exists(targetDirectory))
+                            {
+                                Directory.CreateDirectory(targetDirectory);
+                            }
+
+                            // Extract the file
+                            using (var entryStream = depEntry.OpenEntryStream())
+                            using (var fileStream = File.Create(targetPath))
+                            {
+                                entryStream.CopyTo(fileStream);
+                            }
+
+                            extractedCount++;
+
+                            // Recursively extract dependencies for .vaj files (parent items)
+                            if (dependency.EndsWith(".vaj", StringComparison.OrdinalIgnoreCase))
+                            {
+                                var vajDirectory = Path.GetDirectoryName(depEntry.Key)?.Replace('\\', '/');
+                                extractedCount += ExtractVajDependencies(archive, depEntry, gameFolder, vajDirectory);
+                            }
+                            // Recursively extract dependencies for .vam files (presets)
+                            else if (dependency.EndsWith(".vam", StringComparison.OrdinalIgnoreCase))
+                            {
+                                var vamDirectory = Path.GetDirectoryName(depEntry.Key)?.Replace('\\', '/');
+                                extractedCount += ExtractVapDependencies(archive, depEntry, gameFolder, vamDirectory);
+                            }
+                        }
+                        else
+                        {
+                            // Try to find it in the same directory if we haven't already
+                            if (!dependencyPath.StartsWith(directoryPath))
+                            {
+                                var siblingPath = string.IsNullOrEmpty(directoryPath) 
+                                    ? Path.GetFileName(dependency)
+                                    : $"{directoryPath}/{Path.GetFileName(dependency)}";
+                                
+                                depEntry = archive.Entries.FirstOrDefault(e => e.Key.Equals(siblingPath, StringComparison.OrdinalIgnoreCase));
+                                
+                                if (depEntry != null)
+                                {
+                                     var targetPath = Path.Combine(gameFolder, depEntry.Key.Replace('/', Path.DirectorySeparatorChar));
+                                     if (!File.Exists(targetPath))
+                                     {
+                                         var targetDirectory = Path.GetDirectoryName(targetPath);
+                                         if (!Directory.Exists(targetDirectory)) Directory.CreateDirectory(targetDirectory);
+                                         using (var entryStream = depEntry.OpenEntryStream())
+                                         using (var fileStream = File.Create(targetPath)) entryStream.CopyTo(fileStream);
+                                         extractedCount++;
+                                     }
+                                }
+                            }
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        System.Diagnostics.Debug.WriteLine($"Failed to extract dependency {dependency}: {ex.Message}");
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Error extracting .vap dependencies: {ex.Message}");
+            }
+
+            return extractedCount;
+        }
+
+        /// <summary>
+        /// Checks if all dependency files from a .vap file exist in the game folder
+        /// </summary>
+        private static bool AreVapDependenciesExtracted(IArchive archive, IArchiveEntry vapEntry, string gameFolder, string directoryPath)
+        {
+            try
+            {
+                // Read the .vap file content
+                string vapContent;
+                using (var stream = vapEntry.OpenEntryStream())
+                using (var reader = new StreamReader(stream))
+                {
+                    vapContent = reader.ReadToEnd();
+                }
+
+                // Parse the JSON to find dependencies
+                var dependencies = ExtractFileDependenciesFromVap(vapContent);
+
+                if (dependencies.Count == 0)
+                    return true;
+
+                // Check each dependency file
+                foreach (var dependency in dependencies)
+                {
+                    // Handle relative paths
+                    var dependencyPath = dependency;
+                    if (dependency.StartsWith("./"))
+                    {
+                        dependencyPath = Path.Combine(directoryPath, dependency.Substring(2)).Replace('\\', '/');
+                    }
+                    else if (!dependency.Contains("/"))
+                    {
+                         dependencyPath = string.IsNullOrEmpty(directoryPath) 
+                            ? dependency 
+                            : $"{directoryPath}/{dependency}";
+                    }
+
+                    dependencyPath = dependencyPath.Replace('\\', '/');
+
+                    // Find the dependency file in the archive
+                    var depEntry = archive.Entries
+                        .FirstOrDefault(e => e.Key.Equals(dependencyPath, StringComparison.OrdinalIgnoreCase) ||
+                                             e.Key.EndsWith("/" + dependency, StringComparison.OrdinalIgnoreCase) ||
+                                             e.Key.Equals(dependencyPath.Replace('/', '\\'), StringComparison.OrdinalIgnoreCase));
+
+                    if (depEntry != null)
+                    {
+                        var targetPath = Path.Combine(gameFolder, depEntry.Key.Replace('/', Path.DirectorySeparatorChar));
+                        if (!File.Exists(targetPath))
+                            return false;
+
+                        // Recursively check dependencies for .vaj files
+                        if (dependency.EndsWith(".vaj", StringComparison.OrdinalIgnoreCase))
+                        {
+                            var vajDirectory = Path.GetDirectoryName(depEntry.Key)?.Replace('\\', '/');
+                            if (!AreDependenciesExtracted(archive, depEntry, gameFolder, vajDirectory))
+                                return false;
+                        }
+                        // Recursively check dependencies for .vam files
+                        else if (dependency.EndsWith(".vam", StringComparison.OrdinalIgnoreCase))
+                        {
+                            var vamDirectory = Path.GetDirectoryName(depEntry.Key)?.Replace('\\', '/');
+                            if (!AreVapDependenciesExtracted(archive, depEntry, gameFolder, vamDirectory))
+                                return false;
+                        }
+                    }
+                    else
+                    {
+                         // Try sibling check
+                         if (!dependencyPath.StartsWith(directoryPath))
+                         {
+                            var siblingPath = string.IsNullOrEmpty(directoryPath) 
+                                ? Path.GetFileName(dependency)
+                                : $"{directoryPath}/{Path.GetFileName(dependency)}";
+                            
+                            depEntry = archive.Entries.FirstOrDefault(e => e.Key.Equals(siblingPath, StringComparison.OrdinalIgnoreCase));
+                            if (depEntry != null)
+                            {
+                                var targetPath = Path.Combine(gameFolder, depEntry.Key.Replace('/', Path.DirectorySeparatorChar));
+                                if (!File.Exists(targetPath)) return false;
+                            }
+                         }
+                    }
+                }
+
+                return true;
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Error checking .vap dependencies: {ex.Message}");
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// Extracts file dependencies from .vap JSON content
+        /// </summary>
+        private static List<string> ExtractFileDependenciesFromVap(string vapContent)
+        {
+            var dependencies = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+            try
+            {
+                using var document = JsonDocument.Parse(vapContent);
+                var root = document.RootElement;
+
+                // 1. General recursive scan for any file paths
+                RecursivelyFindDependencies(root, dependencies);
+
+                // 2. Keep existing heuristic for IDs without extensions
+                if (root.TryGetProperty("storables", out var storables) && storables.ValueKind == JsonValueKind.Array)
+                {
+                    foreach (var storable in storables.EnumerateArray())
+                    {
+                        // Check for ID to infer .vab and sim files
+                        if (storable.TryGetProperty("id", out var idProp) && idProp.ValueKind == JsonValueKind.String)
+                        {
+                            var id = idProp.GetString();
+                            if (!string.IsNullOrEmpty(id) && !id.Contains('.')) // Only if no extension found
+                            {
+                                // Format: "package:AssetStyle" or "package:AssetSim"
+                                var parts = id.Split(':');
+                                if (parts.Length > 1)
+                                {
+                                    var assetName = parts[1];
+                                    
+                                    // Heuristic: Strip common suffixes to find the base asset name
+                                    var suffixes = new[] { "Style", "Sim", "WrapControl", "ItemControl", "ItemDeleter", "ItemReloader", "MaterialCombined" };
+                                    foreach (var suffix in suffixes)
+                                    {
+                                        if (assetName.EndsWith(suffix))
+                                        {
+                                            assetName = assetName.Substring(0, assetName.Length - suffix.Length);
+                                            break; // Only strip one suffix
+                                        }
+                                    }
+                                    
+                                    if (!string.IsNullOrEmpty(assetName))
+                                    {
+                                        dependencies.Add($"{assetName}.vab");
+                                        dependencies.Add($"{assetName}.vaj");
+                                        dependencies.Add($"{assetName}.vam");
+                                        dependencies.Add($"{assetName}.jpg");
+                                        dependencies.Add($"{assetName} sim.jpg");
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Error parsing .vap file: {ex.Message}");
+            }
+
+            return dependencies.ToList();
         }
     }
 }

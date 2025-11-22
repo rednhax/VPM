@@ -20,6 +20,7 @@ namespace VPM.Windows
         private Image _imageControl;
         private Grid _overlayGrid;
         private Button _extractButton;
+        private Button _removeButton;
         
         // Image data
         public string PackageKey { get; set; }
@@ -61,7 +62,8 @@ namespace VPM.Windows
             // Create extract button at bottom-right
             _extractButton = new Button
             {
-                Padding = new Thickness(8, 4, 8, 4),
+                Padding = new Thickness(8, 5, 8, 5),
+                Height = 28,
                 Background = new SolidColorBrush(Color.FromArgb(140, 0, 120, 215)), // Semi-transparent blue
                 Foreground = new SolidColorBrush(Colors.White),
                 FontSize = 11,
@@ -86,11 +88,47 @@ namespace VPM.Windows
                 ExtractionRequested?.Invoke(this, new ExtractionRequestedEventArgs
                 {
                     VarFilePath = this.VarFilePath,
-                    InternalImagePath = this.InternalImagePath
+                    InternalImagePath = this.InternalImagePath,
+                    IsRemoval = false
                 });
             };
             
             _overlayGrid.Children.Add(_extractButton);
+
+            // Create remove button at bottom-left
+            _removeButton = new Button
+            {
+                Padding = new Thickness(8, 5, 8, 5),
+                Height = 28,
+                Background = new SolidColorBrush(Color.FromArgb(180, 180, 40, 40)), // Semi-transparent red
+                Foreground = new SolidColorBrush(Colors.White),
+                FontSize = 12,
+                FontWeight = FontWeights.SemiBold,
+                VerticalAlignment = VerticalAlignment.Bottom,
+                HorizontalAlignment = HorizontalAlignment.Left,
+                Margin = new Thickness(6, 0, 0, 6),
+                Visibility = Visibility.Collapsed,
+                ToolTip = "Remove extracted files",
+                BorderThickness = new Thickness(0),
+                Cursor = System.Windows.Input.Cursors.Hand,
+                Content = "❌"
+            };
+
+            // Style the button with rounded corners
+            _removeButton.Style = buttonStyle;
+
+            _removeButton.Click += (s, e) =>
+            {
+                e.Handled = true;
+                ExtractionRequested?.Invoke(this, new ExtractionRequestedEventArgs
+                {
+                    VarFilePath = this.VarFilePath,
+                    InternalImagePath = this.InternalImagePath,
+                    IsRemoval = true
+                });
+            };
+
+            _overlayGrid.Children.Add(_removeButton);
             
             // Set child to overlay grid
             this.Child = _overlayGrid;
@@ -298,7 +336,10 @@ namespace VPM.Windows
                         // Neutral green for extracted state (not too bright)
                         _extractButton.Background = new SolidColorBrush(Color.FromArgb(160, 60, 120, 70)); 
                         _extractButton.ToolTip = $"Files for {category} are already extracted";
-                        _extractButton.IsEnabled = false;
+                        _extractButton.IsEnabled = false; // Disable right button when extracted
+
+                        // Show remove button
+                        _removeButton.Visibility = Visibility.Visible;
                     }
                     else
                     {
@@ -317,6 +358,9 @@ namespace VPM.Windows
                         _extractButton.Background = new SolidColorBrush(Color.FromArgb(120, 80, 80, 80)); 
                         _extractButton.ToolTip = $"Extract {category} files";
                         _extractButton.IsEnabled = true;
+
+                        // Hide remove button
+                        _removeButton.Visibility = Visibility.Collapsed;
                     }
                     
                     // Update padding for a more stylish look
@@ -381,5 +425,6 @@ namespace VPM.Windows
     {
         public string VarFilePath { get; set; }
         public string InternalImagePath { get; set; }
+        public bool IsRemoval { get; set; }
     }
 }

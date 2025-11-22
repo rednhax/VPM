@@ -156,6 +156,26 @@ namespace VPM.Services
             PresetScanner.ParsePresetDependencies(item);
             item.IsOptimized = IsPresetOptimized(vapPath);
 
+            // Try to find parent files
+            var parentName = PresetScanner.GetParentItemName(vapPath);
+            if (!string.IsNullOrEmpty(parentName))
+            {
+                var directory = Path.GetDirectoryName(vapPath);
+                var parentFiles = new List<string>();
+                var parentExtensions = new[] { ".vaj", ".vam", ".jpg", ".vab" };
+                
+                foreach (var ext in parentExtensions)
+                {
+                    var parentPath = Path.Combine(directory, parentName + ext);
+                    if (File.Exists(parentPath))
+                    {
+                        parentFiles.Add(parentPath);
+                    }
+                }
+                
+                item.ParentFiles = parentFiles;
+            }
+
             return item;
         }
 

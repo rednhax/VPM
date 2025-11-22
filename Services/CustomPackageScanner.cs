@@ -47,7 +47,17 @@ namespace VPM.Services
                 {
                     try
                     {
-                        var folderItems = ScanFolderForPackages(folderPath, customBasePath);
+                        // Determine extensions to scan based on folder
+                        var extensions = new List<string> { "*.vam", "*.vab", "*.vaj" };
+                        
+                        // Add .vap for folders other than Atom\Person to avoid duplication with ScanPresets
+                        // ScanPresets in UnifiedCustomContentScanner already handles .vap in Atom\Person
+                        if (!folderPath.EndsWith(Path.Combine("Atom", "Person"), StringComparison.OrdinalIgnoreCase))
+                        {
+                            extensions.Add("*.vap");
+                        }
+
+                        var folderItems = ScanFolderForPackages(folderPath, customBasePath, extensions.ToArray());
                         items.AddRange(folderItems);
                     }
                     catch (Exception ex)
@@ -61,30 +71,33 @@ namespace VPM.Services
         }
 
         /// <summary>
-        /// Scans a specific folder for .vam package files
+        /// Scans a specific folder for package files
         /// </summary>
-        private List<CustomAtomItem> ScanFolderForPackages(string folderPath, string customBasePath)
+        private List<CustomAtomItem> ScanFolderForPackages(string folderPath, string customBasePath, string[] extensions)
         {
             var items = new List<CustomAtomItem>();
 
             try
             {
-                // Get all .vam files recursively from this folder and its subfolders
-                var vamFiles = Directory.GetFiles(folderPath, "*.vam", SearchOption.AllDirectories);
-
-                foreach (var vamPath in vamFiles)
+                foreach (var ext in extensions)
                 {
-                    try
+                    // Get all files recursively from this folder and its subfolders matching the extension
+                    var files = Directory.GetFiles(folderPath, ext, SearchOption.AllDirectories);
+
+                    foreach (var filePath in files)
                     {
-                        var item = CreateCustomPackageItemFromFile(vamPath, customBasePath);
-                        if (item != null)
+                        try
                         {
-                            items.Add(item);
+                            var item = CreateCustomPackageItemFromFile(filePath, customBasePath);
+                            if (item != null)
+                            {
+                                items.Add(item);
+                            }
                         }
-                    }
-                    catch (Exception ex)
-                    {
-                        System.Diagnostics.Debug.WriteLine($"Error processing file {vamPath}: {ex.Message}");
+                        catch (Exception ex)
+                        {
+                            System.Diagnostics.Debug.WriteLine($"Error processing file {filePath}: {ex.Message}");
+                        }
                     }
                 }
             }
@@ -110,6 +123,14 @@ namespace VPM.Services
             // Extract category from the folder structure
             var category = ExtractCategoryFromPath(vamPath, customBasePath);
 
+            // Determine content type based on extension
+            var extension = Path.GetExtension(vamPath).ToLowerInvariant();
+            var contentType = "Package";
+            if (extension == ".vap")
+            {
+                contentType = "Preset";
+            }
+
             var item = new CustomAtomItem
             {
                 Name = fileInfo.Name,
@@ -120,11 +141,38 @@ namespace VPM.Services
                 Subfolder = relativePath,
                 ModifiedDate = fileInfo.LastWriteTime,
                 FileSize = fileInfo.Length,
-                ContentType = "Package"
+                ContentType = contentType
             };
 
             // Parse dependencies from the .vam file if it's a JSON-based package
-            PresetScanner.ParsePresetDependencies(item);
+            // .vab is a binary asset bundle, so skip it
+            if (extension != ".vab")
+            {
+                PresetScanner.ParsePresetDependencies(item);
+            }
+
+            // If it's a preset (.vap), try to find parent files
+            if (extension == ".vap")
+            {
+                var parentName = PresetScanner.GetParentItemName(vamPath);
+                if (!string.IsNullOrEmpty(parentName))
+                {
+                    var directory = Path.GetDirectoryName(vamPath);
+                    var parentFiles = new List<string>();
+                    var parentExtensions = new[] { ".vaj", ".vam", ".jpg", ".vab" };
+                    
+                    foreach (var ext in parentExtensions)
+                    {
+                        var parentPath = Path.Combine(directory, parentName + ext);
+                        if (File.Exists(parentPath))
+                        {
+                            parentFiles.Add(parentPath);
+                        }
+                    }
+                    
+                    item.ParentFiles = parentFiles;
+                }
+            }
 
             return item;
         }

@@ -354,5 +354,68 @@ namespace VPM.Services
 
             return builtInPrefixes.Any(prefix => reference.StartsWith(prefix, StringComparison.OrdinalIgnoreCase));
         }
+
+        /// <summary>
+        /// Extracts the parent item name from a preset file by analyzing storable IDs
+        /// </summary>
+        public static string GetParentItemName(string vapPath)
+        {
+            try
+            {
+                if (!File.Exists(vapPath)) return null;
+
+                var jsonContent = File.ReadAllText(vapPath);
+                using (var doc = JsonDocument.Parse(jsonContent))
+                {
+                    var root = doc.RootElement;
+                    if (root.TryGetProperty("storables", out var storablesElement) && storablesElement.ValueKind == JsonValueKind.Array)
+                    {
+                        // Count occurrences of potential parent names
+                        var nameCounts = new Dictionary<string, int>();
+
+                        foreach (var storable in storablesElement.EnumerateArray())
+                        {
+                            if (storable.TryGetProperty("id", out var idElement))
+                            {
+                                var id = idElement.GetString();
+                                if (string.IsNullOrEmpty(id) || !id.Contains(":")) continue;
+
+                                var parts = id.Split(':');
+                                if (parts.Length < 2) continue;
+
+                                var namePart = parts[1];
+                                
+                                // Heuristic: Remove common suffixes to find the base name
+                                var suffixes = new[] { "Style", "WrapControl", "Sim", "Control", "Trigger", "Audio", "Light", "Physics", "Collider" };
+                                foreach (var suffix in suffixes)
+                                {
+                                    if (namePart.EndsWith(suffix, StringComparison.OrdinalIgnoreCase))
+                                    {
+                                        namePart = namePart.Substring(0, namePart.Length - suffix.Length);
+                                        break;
+                                    }
+                                }
+
+                                if (!string.IsNullOrEmpty(namePart))
+                                {
+                                    if (!nameCounts.ContainsKey(namePart))
+                                        nameCounts[namePart] = 0;
+                                    nameCounts[namePart]++;
+                                }
+                            }
+                        }
+
+                        // Return the most frequent name
+                        return nameCounts.OrderByDescending(x => x.Value).FirstOrDefault().Key;
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Error extracting parent item name: {ex.Message}");
+            }
+
+            return null;
+        }
     }
 }

@@ -570,6 +570,11 @@ namespace VPM.Models
         public List<string> TextureItems { get; set; } = new List<string>();
 
         /// <summary>
+        /// List of parent files associated with this preset (e.g. .vaj, .vam, .vab files)
+        /// </summary>
+        public List<string> ParentFiles { get; set; } = new List<string>();
+
+        /// <summary>
         /// Content type: "Preset" or "Scene"
         /// </summary>
         public string ContentType { get; set; } = "Preset";

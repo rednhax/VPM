@@ -637,7 +637,7 @@ namespace VPM
                         // Wire up extraction event
                         lazyImageTile.ExtractionRequested += async (s, e) =>
                         {
-                            await HandleImageExtractionAsync(e.VarFilePath, e.InternalImagePath);
+                            await HandleImageExtractionAsync(e.VarFilePath, e.InternalImagePath, e.IsRemoval);
                         };
                         
                         // Register with virtualization manager
@@ -2374,7 +2374,7 @@ namespace VPM
         /// <summary>
         /// Handles extraction of files from VAR archive when user clicks extract button
         /// </summary>
-        private async Task HandleImageExtractionAsync(string varFilePath, string internalImagePath)
+        private async Task HandleImageExtractionAsync(string varFilePath, string internalImagePath, bool isRemoval)
         {
             try
             {
@@ -2386,26 +2386,97 @@ namespace VPM
                     return;
                 }
 
-                // Extract the files
-                int extractedCount = await VarContentExtractor.ExtractRelatedFilesAsync(varFilePath, internalImagePath, gameFolder);
-
-                if (extractedCount > 0)
+                if (isRemoval)
                 {
-                    // Update the button state for this image
-                    UpdateImageExtractionState(internalImagePath, true);
+                    // Remove files
+                    int removedCount = await VarContentExtractor.RemoveRelatedFilesAsync(varFilePath, internalImagePath, gameFolder);
                     
-                    // Show success message
-                    MessageBox.Show($"Successfully extracted {extractedCount} file(s).", "Success", MessageBoxButton.OK, MessageBoxImage.Information);
+                    if (removedCount > 0)
+                    {
+                        UpdateImageExtractionState(internalImagePath, false);
+                    }
+                    else
+                    {
+                        // Force update state to false even if no files were removed (handles desync)
+                        UpdateImageExtractionState(internalImagePath, false);
+                    }
                 }
                 else
                 {
-                    MessageBox.Show("No related files found to extract.", "Info", MessageBoxButton.OK, MessageBoxImage.Information);
+                    // Extract the files
+                    int extractedCount = await VarContentExtractor.ExtractRelatedFilesAsync(varFilePath, internalImagePath, gameFolder);
+
+                    if (extractedCount > 0)
+                    {
+                        // Update the button state for this image
+                        UpdateImageExtractionState(internalImagePath, true);
+                        
+                        // Also update parent items if they were extracted
+                        await UpdateParentItemsStateAsync(varFilePath, internalImagePath, gameFolder);
+                    }
+                    else
+                    {
+                        // Check if files are already extracted to update UI
+                        bool isExtracted = await VarContentExtractor.AreRelatedFilesExtractedAsync(varFilePath, internalImagePath, gameFolder);
+                        if (isExtracted)
+                        {
+                            UpdateImageExtractionState(internalImagePath, true);
+                        }
+                        else
+                        {
+                            MessageBox.Show("No related files found to extract.", "Info", MessageBoxButton.OK, MessageBoxImage.Information);
+                        }
+                    }
                 }
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"Error extracting files: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                MessageBox.Show($"Error processing files: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
             }
+        }
+
+        /// <summary>
+        /// Updates the state of parent items that might have been extracted as dependencies
+        /// </summary>
+        private async Task UpdateParentItemsStateAsync(string varFilePath, string internalImagePath, string gameFolder)
+        {
+            try
+            {
+                // Get all LazyLoadImage controls
+                var allImages = GetAllLazyLoadImages(ImagesPanel);
+                
+                foreach (var image in allImages)
+                {
+                    if (string.IsNullOrEmpty(image.InternalImagePath) || image.InternalImagePath == internalImagePath)
+                        continue;
+                        
+                    // Check if this image is now extracted
+                    bool isExtracted = await VarContentExtractor.AreRelatedFilesExtractedAsync(varFilePath, image.InternalImagePath, gameFolder);
+                    if (isExtracted)
+                    {
+                        image.SetExtractionState(true);
+                    }
+                }
+            }
+            catch (Exception) { }
+        }
+
+        private List<LazyLoadImage> GetAllLazyLoadImages(DependencyObject parent)
+        {
+            var result = new List<LazyLoadImage>();
+            for (int i = 0; i < VisualTreeHelper.GetChildrenCount(parent); i++)
+            {
+                var child = VisualTreeHelper.GetChild(parent, i);
+                if (child is LazyLoadImage lazyImage)
+                {
+                    result.Add(lazyImage);
+                }
+                else
+                {
+                    result.AddRange(GetAllLazyLoadImages(child));
+                }
+            }
+            return result;
         }
 
         /// <summary>
