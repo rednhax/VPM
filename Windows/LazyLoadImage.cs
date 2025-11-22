@@ -260,24 +260,67 @@ namespace VPM.Windows
             {
                 Dispatcher.Invoke(() =>
                 {
+                    // Get category name
+                    var category = VarContentExtractor.GetCategoryFromPath(InternalImagePath);
+                    
+                    // Create content with icon and text
+                    var stackPanel = new StackPanel 
+                    { 
+                        Orientation = Orientation.Horizontal,
+                        VerticalAlignment = VerticalAlignment.Center
+                    };
+                    
+                    var iconBlock = new TextBlock 
+                    { 
+                        Margin = new Thickness(0, 0, 6, 0),
+                        FontWeight = FontWeights.Bold,
+                        VerticalAlignment = VerticalAlignment.Center,
+                        FontFamily = new FontFamily("Segoe UI Emoji, Segoe UI Symbol"),
+                        FontSize = 12
+                    };
+                    
+                    var textBlock = new TextBlock 
+                    { 
+                        Text = category,
+                        VerticalAlignment = VerticalAlignment.Center,
+                        FontWeight = FontWeights.SemiBold,
+                        FontSize = 12
+                    };
+                    
+                    stackPanel.Children.Add(iconBlock);
+                    stackPanel.Children.Add(textBlock);
+
                     if (isExtracted)
                     {
-                        // Show checkmark
-                        _extractButton.Content = "✓";
-                        _extractButton.Background = new SolidColorBrush(Color.FromArgb(140, 34, 177, 76)); // Semi-transparent green
-                        _extractButton.ToolTip = "Files already extracted";
+                        // Show checkmark with label
+                        iconBlock.Text = "✓";
+                        _extractButton.Content = stackPanel;
+                        // Neutral green for extracted state (not too bright)
+                        _extractButton.Background = new SolidColorBrush(Color.FromArgb(160, 60, 120, 70)); 
+                        _extractButton.ToolTip = $"Files for {category} are already extracted";
                         _extractButton.IsEnabled = false;
                     }
                     else
                     {
-                        // Show extract button with full category name
-                        var category = VarContentExtractor.GetCategoryFromPath(InternalImagePath);
-                        _extractButton.Content = category;
-                        _extractButton.Background = new SolidColorBrush(Color.FromArgb(140, 0, 120, 215)); // Semi-transparent blue
+                        // Determine icon based on category
+                        string iconText = "📥"; // Default
+                        if (string.Equals(category, "Hair", StringComparison.OrdinalIgnoreCase)) iconText = "✂️";
+                        else if (string.Equals(category, "Clothing", StringComparison.OrdinalIgnoreCase)) iconText = "👕";
+                        else if (string.Equals(category, "Skin", StringComparison.OrdinalIgnoreCase)) iconText = "🎨";
+                        else if (string.Equals(category, "Appearance", StringComparison.OrdinalIgnoreCase)) iconText = "👤";
+                        else if (string.Equals(category, "Scene", StringComparison.OrdinalIgnoreCase)) iconText = "🎬";
+                        
+                        // Show extract button with icon and label
+                        iconBlock.Text = iconText; 
+                        _extractButton.Content = stackPanel;
+                        // Transparent gray for available state
+                        _extractButton.Background = new SolidColorBrush(Color.FromArgb(120, 80, 80, 80)); 
                         _extractButton.ToolTip = $"Extract {category} files";
                         _extractButton.IsEnabled = true;
                     }
                     
+                    // Update padding for a more stylish look
+                    _extractButton.Padding = new Thickness(8, 5, 8, 5);
                     _extractButton.Visibility = Visibility.Visible;
                 });
             }
@@ -308,14 +351,14 @@ namespace VPM.Windows
             border.AppendChild(contentPresenter);
             template.VisualTree = border;
             
-            // Hover trigger - increase opacity
-            var hoverTrigger = new Trigger
-            {
-                Property = Button.IsMouseOverProperty,
-                Value = true
-            };
+            // Hover trigger (only when enabled)
+            var hoverTrigger = new MultiTrigger();
+            hoverTrigger.Conditions.Add(new Condition(Button.IsMouseOverProperty, true));
+            hoverTrigger.Conditions.Add(new Condition(Button.IsEnabledProperty, true));
+            
+            // Lighter transparent gray for hover
             hoverTrigger.Setters.Add(new Setter(Button.BackgroundProperty, 
-                new SolidColorBrush(Color.FromArgb(220, 0, 120, 215))));
+                new SolidColorBrush(Color.FromArgb(180, 100, 100, 100))));
             template.Triggers.Add(hoverTrigger);
             
             // Pressed trigger

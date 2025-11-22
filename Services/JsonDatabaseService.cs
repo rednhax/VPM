@@ -491,7 +491,7 @@ namespace VPM.Services
 
                                 packageList.Add(entry);
                             }
-                            catch (Exception ex)
+                            catch (Exception)
                             {
                                 // Error parsing package
                             }

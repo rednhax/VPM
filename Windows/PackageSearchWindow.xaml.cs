@@ -1454,7 +1454,7 @@ namespace VPM
         private long _size;
         private string _sizeFormatted;
         private string _statusText;
-        private string _statusColor;
+        private string _statusColor = "#00000000"; // Default to transparent to avoid BrushConverter null error
         private string _progressText;
         private Visibility _progressVisibility = Visibility.Collapsed;
         private string _downloadUrl;

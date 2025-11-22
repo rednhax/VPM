@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Text.Json;
 using System.Threading.Tasks;
 using SharpCompress.Archives;
 
@@ -100,6 +101,13 @@ namespace VPM.Services
                     }
                 }
 
+                // Now check for .vaj files and extract their dependencies
+                var vajEntry = relatedEntries.FirstOrDefault(e => e.Key.EndsWith(".vaj", StringComparison.OrdinalIgnoreCase));
+                if (vajEntry != null)
+                {
+                    extractedCount += ExtractVajDependencies(archive, vajEntry, gameFolder, directoryPath);
+                }
+
                 return extractedCount;
             }
             catch (Exception ex)
@@ -107,6 +115,141 @@ namespace VPM.Services
                 System.Diagnostics.Debug.WriteLine($"Error during extraction: {ex.Message}");
                 throw;
             }
+        }
+
+        /// <summary>
+        /// Extracts texture dependencies found in a .vaj file
+        /// </summary>
+        /// <param name="archive">The open archive</param>
+        /// <param name="vajEntry">The .vaj file entry</param>
+        /// <param name="gameFolder">Target game folder path</param>
+        /// <param name="directoryPath">Directory path where the .vaj file is located</param>
+        /// <returns>Number of dependency files extracted</returns>
+        private static int ExtractVajDependencies(IArchive archive, IArchiveEntry vajEntry, string gameFolder, string directoryPath)
+        {
+            int extractedCount = 0;
+
+            try
+            {
+                // Read the .vaj file content
+                string vajContent;
+                using (var stream = vajEntry.OpenEntryStream())
+                using (var reader = new StreamReader(stream))
+                {
+                    vajContent = reader.ReadToEnd();
+                }
+
+                // Parse the JSON to find texture dependencies
+                var dependencies = ExtractTextureDependenciesFromVaj(vajContent);
+
+                if (dependencies.Count == 0)
+                    return 0;
+
+                // Extract each dependency file from the same directory
+                foreach (var dependency in dependencies)
+                {
+                    try
+                    {
+                        // Construct the full path within the archive
+                        var dependencyPath = string.IsNullOrEmpty(directoryPath) 
+                            ? dependency 
+                            : $"{directoryPath}/{dependency}";
+
+                        // Find the dependency file in the archive
+                        var depEntry = archive.Entries
+                            .FirstOrDefault(e => e.Key.Equals(dependencyPath, StringComparison.OrdinalIgnoreCase) ||
+                                                 e.Key.Equals(dependencyPath.Replace('/', '\\'), StringComparison.OrdinalIgnoreCase));
+
+                        if (depEntry != null)
+                        {
+                            var targetPath = Path.Combine(gameFolder, depEntry.Key.Replace('/', Path.DirectorySeparatorChar));
+
+                            // Skip if file already exists
+                            if (File.Exists(targetPath))
+                                continue;
+
+                            // Ensure target directory exists
+                            var targetDirectory = Path.GetDirectoryName(targetPath);
+                            if (!Directory.Exists(targetDirectory))
+                            {
+                                Directory.CreateDirectory(targetDirectory);
+                            }
+
+                            // Extract the dependency file
+                            using (var entryStream = depEntry.OpenEntryStream())
+                            using (var fileStream = File.Create(targetPath))
+                            {
+                                entryStream.CopyTo(fileStream);
+                            }
+
+                            extractedCount++;
+                            System.Diagnostics.Debug.WriteLine($"Extracted dependency: {dependency}");
+                        }
+                        else
+                        {
+                            System.Diagnostics.Debug.WriteLine($"Dependency not found in archive: {dependency}");
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        System.Diagnostics.Debug.WriteLine($"Failed to extract dependency {dependency}: {ex.Message}");
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Error extracting .vaj dependencies: {ex.Message}");
+            }
+
+            return extractedCount;
+        }
+
+        /// <summary>
+        /// Extracts texture file names from .vaj JSON content
+        /// </summary>
+        /// <param name="vajContent">JSON content of the .vaj file</param>
+        /// <returns>List of texture file names</returns>
+        private static List<string> ExtractTextureDependenciesFromVaj(string vajContent)
+        {
+            var dependencies = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+            try
+            {
+                using var document = JsonDocument.Parse(vajContent);
+                var root = document.RootElement;
+
+                // Look for "storables" array
+                if (root.TryGetProperty("storables", out var storables) && storables.ValueKind == JsonValueKind.Array)
+                {
+                    foreach (var storable in storables.EnumerateArray())
+                    {
+                        // Look for customTexture properties
+                        foreach (var property in storable.EnumerateObject())
+                        {
+                            if (property.Name.StartsWith("customTexture_", StringComparison.OrdinalIgnoreCase) &&
+                                property.Value.ValueKind == JsonValueKind.String)
+                            {
+                                var textureFile = property.Value.GetString();
+                                if (!string.IsNullOrWhiteSpace(textureFile))
+                                {
+                                    // Support common texture file formats
+                                    var ext = Path.GetExtension(textureFile).ToLowerInvariant();
+                                    if (ext == ".jpg" || ext == ".jpeg" || ext == ".png" || ext == ".tga" || ext == ".dds" || ext == ".bmp")
+                                    {
+                                        dependencies.Add(textureFile);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Error parsing .vaj file: {ex.Message}");
+            }
+
+            return dependencies.ToList();
         }
 
         /// <summary>
@@ -165,11 +308,76 @@ namespace VPM.Services
                         return false;
                 }
 
+                // Also check for .vaj dependencies
+                var vajEntry = relatedEntries.FirstOrDefault(e => e.Key.EndsWith(".vaj", StringComparison.OrdinalIgnoreCase));
+                if (vajEntry != null)
+                {
+                    // Check if dependency files exist
+                    if (!AreDependenciesExtracted(archive, vajEntry, gameFolder, directoryPath))
+                        return false;
+                }
+
                 return true;
             }
             catch (Exception ex)
             {
                 System.Diagnostics.Debug.WriteLine($"Error checking extracted files: {ex.Message}");
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// Checks if all dependency files from a .vaj file exist in the game folder
+        /// </summary>
+        /// <param name="archive">The open archive</param>
+        /// <param name="vajEntry">The .vaj file entry</param>
+        /// <param name="gameFolder">Target game folder path</param>
+        /// <param name="directoryPath">Directory path where the .vaj file is located</param>
+        /// <returns>True if all dependencies exist, false otherwise</returns>
+        private static bool AreDependenciesExtracted(IArchive archive, IArchiveEntry vajEntry, string gameFolder, string directoryPath)
+        {
+            try
+            {
+                // Read the .vaj file content
+                string vajContent;
+                using (var stream = vajEntry.OpenEntryStream())
+                using (var reader = new StreamReader(stream))
+                {
+                    vajContent = reader.ReadToEnd();
+                }
+
+                // Parse the JSON to find texture dependencies
+                var dependencies = ExtractTextureDependenciesFromVaj(vajContent);
+
+                if (dependencies.Count == 0)
+                    return true; // No dependencies, so they're all "extracted"
+
+                // Check each dependency file
+                foreach (var dependency in dependencies)
+                {
+                    // Construct the full path within the archive
+                    var dependencyPath = string.IsNullOrEmpty(directoryPath)
+                        ? dependency
+                        : $"{directoryPath}/{dependency}";
+
+                    // Find the dependency file in the archive
+                    var depEntry = archive.Entries
+                        .FirstOrDefault(e => e.Key.Equals(dependencyPath, StringComparison.OrdinalIgnoreCase) ||
+                                             e.Key.Equals(dependencyPath.Replace('/', '\\'), StringComparison.OrdinalIgnoreCase));
+
+                    if (depEntry != null)
+                    {
+                        var targetPath = Path.Combine(gameFolder, depEntry.Key.Replace('/', Path.DirectorySeparatorChar));
+                        if (!File.Exists(targetPath))
+                            return false; // Dependency file doesn't exist
+                    }
+                }
+
+                return true;
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Error checking .vaj dependencies: {ex.Message}");
                 return false;
             }
         }
@@ -188,12 +396,41 @@ namespace VPM.Services
             // or Scene/[Category]/...
             if (parts.Length >= 2)
             {
+                // Special-case: VaM previews under Custom/Atom/Person/<Category>
+                // Handle common categories like Skin, Clothing, Hair, Appearance so labels are specific and not just "Atom"
+                // Examples:
+                //   "\\Custom\\Atom\\Person\\Skin\\..."     -> "Skin"
+                //   "\\Custom\\Atom\\Person\\Clothing\\..." -> "Clothing"
+                //   "\\Custom\\Atom\\Person\\Hair\\..."     -> "Hair"
+                //   "\\Custom\\Atom\\Person\\Appearance\\..." -> "Appearance"
+                if (parts.Length >= 4 &&
+                    parts[0].Equals("Custom", StringComparison.OrdinalIgnoreCase) &&
+                    parts[1].Equals("Atom", StringComparison.OrdinalIgnoreCase) &&
+                    parts[2].Equals("Person", StringComparison.OrdinalIgnoreCase))
+                {
+                    var subCategory = parts[3];
+                    if (subCategory.Equals("Skin", StringComparison.OrdinalIgnoreCase) ||
+                        subCategory.Equals("Clothing", StringComparison.OrdinalIgnoreCase) ||
+                        subCategory.Equals("Hair", StringComparison.OrdinalIgnoreCase) ||
+                        subCategory.Equals("Appearance", StringComparison.OrdinalIgnoreCase))
+                    {
+                        return subCategory;
+                    }
+                }
+
                 // Return the second part (category) if first part is Custom or Scene
                 if ((parts[0].Equals("Custom", StringComparison.OrdinalIgnoreCase) ||
                      parts[0].Equals("Scene", StringComparison.OrdinalIgnoreCase)) &&
                     parts.Length > 1)
                 {
                     return parts[1];
+                }
+
+                // Handle VaM typical scene preview path: Saves/scene/... -> label should be "Scene"
+                if (parts[0].Equals("Saves", StringComparison.OrdinalIgnoreCase) && parts.Length > 1 &&
+                    parts[1].Equals("scene", StringComparison.OrdinalIgnoreCase))
+                {
+                    return "Scene";
                 }
             }
 

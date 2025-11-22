@@ -4459,17 +4459,103 @@
                                                             Text="{Binding DisplayName}"
                                                             TextTrimming="CharacterEllipsis" />
                                                     </Border>
-                                                    <TextBox
-                                                        x:Name="SceneEditTextBox"
-                                                        Background="Transparent"
-                                                        BorderThickness="1"
-                                                        FontSize="14"
-                                                        FontWeight="Bold"
-                                                        KeyDown="SceneNameEdit_KeyDown"
-                                                        LostFocus="SceneNameEdit_LostFocus"
-                                                        Tag="{Binding}"
-                                                        Text="{Binding DisplayName, UpdateSourceTrigger=PropertyChanged}"
-                                                        Visibility="Collapsed" />
+                                                    <Border
+                                                        x:Name="SceneEditBorder"
+                                                        Padding="6,4"
+                                                        Background="#2D2D30"
+                                                        BorderBrush="#007ACC"
+                                                        BorderThickness="2"
+                                                        CornerRadius="4"
+                                                        Visibility="Collapsed">
+                                                        <Border.Effect>
+                                                            <DropShadowEffect
+                                                                BlurRadius="8"
+                                                                Direction="270"
+                                                                Opacity="0.5"
+                                                                ShadowDepth="2"
+                                                                Color="#007ACC" />
+                                                        </Border.Effect>
+                                                        <DockPanel>
+                                                            <Button
+                                                                x:Name="SceneCancelButton"
+                                                                Width="24"
+                                                                Height="24"
+                                                                Margin="4,0,0,0"
+                                                                Padding="0"
+                                                                Background="#DC3545"
+                                                                BorderBrush="#BB2D3B"
+                                                                BorderThickness="1"
+                                                                Click="SceneCancelButton_Click"
+                                                                Content="✕"
+                                                                DockPanel.Dock="Right"
+                                                                FontSize="11"
+                                                                FontWeight="Bold"
+                                                                Foreground="White"
+                                                                ToolTip="Cancel rename (ESC)">
+                                                                <Button.Style>
+                                                                    <Style TargetType="Button">
+                                                                        <Setter Property="Template">
+                                                                            <Setter.Value>
+                                                                                <ControlTemplate TargetType="Button">
+                                                                                    <Border
+                                                                                        Background="{TemplateBinding Background}"
+                                                                                        BorderBrush="{TemplateBinding BorderBrush}"
+                                                                                        BorderThickness="{TemplateBinding BorderThickness}"
+                                                                                        CornerRadius="3">
+                                                                                        <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                                                                    </Border>
+                                                                                </ControlTemplate>
+                                                                            </Setter.Value>
+                                                                        </Setter>
+                                                                        <Style.Triggers>
+                                                                            <Trigger Property="IsMouseOver" Value="True">
+                                                                                <Setter Property="Background" Value="#C82333" />
+                                                                                <Setter Property="BorderBrush" Value="#BD2130" />
+                                                                            </Trigger>
+                                                                            <Trigger Property="IsPressed" Value="True">
+                                                                                <Setter Property="Background" Value="#BD2130" />
+                                                                                <Setter Property="BorderBrush" Value="#B21F2D" />
+                                                                            </Trigger>
+                                                                        </Style.Triggers>
+                                                                    </Style>
+                                                                </Button.Style>
+                                                            </Button>
+                                                            <TextBox
+                                                                x:Name="SceneEditTextBox"
+                                                                Padding="4,2"
+                                                                VerticalContentAlignment="Center"
+                                                                Background="#1E1E1E"
+                                                                BorderBrush="#3F3F46"
+                                                                BorderThickness="1"
+                                                                CaretBrush="#FFFFFF"
+                                                                FontSize="14"
+                                                                FontWeight="Bold"
+                                                                Foreground="#FFFFFF"
+                                                                KeyDown="SceneNameEdit_KeyDown"
+                                                                LostFocus="SceneNameEdit_LostFocus"
+                                                                SelectionBrush="#007ACC"
+                                                                Tag="{Binding}"
+                                                                Text="{Binding DisplayName, UpdateSourceTrigger=PropertyChanged}">
+                                                                <TextBox.Style>
+                                                                    <Style TargetType="TextBox">
+                                                                        <Setter Property="Template">
+                                                                            <Setter.Value>
+                                                                                <ControlTemplate TargetType="TextBox">
+                                                                                    <Border
+                                                                                        Background="{TemplateBinding Background}"
+                                                                                        BorderBrush="{TemplateBinding BorderBrush}"
+                                                                                        BorderThickness="{TemplateBinding BorderThickness}"
+                                                                                        CornerRadius="3">
+                                                                                        <ScrollViewer x:Name="PART_ContentHost" />
+                                                                                    </Border>
+                                                                                </ControlTemplate>
+                                                                            </Setter.Value>
+                                                                        </Setter>
+                                                                    </Style>
+                                                                </TextBox.Style>
+                                                            </TextBox>
+                                                        </DockPanel>
+                                                    </Border>
                                                 </Grid>
                                                 <TextBlock
                                                     Margin="6,0,0,0"
@@ -4652,17 +4738,103 @@
                                                             Text="{Binding DisplayName}"
                                                             TextTrimming="CharacterEllipsis" />
                                                     </Border>
-                                                    <TextBox
-                                                        x:Name="PresetEditTextBox"
-                                                        Background="Transparent"
-                                                        BorderThickness="1"
-                                                        FontSize="12"
-                                                        FontWeight="SemiBold"
-                                                        KeyDown="PresetNameEdit_KeyDown"
-                                                        LostFocus="PresetNameEdit_LostFocus"
-                                                        Tag="{Binding}"
-                                                        Text="{Binding DisplayName, UpdateSourceTrigger=PropertyChanged}"
-                                                        Visibility="Collapsed" />
+                                                    <Border
+                                                        x:Name="PresetEditBorder"
+                                                        Padding="6,4"
+                                                        Background="#2D2D30"
+                                                        BorderBrush="#007ACC"
+                                                        BorderThickness="2"
+                                                        CornerRadius="4"
+                                                        Visibility="Collapsed">
+                                                        <Border.Effect>
+                                                            <DropShadowEffect
+                                                                BlurRadius="8"
+                                                                Direction="270"
+                                                                Opacity="0.5"
+                                                                ShadowDepth="2"
+                                                                Color="#007ACC" />
+                                                        </Border.Effect>
+                                                        <DockPanel>
+                                                            <Button
+                                                                x:Name="PresetCancelButton"
+                                                                Width="24"
+                                                                Height="24"
+                                                                Margin="4,0,0,0"
+                                                                Padding="0"
+                                                                Background="#DC3545"
+                                                                BorderBrush="#BB2D3B"
+                                                                BorderThickness="1"
+                                                                Click="PresetCancelButton_Click"
+                                                                Content="✕"
+                                                                DockPanel.Dock="Right"
+                                                                FontSize="11"
+                                                                FontWeight="Bold"
+                                                                Foreground="White"
+                                                                ToolTip="Cancel rename (ESC)">
+                                                                <Button.Style>
+                                                                    <Style TargetType="Button">
+                                                                        <Setter Property="Template">
+                                                                            <Setter.Value>
+                                                                                <ControlTemplate TargetType="Button">
+                                                                                    <Border
+                                                                                        Background="{TemplateBinding Background}"
+                                                                                        BorderBrush="{TemplateBinding BorderBrush}"
+                                                                                        BorderThickness="{TemplateBinding BorderThickness}"
+                                                                                        CornerRadius="3">
+                                                                                        <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                                                                    </Border>
+                                                                                </ControlTemplate>
+                                                                            </Setter.Value>
+                                                                        </Setter>
+                                                                        <Style.Triggers>
+                                                                            <Trigger Property="IsMouseOver" Value="True">
+                                                                                <Setter Property="Background" Value="#C82333" />
+                                                                                <Setter Property="BorderBrush" Value="#BD2130" />
+                                                                            </Trigger>
+                                                                            <Trigger Property="IsPressed" Value="True">
+                                                                                <Setter Property="Background" Value="#BD2130" />
+                                                                                <Setter Property="BorderBrush" Value="#B21F2D" />
+                                                                            </Trigger>
+                                                                        </Style.Triggers>
+                                                                    </Style>
+                                                                </Button.Style>
+                                                            </Button>
+                                                            <TextBox
+                                                                x:Name="PresetEditTextBox"
+                                                                Padding="4,2"
+                                                                VerticalContentAlignment="Center"
+                                                                Background="#1E1E1E"
+                                                                BorderBrush="#3F3F46"
+                                                                BorderThickness="1"
+                                                                CaretBrush="#FFFFFF"
+                                                                FontSize="12"
+                                                                FontWeight="SemiBold"
+                                                                Foreground="#FFFFFF"
+                                                                KeyDown="PresetNameEdit_KeyDown"
+                                                                LostFocus="PresetNameEdit_LostFocus"
+                                                                SelectionBrush="#007ACC"
+                                                                Tag="{Binding}"
+                                                                Text="{Binding DisplayName, UpdateSourceTrigger=PropertyChanged}">
+                                                                <TextBox.Style>
+                                                                    <Style TargetType="TextBox">
+                                                                        <Setter Property="Template">
+                                                                            <Setter.Value>
+                                                                                <ControlTemplate TargetType="TextBox">
+                                                                                    <Border
+                                                                                        Background="{TemplateBinding Background}"
+                                                                                        BorderBrush="{TemplateBinding BorderBrush}"
+                                                                                        BorderThickness="{TemplateBinding BorderThickness}"
+                                                                                        CornerRadius="3">
+                                                                                        <ScrollViewer x:Name="PART_ContentHost" />
+                                                                                    </Border>
+                                                                                </ControlTemplate>
+                                                                            </Setter.Value>
+                                                                        </Setter>
+                                                                    </Style>
+                                                                </TextBox.Style>
+                                                            </TextBox>
+                                                        </DockPanel>
+                                                    </Border>
                                                 </Grid>
                                                 <TextBlock
                                                     Margin="3,0,0,0"

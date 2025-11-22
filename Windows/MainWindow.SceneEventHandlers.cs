@@ -1928,17 +1928,41 @@ namespace VPM
         }
 
         /// <summary>
-        /// Handles double-click on custom atom item in the grid - opens folder and selects the file (Shift+Double-click)
+        /// Handles double-click on custom atom item in the grid - opens folder and selects the file
+        /// Double-clicking on the title triggers rename (handled by PresetName_PreviewMouseDown)
+        /// Double-clicking anywhere else on the row opens the file location
         /// </summary>
         private void CustomAtomDataGrid_MouseDoubleClick(object sender, MouseButtonEventArgs e)
         {
-            // Only handle if Shift is held
-            if (!Keyboard.IsKeyDown(Key.LeftShift) && !Keyboard.IsKeyDown(Key.RightShift))
-                return;
-
             try
             {
-                // Get the selected custom atom item
+                // Check if the click originated from the title area (PresetDisplayBorder or its children)
+                // If so, let the rename handler deal with it
+                var originalSource = e.OriginalSource as DependencyObject;
+                if (originalSource != null)
+                {
+                    // Walk up the visual tree to check if we're inside a Border named PresetDisplayBorder
+                    var current = originalSource;
+                    while (current != null)
+                    {
+                        if (current is Border border && border.Name == "PresetDisplayBorder")
+                        {
+                            // This is a click on the title area - don't handle it here
+                            // Let the PresetName_PreviewMouseDown handler deal with it
+                            return;
+                        }
+                        
+                        if (current is TextBox textBox && textBox.Name == "PresetEditTextBox")
+                        {
+                            // This is a click on the edit textbox - don't handle it
+                            return;
+                        }
+                        
+                        current = System.Windows.Media.VisualTreeHelper.GetParent(current);
+                    }
+                }
+
+                // Not clicking on title, so open the folder location
                 if (CustomAtomDataGrid?.SelectedItem is CustomAtomItem item && !string.IsNullOrEmpty(item.FilePath))
                 {
                     // Check if file exists
