@@ -393,7 +393,7 @@ namespace VPM.Services
                 {
                     var pngHeader = new byte[4];
                     stream.Position = 0;
-                    stream.Read(pngHeader, 0, 4);
+                    stream.ReadExactly(pngHeader, 0, 4);
                     if (pngHeader[0] == 0x89 && pngHeader[1] == 0x50 && pngHeader[2] == 0x4E && pngHeader[3] == 0x47)
                     {
                         stream.Position = 0;

@@ -642,6 +642,17 @@ namespace VPM.Services
         /// Example: C:\VAM\AddonPackages\Folder1\SubFolder2\Package.var -> "Folder1/SubFolder2"
         /// Returns null if package is directly in AddonPackages/AllPackages root (not in a subfolder)
         /// </summary>
+        public string GetPackageSubfolder(VarMetadata metadata)
+        {
+            return ExtractSubfolderFromMetadata(metadata);
+        }
+
+        /// <summary>
+        /// Extract full subfolder path from metadata using FilePath or Filename
+        /// Returns the full relative path under AddonPackages or AllPackages
+        /// Example: C:\VAM\AddonPackages\Folder1\SubFolder2\Package.var -> "Folder1/SubFolder2"
+        /// Returns null if package is directly in AddonPackages/AllPackages root (not in a subfolder)
+        /// </summary>
         private string ExtractSubfolderFromMetadata(VarMetadata metadata)
         {
             string pathToCheck = null;

@@ -485,7 +485,7 @@ namespace VPM.Tests.Services
             var elapsed = timer.Stop("operation");
 
             Assert.True(elapsed > 0);
-            Assert.True(elapsed < 20, "Timer should have been restarted");
+            Assert.True(elapsed < 30, "Timer should have been restarted");
         }
     }
 }

@@ -186,7 +186,7 @@ namespace VPM.Tests.Services
             var state = new SortingState();
 
             Assert.True(state.IsAscending);
-            Assert.NotNull(state.LastSortTime);
+            Assert.NotEqual(default(DateTime), state.LastSortTime);
         }
 
         [Fact]
@@ -197,7 +197,7 @@ namespace VPM.Tests.Services
 
             Assert.Equal(option, state.CurrentSortOption);
             Assert.False(state.IsAscending);
-            Assert.NotNull(state.LastSortTime);
+            Assert.NotEqual(default(DateTime), state.LastSortTime);
         }
 
         [Fact]

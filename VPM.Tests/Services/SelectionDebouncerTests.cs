@@ -336,13 +336,11 @@ namespace VPM.Tests.Services
         public async Task Cancel_DuringExecution_StopsWaiting()
         {
             var actionStarted = false;
-            var actionCompleted = false;
 
             Func<Task> action = async () =>
             {
                 actionStarted = true;
                 await Task.Delay(100);
-                actionCompleted = true;
             };
 
             var debouncer = new SelectionDebouncer(50, action);

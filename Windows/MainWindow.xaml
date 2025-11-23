@@ -27,6 +27,11 @@
         <local:ThumbnailPathConverter x:Key="ThumbnailPathConverter" />
         <System:Double x:Key="FilterToggleButtonSize">27</System:Double>
         <System:Double x:Key="LinkedButtonHeight">36</System:Double>
+        <Thickness x:Key="StandardMargin">6</Thickness>
+        <Thickness x:Key="StandardPadding">6</Thickness>
+        <SolidColorBrush x:Key="FocusBorderBrush" Color="#FF0078D7" />
+        <SolidColorBrush x:Key="AccentBrush" Color="#FF0078D7" />
+        <SolidColorBrush x:Key="AccentPressedBrush" Color="#007ACC" />
 
         <!--  Global Button Style with Blue Border Hover Effect  -->
         <Style x:Key="BlueHoverButtonStyle" TargetType="{x:Type Button}">
@@ -50,11 +55,11 @@
             </Setter>
             <Style.Triggers>
                 <Trigger Property="IsMouseOver" Value="True">
-                    <Setter Property="BorderBrush" Value="#FF0078D7" />
+                    <Setter Property="BorderBrush" Value="{StaticResource AccentBrush}" />
                     <Setter Property="BorderThickness" Value="1" />
                 </Trigger>
                 <Trigger Property="IsPressed" Value="True">
-                    <Setter Property="Background" Value="#007ACC" />
+                    <Setter Property="Background" Value="{StaticResource AccentPressedBrush}" />
                     <Setter Property="Foreground" Value="White" />
                 </Trigger>
                 <Trigger Property="IsEnabled" Value="False">
@@ -305,7 +310,7 @@
             </Setter>
             <Style.Triggers>
                 <Trigger Property="IsMouseOver" Value="True">
-                    <Setter Property="Background" Value="#1A1A1A" />
+                    <Setter Property="Background" Value="{DynamicResource {x:Static SystemColors.ControlBrushKey}}" />
                 </Trigger>
                 <Trigger Property="IsSelected" Value="True">
                     <Setter Property="Background" Value="{DynamicResource {x:Static SystemColors.HighlightBrushKey}}" />
@@ -384,9 +389,86 @@
 
         <!--  Dark Separator Style for Menu Bar  -->
         <Style x:Key="DarkMenuSeparatorStyle" TargetType="{x:Type Separator}">
-            <Setter Property="Background" Value="#3E3E42" />
+            <Setter Property="Background" Value="{DynamicResource {x:Static SystemColors.ActiveBorderBrushKey}}" />
             <Setter Property="Height" Value="1" />
             <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
+
+        <!--  Shared Filter ListBoxItem Style  -->
+        <Style x:Key="FilterListBoxItemStyle" TargetType="ListBoxItem">
+            <Setter Property="Padding" Value="6" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ListBoxItem">
+                        <Border Padding="{TemplateBinding Padding}" Background="{TemplateBinding Background}">
+                            <TextBlock
+                                Margin="6,0,0,0"
+                                Text="{Binding}"
+                                TextTrimming="CharacterEllipsis"
+                                TextWrapping="Wrap" />
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+            <Style.Triggers>
+                <Trigger Property="IsSelected" Value="True">
+                    <Setter Property="Background" Value="{DynamicResource {x:Static SystemColors.HighlightBrushKey}}" />
+                    <Setter Property="Foreground" Value="{DynamicResource {x:Static SystemColors.HighlightTextBrushKey}}" />
+                    <Setter Property="FontWeight" Value="Bold" />
+                </Trigger>
+                <Trigger Property="IsKeyboardFocused" Value="True">
+                    <Setter Property="BorderBrush" Value="{StaticResource FocusBorderBrush}" />
+                    <Setter Property="BorderThickness" Value="1" />
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+
+        <!--  Shared Launch Button Style  -->
+        <Style x:Key="LaunchButtonStyle" TargetType="Button">
+            <Setter Property="Background" Value="{DynamicResource ButtonBackgroundBrush}" />
+            <Setter Property="Foreground" Value="{DynamicResource TextBrush}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource ControlBorderBrush}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="Padding" Value="8,4" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border
+                            Padding="{TemplateBinding Padding}"
+                            Background="{TemplateBinding Background}"
+                            BorderBrush="{TemplateBinding BorderBrush}"
+                            BorderThickness="{TemplateBinding BorderThickness}"
+                            CornerRadius="4">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+            <Style.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter Property="Background" Value="{DynamicResource ButtonHoverBrush}" />
+                </Trigger>
+                <Trigger Property="IsPressed" Value="True">
+                    <Setter Property="Background" Value="{DynamicResource ButtonHoverBrush}" />
+                </Trigger>
+                <Trigger Property="Visibility" Value="Visible">
+                    <Trigger.EnterActions>
+                        <BeginStoryboard>
+                            <Storyboard>
+                                <DoubleAnimation
+                                    Storyboard.TargetProperty="Opacity"
+                                    From="0.0"
+                                    To="1.0"
+                                    Duration="0:0:0.15">
+                                    <DoubleAnimation.EasingFunction>
+                                        <QuadraticEase EasingMode="EaseOut" />
+                                    </DoubleAnimation.EasingFunction>
+                                </DoubleAnimation>
+                            </Storyboard>
+                        </BeginStoryboard>
+                    </Trigger.EnterActions>
+                </Trigger>
+            </Style.Triggers>
         </Style>
 
         <!--  Custom ScrollViewer with left-side scrollbar  -->
@@ -549,174 +631,30 @@
                 <Button
                     x:Name="DesktopButton"
                     Margin="0,0,3,0"
-                    Padding="8,4"
                     Click="LaunchDesktop_Click"
                     Content="🖥️ Desktop"
+                    Style="{StaticResource LaunchButtonStyle}"
                     ToolTip="Launch VirtAMate in Desktop mode"
-                    Visibility="Collapsed">
-                    <Button.Style>
-                        <Style TargetType="Button">
-                            <Setter Property="Background" Value="{DynamicResource ButtonBackgroundBrush}" />
-                            <Setter Property="Foreground" Value="{DynamicResource TextBrush}" />
-                            <Setter Property="BorderBrush" Value="{DynamicResource ControlBorderBrush}" />
-                            <Setter Property="BorderThickness" Value="1" />
-                            <Setter Property="Template">
-                                <Setter.Value>
-                                    <ControlTemplate TargetType="Button">
-                                        <Border
-                                            Padding="{TemplateBinding Padding}"
-                                            Background="{TemplateBinding Background}"
-                                            BorderBrush="{TemplateBinding BorderBrush}"
-                                            BorderThickness="{TemplateBinding BorderThickness}"
-                                            CornerRadius="4">
-                                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
-                                        </Border>
-                                    </ControlTemplate>
-                                </Setter.Value>
-                            </Setter>
-                            <Style.Triggers>
-                                <Trigger Property="IsMouseOver" Value="True">
-                                    <Setter Property="Background" Value="{DynamicResource ButtonHoverBrush}" />
-                                </Trigger>
-                                <Trigger Property="IsPressed" Value="True">
-                                    <Setter Property="Background" Value="{DynamicResource ButtonHoverBrush}" />
-                                </Trigger>
-                                <Trigger Property="Visibility" Value="Visible">
-                                    <Trigger.EnterActions>
-                                        <BeginStoryboard>
-                                            <Storyboard>
-                                                <DoubleAnimation
-                                                    Storyboard.TargetProperty="Opacity"
-                                                    From="0.0"
-                                                    To="1.0"
-                                                    Duration="0:0:0">
-                                                    <DoubleAnimation.EasingFunction>
-                                                        <QuadraticEase EasingMode="EaseOut" />
-                                                    </DoubleAnimation.EasingFunction>
-                                                </DoubleAnimation>
-                                            </Storyboard>
-                                        </BeginStoryboard>
-                                    </Trigger.EnterActions>
-                                </Trigger>
-                            </Style.Triggers>
-                        </Style>
-                    </Button.Style>
-                </Button>
+                    Visibility="Collapsed" />
 
                 <!--  Config Button (hidden by default)  -->
                 <Button
                     x:Name="ConfigButton"
                     Margin="0,0,3,0"
-                    Padding="8,4"
                     Click="LaunchConfig_Click"
                     Content="⚙️ Custom"
+                    Style="{StaticResource LaunchButtonStyle}"
                     ToolTip="Launch VirtAMate with screen selector"
-                    Visibility="Collapsed">
-                    <Button.Style>
-                        <Style TargetType="Button">
-                            <Setter Property="Background" Value="{DynamicResource ButtonBackgroundBrush}" />
-                            <Setter Property="Foreground" Value="{DynamicResource TextBrush}" />
-                            <Setter Property="BorderBrush" Value="{DynamicResource ControlBorderBrush}" />
-                            <Setter Property="BorderThickness" Value="1" />
-                            <Setter Property="Template">
-                                <Setter.Value>
-                                    <ControlTemplate TargetType="Button">
-                                        <Border
-                                            Padding="{TemplateBinding Padding}"
-                                            Background="{TemplateBinding Background}"
-                                            BorderBrush="{TemplateBinding BorderBrush}"
-                                            BorderThickness="{TemplateBinding BorderThickness}"
-                                            CornerRadius="4">
-                                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
-                                        </Border>
-                                    </ControlTemplate>
-                                </Setter.Value>
-                            </Setter>
-                            <Style.Triggers>
-                                <Trigger Property="IsMouseOver" Value="True">
-                                    <Setter Property="Background" Value="{DynamicResource ButtonHoverBrush}" />
-                                </Trigger>
-                                <Trigger Property="IsPressed" Value="True">
-                                    <Setter Property="Background" Value="{DynamicResource ButtonHoverBrush}" />
-                                </Trigger>
-                                <Trigger Property="Visibility" Value="Visible">
-                                    <Trigger.EnterActions>
-                                        <BeginStoryboard>
-                                            <Storyboard>
-                                                <DoubleAnimation
-                                                    Storyboard.TargetProperty="Opacity"
-                                                    From="0.0"
-                                                    To="1.0"
-                                                    Duration="0:0:0.15">
-                                                    <DoubleAnimation.EasingFunction>
-                                                        <QuadraticEase EasingMode="EaseOut" />
-                                                    </DoubleAnimation.EasingFunction>
-                                                </DoubleAnimation>
-                                            </Storyboard>
-                                        </BeginStoryboard>
-                                    </Trigger.EnterActions>
-                                </Trigger>
-                            </Style.Triggers>
-                        </Style>
-                    </Button.Style>
-                </Button>
+                    Visibility="Collapsed" />
 
                 <!--  Cancel Button (hidden by default)  -->
                 <Button
                     x:Name="CancelPlayButton"
-                    Padding="8,4"
                     Click="CancelPlay_Click"
                     Content="✕ Cancel"
+                    Style="{StaticResource LaunchButtonStyle}"
                     ToolTip="Cancel and return to main buttons"
-                    Visibility="Collapsed">
-                    <Button.Style>
-                        <Style TargetType="Button">
-                            <Setter Property="Background" Value="{DynamicResource ButtonBackgroundBrush}" />
-                            <Setter Property="Foreground" Value="{DynamicResource TextBrush}" />
-                            <Setter Property="BorderBrush" Value="{DynamicResource ControlBorderBrush}" />
-                            <Setter Property="BorderThickness" Value="1" />
-                            <Setter Property="Template">
-                                <Setter.Value>
-                                    <ControlTemplate TargetType="Button">
-                                        <Border
-                                            Padding="{TemplateBinding Padding}"
-                                            Background="{TemplateBinding Background}"
-                                            BorderBrush="{TemplateBinding BorderBrush}"
-                                            BorderThickness="{TemplateBinding BorderThickness}"
-                                            CornerRadius="4">
-                                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
-                                        </Border>
-                                    </ControlTemplate>
-                                </Setter.Value>
-                            </Setter>
-                            <Style.Triggers>
-                                <Trigger Property="IsMouseOver" Value="True">
-                                    <Setter Property="Background" Value="{DynamicResource ButtonHoverBrush}" />
-                                </Trigger>
-                                <Trigger Property="IsPressed" Value="True">
-                                    <Setter Property="Background" Value="{DynamicResource ButtonHoverBrush}" />
-                                </Trigger>
-                                <Trigger Property="Visibility" Value="Visible">
-                                    <Trigger.EnterActions>
-                                        <BeginStoryboard>
-                                            <Storyboard>
-                                                <DoubleAnimation
-                                                    Storyboard.TargetProperty="Opacity"
-                                                    From="0.0"
-                                                    To="1.0"
-                                                    Duration="0:0:0.15">
-                                                    <DoubleAnimation.EasingFunction>
-                                                        <QuadraticEase EasingMode="EaseOut" />
-                                                    </DoubleAnimation.EasingFunction>
-                                                </DoubleAnimation>
-                                            </Storyboard>
-                                        </BeginStoryboard>
-                                    </Trigger.EnterActions>
-                                </Trigger>
-                            </Style.Triggers>
-                        </Style>
-                    </Button.Style>
-                </Button>
+                    Visibility="Collapsed" />
             </StackPanel>
 
             <!--  Menu Button on Left (App Title + Menu)  -->
@@ -942,10 +880,10 @@
                             Padding="6,6"
                             HorizontalAlignment="Stretch"
                             VerticalContentAlignment="Center"
-                            Background="#2d2d2d"
-                            BorderBrush="#404040"
+                            Background="{DynamicResource {x:Static SystemColors.ControlBrushKey}}"
+                            BorderBrush="{DynamicResource {x:Static SystemColors.ActiveBorderBrushKey}}"
                             BorderThickness="1"
-                            Foreground="White"
+                            Foreground="{DynamicResource {x:Static SystemColors.ControlTextBrushKey}}"
                             PreviewMouseRightButtonDown="ContentModeDropdown_PreviewMouseRightButtonDown"
                             SelectionChanged="ContentModeDropdown_SelectionChanged"
                             ToolTip="Left-click: Open dropdown | Right-click: Cycle to next mode">
@@ -975,15 +913,15 @@
                                                     </Border>
                                                     <ControlTemplate.Triggers>
                                                         <Trigger Property="IsMouseOver" Value="True">
-                                                            <Setter Property="BorderBrush" Value="#FF0078D7" />
+                                                            <Setter Property="BorderBrush" Value="{StaticResource AccentBrush}" />
                                                             <Setter Property="BorderThickness" Value="1" />
                                                         </Trigger>
                                                         <Trigger Property="IsPressed" Value="True">
-                                                            <Setter Property="Background" Value="#007ACC" />
+                                                            <Setter Property="Background" Value="{StaticResource AccentPressedBrush}" />
                                                             <Setter Property="Foreground" Value="White" />
                                                         </Trigger>
                                                         <Trigger Property="IsChecked" Value="True">
-                                                            <Setter Property="BorderBrush" Value="#FF0078D7" />
+                                                            <Setter Property="BorderBrush" Value="{StaticResource AccentBrush}" />
                                                             <Setter Property="BorderThickness" Value="1" />
                                                         </Trigger>
                                                     </ControlTemplate.Triggers>
@@ -1195,35 +1133,7 @@
                                         VirtualizingStackPanel.IsVirtualizing="True"
                                         VirtualizingStackPanel.VirtualizationMode="Recycling">
                                         <ListBox.ItemContainerStyle>
-                                            <Style TargetType="ListBoxItem">
-                                                <Setter Property="Padding" Value="3" />
-                                                <Setter Property="Margin" Value="0,3,0,0" />
-                                                <Setter Property="Template">
-                                                    <Setter.Value>
-                                                        <ControlTemplate TargetType="ListBoxItem">
-                                                            <Border
-                                                                Padding="{TemplateBinding Padding}"
-                                                                Background="{TemplateBinding Background}"
-                                                                CornerRadius="6">
-                                                                <TextBlock
-                                                                    Margin="6,0,0,0"
-                                                                    Text="{Binding}"
-                                                                    TextTrimming="CharacterEllipsis"
-                                                                    TextWrapping="Wrap" />
-                                                            </Border>
-                                                        </ControlTemplate>
-                                                    </Setter.Value>
-                                                </Setter>
-                                                <Style.Triggers>
-                                                    <Trigger Property="IsMouseOver" Value="True">
-                                                        <Setter Property="Background" Value="#FF3D3D3D" />
-                                                    </Trigger>
-                                                    <Trigger Property="IsSelected" Value="True">
-                                                        <Setter Property="Background" Value="#FF4A4A4A" />
-                                                        <Setter Property="Foreground" Value="#FFFFFFFF" />
-                                                    </Trigger>
-                                                </Style.Triggers>
-                                            </Style>
+                                            <StaticResource ResourceKey="FilterListBoxItemStyle" />
                                         </ListBox.ItemContainerStyle>
                                         <!--  Date filter items will be populated dynamically with package counts  -->
                                     </ListBox>
@@ -1369,35 +1279,7 @@
                                         VirtualizingStackPanel.IsVirtualizing="True"
                                         VirtualizingStackPanel.VirtualizationMode="Recycling">
                                         <ListBox.ItemContainerStyle>
-                                            <Style TargetType="ListBoxItem">
-                                                <Setter Property="Padding" Value="3" />
-                                                <Setter Property="Margin" Value="0,3,0,0" />
-                                                <Setter Property="Template">
-                                                    <Setter.Value>
-                                                        <ControlTemplate TargetType="ListBoxItem">
-                                                            <Border
-                                                                Padding="{TemplateBinding Padding}"
-                                                                Background="{TemplateBinding Background}"
-                                                                CornerRadius="6">
-                                                                <TextBlock
-                                                                    Margin="6,0,0,0"
-                                                                    Text="{Binding}"
-                                                                    TextTrimming="CharacterEllipsis"
-                                                                    TextWrapping="Wrap" />
-                                                            </Border>
-                                                        </ControlTemplate>
-                                                    </Setter.Value>
-                                                </Setter>
-                                                <Style.Triggers>
-                                                    <Trigger Property="IsMouseOver" Value="True">
-                                                        <Setter Property="Background" Value="#FF3D3D3D" />
-                                                    </Trigger>
-                                                    <Trigger Property="IsSelected" Value="True">
-                                                        <Setter Property="Background" Value="#FF4A4A4A" />
-                                                        <Setter Property="Foreground" Value="#FFFFFFFF" />
-                                                    </Trigger>
-                                                </Style.Triggers>
-                                            </Style>
+                                            <StaticResource ResourceKey="FilterListBoxItemStyle" />
                                         </ListBox.ItemContainerStyle>
                                         <!--  Status items will be populated dynamically  -->
                                     </ListBox>
@@ -1536,35 +1418,7 @@
                                         VirtualizingStackPanel.IsVirtualizing="True"
                                         VirtualizingStackPanel.VirtualizationMode="Recycling">
                                         <ListBox.ItemContainerStyle>
-                                            <Style TargetType="ListBoxItem">
-                                                <Setter Property="Padding" Value="3" />
-                                                <Setter Property="Margin" Value="0,3,0,0" />
-                                                <Setter Property="Template">
-                                                    <Setter.Value>
-                                                        <ControlTemplate TargetType="ListBoxItem">
-                                                            <Border
-                                                                Padding="{TemplateBinding Padding}"
-                                                                Background="{TemplateBinding Background}"
-                                                                CornerRadius="6">
-                                                                <TextBlock
-                                                                    Margin="6,0,0,0"
-                                                                    Text="{Binding}"
-                                                                    TextTrimming="CharacterEllipsis"
-                                                                    TextWrapping="Wrap" />
-                                                            </Border>
-                                                        </ControlTemplate>
-                                                    </Setter.Value>
-                                                </Setter>
-                                                <Style.Triggers>
-                                                    <Trigger Property="IsMouseOver" Value="True">
-                                                        <Setter Property="Background" Value="#FF3D3D3D" />
-                                                    </Trigger>
-                                                    <Trigger Property="IsSelected" Value="True">
-                                                        <Setter Property="Background" Value="#FF4A4A4A" />
-                                                        <Setter Property="Foreground" Value="#FFFFFFFF" />
-                                                    </Trigger>
-                                                </Style.Triggers>
-                                            </Style>
+                                            <StaticResource ResourceKey="FilterListBoxItemStyle" />
                                         </ListBox.ItemContainerStyle>
                                         <!--  Content types will be populated dynamically  -->
                                     </ListBox>
@@ -1575,7 +1429,7 @@
                                     <!--  Collapsed state label (shown when hidden)  -->
                                     <Grid
                                         x:Name="CreatorsFilterCollapsedGrid"
-                                        Margin="0,0,0,5"
+                                        Margin="0,0,0,6"
                                         Visibility="Collapsed">
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="Auto" />
@@ -1744,7 +1598,7 @@
                                     <!--  Collapsed state (shown when hidden)  -->
                                     <Grid
                                         x:Name="SubfoldersFilterCollapsedGrid"
-                                        Margin="0,0,0,5"
+                                        Margin="0,0,0,6"
                                         Visibility="Collapsed">
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="Auto" />
@@ -1872,33 +1726,7 @@
                                         VirtualizingStackPanel.IsVirtualizing="True"
                                         VirtualizingStackPanel.VirtualizationMode="Recycling">
                                         <ListBox.ItemContainerStyle>
-                                            <Style TargetType="ListBoxItem">
-                                                <Setter Property="Padding" Value="5" />
-                                                <Setter Property="Template">
-                                                    <Setter.Value>
-                                                        <ControlTemplate TargetType="ListBoxItem">
-                                                            <Border Padding="{TemplateBinding Padding}" Background="{TemplateBinding Background}">
-                                                                <TextBlock
-                                                                    Margin="6,0,0,0"
-                                                                    Text="{Binding}"
-                                                                    TextTrimming="CharacterEllipsis"
-                                                                    TextWrapping="Wrap" />
-                                                            </Border>
-                                                        </ControlTemplate>
-                                                    </Setter.Value>
-                                                </Setter>
-                                                <Style.Triggers>
-                                                    <Trigger Property="IsSelected" Value="True">
-                                                        <Setter Property="Background" Value="{DynamicResource {x:Static SystemColors.HighlightBrushKey}}" />
-                                                        <Setter Property="Foreground" Value="{DynamicResource {x:Static SystemColors.HighlightTextBrushKey}}" />
-                                                        <Setter Property="FontWeight" Value="Bold" />
-                                                    </Trigger>
-                                                    <Trigger Property="IsKeyboardFocused" Value="True">
-                                                        <Setter Property="BorderBrush" Value="#FF6200EA" />
-                                                        <Setter Property="BorderThickness" Value="1" />
-                                                    </Trigger>
-                                                </Style.Triggers>
-                                            </Style>
+                                            <StaticResource ResourceKey="FilterListBoxItemStyle" />
                                         </ListBox.ItemContainerStyle>
                                         <!--  Subfolders will be populated dynamically  -->
                                     </ListBox>
@@ -1909,7 +1737,7 @@
                                     <!--  Collapsed state label (shown when hidden)  -->
                                     <Grid
                                         x:Name="LicenseTypeFilterCollapsedGrid"
-                                        Margin="0,0,0,5"
+                                        Margin="0,0,0,6"
                                         Visibility="Collapsed">
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="Auto" />
@@ -2037,33 +1865,7 @@
                                         VirtualizingStackPanel.IsVirtualizing="True"
                                         VirtualizingStackPanel.VirtualizationMode="Recycling">
                                         <ListBox.ItemContainerStyle>
-                                            <Style TargetType="ListBoxItem">
-                                                <Setter Property="Padding" Value="5" />
-                                                <Setter Property="Template">
-                                                    <Setter.Value>
-                                                        <ControlTemplate TargetType="ListBoxItem">
-                                                            <Border Padding="{TemplateBinding Padding}" Background="{TemplateBinding Background}">
-                                                                <TextBlock
-                                                                    Margin="6,0,0,0"
-                                                                    Text="{Binding}"
-                                                                    TextTrimming="CharacterEllipsis"
-                                                                    TextWrapping="Wrap" />
-                                                            </Border>
-                                                        </ControlTemplate>
-                                                    </Setter.Value>
-                                                </Setter>
-                                                <Style.Triggers>
-                                                    <Trigger Property="IsSelected" Value="True">
-                                                        <Setter Property="Background" Value="{DynamicResource {x:Static SystemColors.HighlightBrushKey}}" />
-                                                        <Setter Property="Foreground" Value="{DynamicResource {x:Static SystemColors.HighlightTextBrushKey}}" />
-                                                        <Setter Property="FontWeight" Value="Bold" />
-                                                    </Trigger>
-                                                    <Trigger Property="IsKeyboardFocused" Value="True">
-                                                        <Setter Property="BorderBrush" Value="#FF6200EA" />
-                                                        <Setter Property="BorderThickness" Value="1" />
-                                                    </Trigger>
-                                                </Style.Triggers>
-                                            </Style>
+                                            <StaticResource ResourceKey="FilterListBoxItemStyle" />
                                         </ListBox.ItemContainerStyle>
                                         <!--  License types will be populated dynamically  -->
                                     </ListBox>
@@ -2074,7 +1876,7 @@
                                     <!--  Collapsed state (shown when hidden)  -->
                                     <Grid
                                         x:Name="FileSizeFilterCollapsedGrid"
-                                        Margin="0,0,0,5"
+                                        Margin="0,0,0,6"
                                         Visibility="Collapsed">
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="Auto" />
@@ -2127,7 +1929,7 @@
                                     </Grid>
 
                                     <!--  Expanded state (shown when visible)  -->
-                                    <Grid x:Name="FileSizeFilterExpandedGrid" Margin="0,0,0,5">
+                                    <Grid x:Name="FileSizeFilterExpandedGrid" Margin="0,0,0,6">
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="Auto" />
                                             <ColumnDefinition Width="*" />
@@ -2164,33 +1966,7 @@
                                         VirtualizingStackPanel.IsVirtualizing="True"
                                         VirtualizingStackPanel.VirtualizationMode="Recycling">
                                         <ListBox.ItemContainerStyle>
-                                            <Style TargetType="ListBoxItem">
-                                                <Setter Property="Padding" Value="5" />
-                                                <Setter Property="Template">
-                                                    <Setter.Value>
-                                                        <ControlTemplate TargetType="ListBoxItem">
-                                                            <Border Padding="{TemplateBinding Padding}" Background="{TemplateBinding Background}">
-                                                                <TextBlock
-                                                                    Margin="6,0,0,0"
-                                                                    Text="{Binding}"
-                                                                    TextTrimming="CharacterEllipsis"
-                                                                    TextWrapping="Wrap" />
-                                                            </Border>
-                                                        </ControlTemplate>
-                                                    </Setter.Value>
-                                                </Setter>
-                                                <Style.Triggers>
-                                                    <Trigger Property="IsSelected" Value="True">
-                                                        <Setter Property="Background" Value="{DynamicResource {x:Static SystemColors.HighlightBrushKey}}" />
-                                                        <Setter Property="Foreground" Value="{DynamicResource {x:Static SystemColors.HighlightTextBrushKey}}" />
-                                                        <Setter Property="FontWeight" Value="Bold" />
-                                                    </Trigger>
-                                                    <Trigger Property="IsKeyboardFocused" Value="True">
-                                                        <Setter Property="BorderBrush" Value="#FF6200EA" />
-                                                        <Setter Property="BorderThickness" Value="1" />
-                                                    </Trigger>
-                                                </Style.Triggers>
-                                            </Style>
+                                            <StaticResource ResourceKey="FilterListBoxItemStyle" />
                                         </ListBox.ItemContainerStyle>
                                         <!--  File size ranges will be populated dynamically  -->
                                     </ListBox>
@@ -2200,7 +1976,7 @@
                                 <StackPanel Margin="0,6,0,0">
                                     <Grid
                                         x:Name="DamagedFilterCollapsedGrid"
-                                        Margin="0,0,0,5"
+                                        Margin="0,0,0,6"
                                         Visibility="Collapsed">
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="Auto" />
@@ -2252,7 +2028,7 @@
                                             ToolTip="Move filter down" />
                                     </Grid>
 
-                                    <Grid x:Name="DamagedFilterExpandedGrid" Margin="0,0,0,5">
+                                    <Grid x:Name="DamagedFilterExpandedGrid" Margin="0,0,0,6">
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="Auto" />
                                             <ColumnDefinition Width="*" />
@@ -2289,33 +2065,7 @@
                                         VirtualizingStackPanel.IsVirtualizing="True"
                                         VirtualizingStackPanel.VirtualizationMode="Recycling">
                                         <ListBox.ItemContainerStyle>
-                                            <Style TargetType="ListBoxItem">
-                                                <Setter Property="Padding" Value="5" />
-                                                <Setter Property="Template">
-                                                    <Setter.Value>
-                                                        <ControlTemplate TargetType="ListBoxItem">
-                                                            <Border Padding="{TemplateBinding Padding}" Background="{TemplateBinding Background}">
-                                                                <TextBlock
-                                                                    Margin="6,0,0,0"
-                                                                    Text="{Binding}"
-                                                                    TextTrimming="CharacterEllipsis"
-                                                                    TextWrapping="Wrap" />
-                                                            </Border>
-                                                        </ControlTemplate>
-                                                    </Setter.Value>
-                                                </Setter>
-                                                <Style.Triggers>
-                                                    <Trigger Property="IsSelected" Value="True">
-                                                        <Setter Property="Background" Value="{DynamicResource {x:Static SystemColors.HighlightBrushKey}}" />
-                                                        <Setter Property="Foreground" Value="{DynamicResource {x:Static SystemColors.HighlightTextBrushKey}}" />
-                                                        <Setter Property="FontWeight" Value="Bold" />
-                                                    </Trigger>
-                                                    <Trigger Property="IsKeyboardFocused" Value="True">
-                                                        <Setter Property="BorderBrush" Value="#FF6200EA" />
-                                                        <Setter Property="BorderThickness" Value="1" />
-                                                    </Trigger>
-                                                </Style.Triggers>
-                                            </Style>
+                                            <StaticResource ResourceKey="FilterListBoxItemStyle" />
                                         </ListBox.ItemContainerStyle>
                                         <!--  Damaged packages will be populated dynamically  -->
                                     </ListBox>
@@ -2462,33 +2212,7 @@
                                         VirtualizingStackPanel.IsVirtualizing="True"
                                         VirtualizingStackPanel.VirtualizationMode="Recycling">
                                         <ListBox.ItemContainerStyle>
-                                            <Style TargetType="ListBoxItem">
-                                                <Setter Property="Padding" Value="5" />
-                                                <Setter Property="Template">
-                                                    <Setter.Value>
-                                                        <ControlTemplate TargetType="ListBoxItem">
-                                                            <Border Padding="{TemplateBinding Padding}" Background="{TemplateBinding Background}">
-                                                                <TextBlock
-                                                                    Margin="6,0,0,0"
-                                                                    Text="{Binding}"
-                                                                    TextTrimming="CharacterEllipsis"
-                                                                    TextWrapping="Wrap" />
-                                                            </Border>
-                                                        </ControlTemplate>
-                                                    </Setter.Value>
-                                                </Setter>
-                                                <Style.Triggers>
-                                                    <Trigger Property="IsSelected" Value="True">
-                                                        <Setter Property="Background" Value="{DynamicResource {x:Static SystemColors.HighlightBrushKey}}" />
-                                                        <Setter Property="Foreground" Value="{DynamicResource {x:Static SystemColors.HighlightTextBrushKey}}" />
-                                                        <Setter Property="FontWeight" Value="Bold" />
-                                                    </Trigger>
-                                                    <Trigger Property="IsKeyboardFocused" Value="True">
-                                                        <Setter Property="BorderBrush" Value="#FF6200EA" />
-                                                        <Setter Property="BorderThickness" Value="1" />
-                                                    </Trigger>
-                                                </Style.Triggers>
-                                            </Style>
+                                            <StaticResource ResourceKey="FilterListBoxItemStyle" />
                                         </ListBox.ItemContainerStyle>
                                     </ListBox>
                                 </StackPanel>
@@ -2629,33 +2353,7 @@
                                         VirtualizingStackPanel.IsVirtualizing="True"
                                         VirtualizingStackPanel.VirtualizationMode="Recycling">
                                         <ListBox.ItemContainerStyle>
-                                            <Style TargetType="ListBoxItem">
-                                                <Setter Property="Padding" Value="5" />
-                                                <Setter Property="Template">
-                                                    <Setter.Value>
-                                                        <ControlTemplate TargetType="ListBoxItem">
-                                                            <Border Padding="{TemplateBinding Padding}" Background="{TemplateBinding Background}">
-                                                                <TextBlock
-                                                                    Margin="6,0,0,0"
-                                                                    Text="{Binding}"
-                                                                    TextTrimming="CharacterEllipsis"
-                                                                    TextWrapping="Wrap" />
-                                                            </Border>
-                                                        </ControlTemplate>
-                                                    </Setter.Value>
-                                                </Setter>
-                                                <Style.Triggers>
-                                                    <Trigger Property="IsSelected" Value="True">
-                                                        <Setter Property="Background" Value="{DynamicResource {x:Static SystemColors.HighlightBrushKey}}" />
-                                                        <Setter Property="Foreground" Value="{DynamicResource {x:Static SystemColors.HighlightTextBrushKey}}" />
-                                                        <Setter Property="FontWeight" Value="Bold" />
-                                                    </Trigger>
-                                                    <Trigger Property="IsKeyboardFocused" Value="True">
-                                                        <Setter Property="BorderBrush" Value="#FF6200EA" />
-                                                        <Setter Property="BorderThickness" Value="1" />
-                                                    </Trigger>
-                                                </Style.Triggers>
-                                            </Style>
+                                            <StaticResource ResourceKey="FilterListBoxItemStyle" />
                                         </ListBox.ItemContainerStyle>
                                     </ListBox>
                                 </StackPanel>
@@ -2755,33 +2453,7 @@
                                         VirtualizingStackPanel.IsVirtualizing="True"
                                         VirtualizingStackPanel.VirtualizationMode="Recycling">
                                         <ListBox.ItemContainerStyle>
-                                            <Style TargetType="ListBoxItem">
-                                                <Setter Property="Padding" Value="5" />
-                                                <Setter Property="Template">
-                                                    <Setter.Value>
-                                                        <ControlTemplate TargetType="ListBoxItem">
-                                                            <Border Padding="{TemplateBinding Padding}" Background="{TemplateBinding Background}">
-                                                                <TextBlock
-                                                                    Margin="6,0,0,0"
-                                                                    Text="{Binding}"
-                                                                    TextTrimming="CharacterEllipsis"
-                                                                    TextWrapping="Wrap" />
-                                                            </Border>
-                                                        </ControlTemplate>
-                                                    </Setter.Value>
-                                                </Setter>
-                                                <Style.Triggers>
-                                                    <Trigger Property="IsSelected" Value="True">
-                                                        <Setter Property="Background" Value="{DynamicResource {x:Static SystemColors.HighlightBrushKey}}" />
-                                                        <Setter Property="Foreground" Value="{DynamicResource {x:Static SystemColors.HighlightTextBrushKey}}" />
-                                                        <Setter Property="FontWeight" Value="Bold" />
-                                                    </Trigger>
-                                                    <Trigger Property="IsKeyboardFocused" Value="True">
-                                                        <Setter Property="BorderBrush" Value="#FF6200EA" />
-                                                        <Setter Property="BorderThickness" Value="1" />
-                                                    </Trigger>
-                                                </Style.Triggers>
-                                            </Style>
+                                            <StaticResource ResourceKey="FilterListBoxItemStyle" />
                                         </ListBox.ItemContainerStyle>
                                     </ListBox>
                                 </StackPanel>
@@ -2884,33 +2556,7 @@
                                         VirtualizingStackPanel.IsVirtualizing="True"
                                         VirtualizingStackPanel.VirtualizationMode="Recycling">
                                         <ListBox.ItemContainerStyle>
-                                            <Style TargetType="ListBoxItem">
-                                                <Setter Property="Padding" Value="5" />
-                                                <Setter Property="Template">
-                                                    <Setter.Value>
-                                                        <ControlTemplate TargetType="ListBoxItem">
-                                                            <Border Padding="{TemplateBinding Padding}" Background="{TemplateBinding Background}">
-                                                                <TextBlock
-                                                                    Margin="6,0,0,0"
-                                                                    Text="{Binding}"
-                                                                    TextTrimming="CharacterEllipsis"
-                                                                    TextWrapping="Wrap" />
-                                                            </Border>
-                                                        </ControlTemplate>
-                                                    </Setter.Value>
-                                                </Setter>
-                                                <Style.Triggers>
-                                                    <Trigger Property="IsSelected" Value="True">
-                                                        <Setter Property="Background" Value="{DynamicResource {x:Static SystemColors.HighlightBrushKey}}" />
-                                                        <Setter Property="Foreground" Value="{DynamicResource {x:Static SystemColors.HighlightTextBrushKey}}" />
-                                                        <Setter Property="FontWeight" Value="Bold" />
-                                                    </Trigger>
-                                                    <Trigger Property="IsKeyboardFocused" Value="True">
-                                                        <Setter Property="BorderBrush" Value="#FF6200EA" />
-                                                        <Setter Property="BorderThickness" Value="1" />
-                                                    </Trigger>
-                                                </Style.Triggers>
-                                            </Style>
+                                            <StaticResource ResourceKey="FilterListBoxItemStyle" />
                                         </ListBox.ItemContainerStyle>
                                     </ListBox>
                                 </StackPanel>
@@ -3010,33 +2656,7 @@
                                         VirtualizingStackPanel.IsVirtualizing="True"
                                         VirtualizingStackPanel.VirtualizationMode="Recycling">
                                         <ListBox.ItemContainerStyle>
-                                            <Style TargetType="ListBoxItem">
-                                                <Setter Property="Padding" Value="5" />
-                                                <Setter Property="Template">
-                                                    <Setter.Value>
-                                                        <ControlTemplate TargetType="ListBoxItem">
-                                                            <Border Padding="{TemplateBinding Padding}" Background="{TemplateBinding Background}">
-                                                                <TextBlock
-                                                                    Margin="6,0,0,0"
-                                                                    Text="{Binding}"
-                                                                    TextTrimming="CharacterEllipsis"
-                                                                    TextWrapping="Wrap" />
-                                                            </Border>
-                                                        </ControlTemplate>
-                                                    </Setter.Value>
-                                                </Setter>
-                                                <Style.Triggers>
-                                                    <Trigger Property="IsSelected" Value="True">
-                                                        <Setter Property="Background" Value="{DynamicResource {x:Static SystemColors.HighlightBrushKey}}" />
-                                                        <Setter Property="Foreground" Value="{DynamicResource {x:Static SystemColors.HighlightTextBrushKey}}" />
-                                                        <Setter Property="FontWeight" Value="Bold" />
-                                                    </Trigger>
-                                                    <Trigger Property="IsKeyboardFocused" Value="True">
-                                                        <Setter Property="BorderBrush" Value="#FF6200EA" />
-                                                        <Setter Property="BorderThickness" Value="1" />
-                                                    </Trigger>
-                                                </Style.Triggers>
-                                            </Style>
+                                            <StaticResource ResourceKey="FilterListBoxItemStyle" />
                                         </ListBox.ItemContainerStyle>
                                     </ListBox>
                                 </StackPanel>
@@ -3136,33 +2756,7 @@
                                         VirtualizingStackPanel.IsVirtualizing="True"
                                         VirtualizingStackPanel.VirtualizationMode="Recycling">
                                         <ListBox.ItemContainerStyle>
-                                            <Style TargetType="ListBoxItem">
-                                                <Setter Property="Padding" Value="5" />
-                                                <Setter Property="Template">
-                                                    <Setter.Value>
-                                                        <ControlTemplate TargetType="ListBoxItem">
-                                                            <Border Padding="{TemplateBinding Padding}" Background="{TemplateBinding Background}">
-                                                                <TextBlock
-                                                                    Margin="6,0,0,0"
-                                                                    Text="{Binding}"
-                                                                    TextTrimming="CharacterEllipsis"
-                                                                    TextWrapping="Wrap" />
-                                                            </Border>
-                                                        </ControlTemplate>
-                                                    </Setter.Value>
-                                                </Setter>
-                                                <Style.Triggers>
-                                                    <Trigger Property="IsSelected" Value="True">
-                                                        <Setter Property="Background" Value="{DynamicResource {x:Static SystemColors.HighlightBrushKey}}" />
-                                                        <Setter Property="Foreground" Value="{DynamicResource {x:Static SystemColors.HighlightTextBrushKey}}" />
-                                                        <Setter Property="FontWeight" Value="Bold" />
-                                                    </Trigger>
-                                                    <Trigger Property="IsKeyboardFocused" Value="True">
-                                                        <Setter Property="BorderBrush" Value="#FF6200EA" />
-                                                        <Setter Property="BorderThickness" Value="1" />
-                                                    </Trigger>
-                                                </Style.Triggers>
-                                            </Style>
+                                            <StaticResource ResourceKey="FilterListBoxItemStyle" />
                                         </ListBox.ItemContainerStyle>
                                     </ListBox>
                                 </StackPanel>
@@ -3308,33 +2902,7 @@
                                         VirtualizingStackPanel.IsVirtualizing="True"
                                         VirtualizingStackPanel.VirtualizationMode="Recycling">
                                         <ListBox.ItemContainerStyle>
-                                            <Style TargetType="ListBoxItem">
-                                                <Setter Property="Padding" Value="5" />
-                                                <Setter Property="Template">
-                                                    <Setter.Value>
-                                                        <ControlTemplate TargetType="ListBoxItem">
-                                                            <Border Padding="{TemplateBinding Padding}" Background="{TemplateBinding Background}">
-                                                                <TextBlock
-                                                                    Margin="6,0,0,0"
-                                                                    Text="{Binding}"
-                                                                    TextTrimming="CharacterEllipsis"
-                                                                    TextWrapping="Wrap" />
-                                                            </Border>
-                                                        </ControlTemplate>
-                                                    </Setter.Value>
-                                                </Setter>
-                                                <Style.Triggers>
-                                                    <Trigger Property="IsSelected" Value="True">
-                                                        <Setter Property="Background" Value="{DynamicResource {x:Static SystemColors.HighlightBrushKey}}" />
-                                                        <Setter Property="Foreground" Value="{DynamicResource {x:Static SystemColors.HighlightTextBrushKey}}" />
-                                                        <Setter Property="FontWeight" Value="Bold" />
-                                                    </Trigger>
-                                                    <Trigger Property="IsKeyboardFocused" Value="True">
-                                                        <Setter Property="BorderBrush" Value="#FF6200EA" />
-                                                        <Setter Property="BorderThickness" Value="1" />
-                                                    </Trigger>
-                                                </Style.Triggers>
-                                            </Style>
+                                            <StaticResource ResourceKey="FilterListBoxItemStyle" />
                                         </ListBox.ItemContainerStyle>
                                     </ListBox>
                                 </StackPanel>
@@ -3475,33 +3043,7 @@
                                         VirtualizingStackPanel.IsVirtualizing="True"
                                         VirtualizingStackPanel.VirtualizationMode="Recycling">
                                         <ListBox.ItemContainerStyle>
-                                            <Style TargetType="ListBoxItem">
-                                                <Setter Property="Padding" Value="5" />
-                                                <Setter Property="Template">
-                                                    <Setter.Value>
-                                                        <ControlTemplate TargetType="ListBoxItem">
-                                                            <Border Padding="{TemplateBinding Padding}" Background="{TemplateBinding Background}">
-                                                                <TextBlock
-                                                                    Margin="6,0,0,0"
-                                                                    Text="{Binding}"
-                                                                    TextTrimming="CharacterEllipsis"
-                                                                    TextWrapping="Wrap" />
-                                                            </Border>
-                                                        </ControlTemplate>
-                                                    </Setter.Value>
-                                                </Setter>
-                                                <Style.Triggers>
-                                                    <Trigger Property="IsSelected" Value="True">
-                                                        <Setter Property="Background" Value="{DynamicResource {x:Static SystemColors.HighlightBrushKey}}" />
-                                                        <Setter Property="Foreground" Value="{DynamicResource {x:Static SystemColors.HighlightTextBrushKey}}" />
-                                                        <Setter Property="FontWeight" Value="Bold" />
-                                                    </Trigger>
-                                                    <Trigger Property="IsKeyboardFocused" Value="True">
-                                                        <Setter Property="BorderBrush" Value="#FF6200EA" />
-                                                        <Setter Property="BorderThickness" Value="1" />
-                                                    </Trigger>
-                                                </Style.Triggers>
-                                            </Style>
+                                            <StaticResource ResourceKey="FilterListBoxItemStyle" />
                                         </ListBox.ItemContainerStyle>
                                     </ListBox>
                                 </StackPanel>
@@ -3601,33 +3143,7 @@
                                         VirtualizingStackPanel.IsVirtualizing="True"
                                         VirtualizingStackPanel.VirtualizationMode="Recycling">
                                         <ListBox.ItemContainerStyle>
-                                            <Style TargetType="ListBoxItem">
-                                                <Setter Property="Padding" Value="5" />
-                                                <Setter Property="Template">
-                                                    <Setter.Value>
-                                                        <ControlTemplate TargetType="ListBoxItem">
-                                                            <Border Padding="{TemplateBinding Padding}" Background="{TemplateBinding Background}">
-                                                                <TextBlock
-                                                                    Margin="6,0,0,0"
-                                                                    Text="{Binding}"
-                                                                    TextTrimming="CharacterEllipsis"
-                                                                    TextWrapping="Wrap" />
-                                                            </Border>
-                                                        </ControlTemplate>
-                                                    </Setter.Value>
-                                                </Setter>
-                                                <Style.Triggers>
-                                                    <Trigger Property="IsSelected" Value="True">
-                                                        <Setter Property="Background" Value="{DynamicResource {x:Static SystemColors.HighlightBrushKey}}" />
-                                                        <Setter Property="Foreground" Value="{DynamicResource {x:Static SystemColors.HighlightTextBrushKey}}" />
-                                                        <Setter Property="FontWeight" Value="Bold" />
-                                                    </Trigger>
-                                                    <Trigger Property="IsKeyboardFocused" Value="True">
-                                                        <Setter Property="BorderBrush" Value="#FF6200EA" />
-                                                        <Setter Property="BorderThickness" Value="1" />
-                                                    </Trigger>
-                                                </Style.Triggers>
-                                            </Style>
+                                            <StaticResource ResourceKey="FilterListBoxItemStyle" />
                                         </ListBox.ItemContainerStyle>
                                     </ListBox>
                                 </StackPanel>
@@ -3727,33 +3243,7 @@
                                         VirtualizingStackPanel.IsVirtualizing="True"
                                         VirtualizingStackPanel.VirtualizationMode="Recycling">
                                         <ListBox.ItemContainerStyle>
-                                            <Style TargetType="ListBoxItem">
-                                                <Setter Property="Padding" Value="5" />
-                                                <Setter Property="Template">
-                                                    <Setter.Value>
-                                                        <ControlTemplate TargetType="ListBoxItem">
-                                                            <Border Padding="{TemplateBinding Padding}" Background="{TemplateBinding Background}">
-                                                                <TextBlock
-                                                                    Margin="6,0,0,0"
-                                                                    Text="{Binding}"
-                                                                    TextTrimming="CharacterEllipsis"
-                                                                    TextWrapping="Wrap" />
-                                                            </Border>
-                                                        </ControlTemplate>
-                                                    </Setter.Value>
-                                                </Setter>
-                                                <Style.Triggers>
-                                                    <Trigger Property="IsSelected" Value="True">
-                                                        <Setter Property="Background" Value="{DynamicResource {x:Static SystemColors.HighlightBrushKey}}" />
-                                                        <Setter Property="Foreground" Value="{DynamicResource {x:Static SystemColors.HighlightTextBrushKey}}" />
-                                                        <Setter Property="FontWeight" Value="Bold" />
-                                                    </Trigger>
-                                                    <Trigger Property="IsKeyboardFocused" Value="True">
-                                                        <Setter Property="BorderBrush" Value="#FF6200EA" />
-                                                        <Setter Property="BorderThickness" Value="1" />
-                                                    </Trigger>
-                                                </Style.Triggers>
-                                            </Style>
+                                            <StaticResource ResourceKey="FilterListBoxItemStyle" />
                                         </ListBox.ItemContainerStyle>
                                     </ListBox>
                                 </StackPanel>
@@ -3853,33 +3343,7 @@
                                         VirtualizingStackPanel.IsVirtualizing="True"
                                         VirtualizingStackPanel.VirtualizationMode="Recycling">
                                         <ListBox.ItemContainerStyle>
-                                            <Style TargetType="ListBoxItem">
-                                                <Setter Property="Padding" Value="5" />
-                                                <Setter Property="Template">
-                                                    <Setter.Value>
-                                                        <ControlTemplate TargetType="ListBoxItem">
-                                                            <Border Padding="{TemplateBinding Padding}" Background="{TemplateBinding Background}">
-                                                                <TextBlock
-                                                                    Margin="6,0,0,0"
-                                                                    Text="{Binding}"
-                                                                    TextTrimming="CharacterEllipsis"
-                                                                    TextWrapping="Wrap" />
-                                                            </Border>
-                                                        </ControlTemplate>
-                                                    </Setter.Value>
-                                                </Setter>
-                                                <Style.Triggers>
-                                                    <Trigger Property="IsSelected" Value="True">
-                                                        <Setter Property="Background" Value="{DynamicResource {x:Static SystemColors.HighlightBrushKey}}" />
-                                                        <Setter Property="Foreground" Value="{DynamicResource {x:Static SystemColors.HighlightTextBrushKey}}" />
-                                                        <Setter Property="FontWeight" Value="Bold" />
-                                                    </Trigger>
-                                                    <Trigger Property="IsKeyboardFocused" Value="True">
-                                                        <Setter Property="BorderBrush" Value="#FF6200EA" />
-                                                        <Setter Property="BorderThickness" Value="1" />
-                                                    </Trigger>
-                                                </Style.Triggers>
-                                            </Style>
+                                            <StaticResource ResourceKey="FilterListBoxItemStyle" />
                                         </ListBox.ItemContainerStyle>
                                     </ListBox>
                                 </StackPanel>
@@ -4319,6 +3783,15 @@
                                                             Text="⚡"
                                                             ToolTip="Package has been optimized by VPM"
                                                             Visibility="{Binding IsOptimized, Converter={StaticResource BoolToVis}}" />
+                                                        <!--  Old Version indicator hourglass  -->
+                                                        <TextBlock
+                                                            Margin="0,0,3,0"
+                                                            FontSize="11"
+                                                            FontWeight="Bold"
+                                                            Foreground="#FF5722"
+                                                            Text="⏳"
+                                                            ToolTip="Old version available"
+                                                            Visibility="{Binding IsOldVersion, Converter={StaticResource BoolToVis}}" />
                                                     </StackPanel>
                                                     <TextBlock
                                                         FontSize="16"
@@ -4327,29 +3800,6 @@
                                                         TextTrimming="CharacterEllipsis" />
                                                 </DockPanel>
                                                 <StackPanel Orientation="Horizontal">
-
-                                                    <!--  Old Version indicator  -->
-                                                    <TextBlock
-                                                        Margin="0,0,2,0"
-                                                        FontSize="12"
-                                                        Foreground="#FF5722"
-                                                        RenderTransformOrigin="0,0.5"
-                                                        Text="⏳"
-                                                        ToolTip="Old version available">
-                                                        <TextBlock.Style>
-                                                            <Style TargetType="TextBlock">
-                                                                <Setter Property="Visibility" Value="Collapsed" />
-                                                                <Style.Triggers>
-                                                                    <DataTrigger Binding="{Binding IsOldVersion}" Value="True">
-                                                                        <Setter Property="Visibility" Value="Visible" />
-                                                                    </DataTrigger>
-                                                                </Style.Triggers>
-                                                            </Style>
-                                                        </TextBlock.Style>
-                                                        <TextBlock.RenderTransform>
-                                                            <ScaleTransform ScaleX="1.0" ScaleY="1.0" />
-                                                        </TextBlock.RenderTransform>
-                                                    </TextBlock>
 
                                                     <!--  Damaged Package indicator  -->
                                                     <TextBlock
@@ -4470,8 +3920,8 @@
                                             Width="60"
                                             Height="60"
                                             Margin="3"
-                                            Background="#1e1e1e"
-                                            BorderBrush="#444444"
+                                            Background="{DynamicResource {x:Static SystemColors.WindowBrushKey}}"
+                                            BorderBrush="{DynamicResource {x:Static SystemColors.ActiveBorderBrushKey}}"
                                             BorderThickness="1"
                                             ClipToBounds="True"
                                             CornerRadius="{StaticResource CornerRadiusValue}">
@@ -4509,8 +3959,8 @@
                                                     <Border
                                                         x:Name="SceneEditBorder"
                                                         Padding="6,4"
-                                                        Background="#2D2D30"
-                                                        BorderBrush="#007ACC"
+                                                        Background="{DynamicResource {x:Static SystemColors.ControlBrushKey}}"
+                                                        BorderBrush="{StaticResource AccentPressedBrush}"
                                                         BorderThickness="2"
                                                         CornerRadius="4"
                                                         Visibility="Collapsed">
@@ -4571,16 +4021,16 @@
                                                                 x:Name="SceneEditTextBox"
                                                                 Padding="4,2"
                                                                 VerticalContentAlignment="Center"
-                                                                Background="#1E1E1E"
-                                                                BorderBrush="#3F3F46"
+                                                                Background="{DynamicResource {x:Static SystemColors.WindowBrushKey}}"
+                                                                BorderBrush="{DynamicResource {x:Static SystemColors.ActiveBorderBrushKey}}"
                                                                 BorderThickness="1"
-                                                                CaretBrush="#FFFFFF"
+                                                                CaretBrush="{DynamicResource {x:Static SystemColors.ControlTextBrushKey}}"
                                                                 FontSize="14"
                                                                 FontWeight="Bold"
-                                                                Foreground="#FFFFFF"
+                                                                Foreground="{DynamicResource {x:Static SystemColors.ControlTextBrushKey}}"
                                                                 KeyDown="SceneNameEdit_KeyDown"
                                                                 LostFocus="SceneNameEdit_LostFocus"
-                                                                SelectionBrush="#007ACC"
+                                                                SelectionBrush="{StaticResource AccentPressedBrush}"
                                                                 Tag="{Binding}"
                                                                 Text="{Binding DisplayName, UpdateSourceTrigger=PropertyChanged}">
                                                                 <TextBox.Style>
@@ -4748,8 +4198,8 @@
                                             Width="60"
                                             Height="60"
                                             Margin="3"
-                                            Background="#1e1e1e"
-                                            BorderBrush="#444444"
+                                            Background="{DynamicResource {x:Static SystemColors.WindowBrushKey}}"
+                                            BorderBrush="{DynamicResource {x:Static SystemColors.ActiveBorderBrushKey}}"
                                             BorderThickness="1"
                                             ClipToBounds="True"
                                             CornerRadius="{StaticResource CornerRadiusValue}">
@@ -4787,8 +4237,8 @@
                                                     <Border
                                                         x:Name="PresetEditBorder"
                                                         Padding="6,4"
-                                                        Background="#2D2D30"
-                                                        BorderBrush="#007ACC"
+                                                        Background="{DynamicResource {x:Static SystemColors.ControlBrushKey}}"
+                                                        BorderBrush="{StaticResource AccentPressedBrush}"
                                                         BorderThickness="2"
                                                         CornerRadius="4"
                                                         Visibility="Collapsed">
@@ -4849,16 +4299,16 @@
                                                                 x:Name="PresetEditTextBox"
                                                                 Padding="4,2"
                                                                 VerticalContentAlignment="Center"
-                                                                Background="#1E1E1E"
-                                                                BorderBrush="#3F3F46"
+                                                                Background="{DynamicResource {x:Static SystemColors.WindowBrushKey}}"
+                                                                BorderBrush="{DynamicResource {x:Static SystemColors.ActiveBorderBrushKey}}"
                                                                 BorderThickness="1"
-                                                                CaretBrush="#FFFFFF"
+                                                                CaretBrush="{DynamicResource {x:Static SystemColors.ControlTextBrushKey}}"
                                                                 FontSize="12"
                                                                 FontWeight="SemiBold"
-                                                                Foreground="#FFFFFF"
+                                                                Foreground="{DynamicResource {x:Static SystemColors.ControlTextBrushKey}}"
                                                                 KeyDown="PresetNameEdit_KeyDown"
                                                                 LostFocus="PresetNameEdit_LostFocus"
-                                                                SelectionBrush="#007ACC"
+                                                                SelectionBrush="{StaticResource AccentPressedBrush}"
                                                                 Tag="{Binding}"
                                                                 Text="{Binding DisplayName, UpdateSourceTrigger=PropertyChanged}">
                                                                 <TextBox.Style>

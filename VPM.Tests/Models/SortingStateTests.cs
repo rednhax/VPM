@@ -13,7 +13,7 @@ namespace VPM.Tests.Models
 
             Assert.Null(state.CurrentSortOption);
             Assert.True(state.IsAscending);
-            Assert.NotNull(state.LastSortTime);
+            Assert.NotEqual(default(DateTime), state.LastSortTime);
         }
 
         [Fact]
@@ -24,7 +24,7 @@ namespace VPM.Tests.Models
 
             Assert.Equal(option, state.CurrentSortOption);
             Assert.True(state.IsAscending);
-            Assert.NotNull(state.LastSortTime);
+            Assert.NotEqual(default(DateTime), state.LastSortTime);
         }
 
         [Fact]

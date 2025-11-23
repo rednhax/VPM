@@ -11,11 +11,11 @@ namespace VPM.Services
     /// </summary>
     public class NetworkPermissionService
     {
-        private readonly SettingsManager _settingsManager;
+        private readonly ISettingsManager _settingsManager;
         private bool _databaseUpdateOfferedThisSession = false;
         private readonly string _localDbPath;
 
-        public NetworkPermissionService(SettingsManager settingsManager)
+        public NetworkPermissionService(ISettingsManager settingsManager)
         {
             _settingsManager = settingsManager ?? throw new ArgumentNullException(nameof(settingsManager));
             

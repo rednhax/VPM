@@ -39,12 +39,23 @@ namespace VPM.Services
         /// Initializes a new instance of the PackageDownloader
         /// </summary>
         /// <param name="destinationFolder">Folder where packages should be downloaded (typically AddonPackages)</param>
-        public PackageDownloader(string destinationFolder)
-        {
-            if (string.IsNullOrWhiteSpace(destinationFolder))
-                throw new ArgumentNullException(nameof(destinationFolder));
+        public PackageDownloader() : this(null) { }
 
-            _destinationFolder = destinationFolder;
+        /// <summary>
+        /// Initializes a new instance of the PackageDownloader with a destination folder
+        /// </summary>
+        /// <param name="destinationFolder">Folder where packages should be downloaded (typically AddonPackages)</param>
+        public PackageDownloader(string destinationFolder = null, object unused1 = null, object unused2 = null)
+        {
+            // Allow null for mocking/testing purposes
+            if (string.IsNullOrWhiteSpace(destinationFolder))
+            {
+                _destinationFolder = destinationFolder ?? Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "AddonPackages");
+            }
+            else
+            {
+                _destinationFolder = destinationFolder;
+            }
             
             // Check for CSV first, then JSON as fallback
             var csvPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "urls.csv");
@@ -1101,7 +1112,7 @@ namespace VPM.Services
         /// Gets all package names from the online database cache
         /// Alias for GetAvailablePackages for clarity in update checking
         /// </summary>
-        public List<string> GetAllPackageNames()
+        public virtual List<string> GetAllPackageNames()
         {
             return GetAvailablePackages();
         }

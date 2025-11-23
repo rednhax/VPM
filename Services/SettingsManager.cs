@@ -13,9 +13,27 @@ using VPM.Models;
 namespace VPM.Services
 {
     /// <summary>
+    /// Interface for settings management to support mocking in tests
+    /// </summary>
+    public interface ISettingsManager
+    {
+        AppSettings Settings { get; }
+        event EventHandler<AppSettings> SettingsChanged;
+        void LoadSettings();
+        void SaveSettingsImmediate();
+        Task SaveSettingsAsync();
+        void UpdateSetting<T>(string propertyName, T value);
+        T GetSetting<T>(string propertyName, T defaultValue = default);
+        void ResetToDefaults();
+        void ExportSettings(string filePath);
+        void ImportSettings(string filePath);
+        void Dispose();
+    }
+
+    /// <summary>
     /// Manages application settings with automatic saving and loading
     /// </summary>
-    public class SettingsManager
+    public class SettingsManager : ISettingsManager
     {
         private readonly string _settingsFilePath;
         private readonly DispatcherTimer _saveTimer;
@@ -36,7 +54,12 @@ namespace VPM.Services
         private static readonly ConcurrentDictionary<string, Func<AppSettings, object>> _propertyGetters = new();
         private static readonly ConcurrentDictionary<string, Action<AppSettings, object>> _propertySetters = new();
 
-        public AppSettings Settings { get; private set; }
+        private AppSettings _settings;
+        public AppSettings Settings 
+        { 
+            get => _settings;
+            set => _settings = value;
+        }
 
         public event EventHandler<AppSettings> SettingsChanged;
 

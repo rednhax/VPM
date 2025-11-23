@@ -47,6 +47,9 @@
     <Page Remove="_links\**" />
     <Page Remove="VPM.Tests\**" />
   </ItemGroup>
+  <ItemGroup>
+    <None Remove="build_output.txt" />
+  </ItemGroup>
 
   <!-- Auto-increment build number on every build -->
   <Target Name="IncrementBuildNumber" BeforeTargets="BeforeBuild">

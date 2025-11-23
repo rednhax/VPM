@@ -35,7 +35,6 @@ namespace VPM.Services
 
             // Cancel any pending execution
             _cancellationTokenSource?.Cancel();
-            _cancellationTokenSource?.Dispose();
 
             // Create new cancellation token source
             _cancellationTokenSource = new CancellationTokenSource();

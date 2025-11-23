@@ -71,7 +71,6 @@ namespace VPM.Tests.Models
             collection.Clear();
 
             Assert.Empty(collection);
-            Assert.Equal(0, collection.Count);
         }
 
         [Fact]
@@ -79,7 +78,7 @@ namespace VPM.Tests.Models
         {
             var collection = new AsyncObservableCollection<string> { "a", "b", "c" };
 
-            Assert.True(collection.Contains("b"));
+            Assert.Contains("b", collection);
         }
 
         [Fact]
@@ -87,7 +86,7 @@ namespace VPM.Tests.Models
         {
             var collection = new AsyncObservableCollection<string> { "a", "b", "c" };
 
-            Assert.False(collection.Contains("z"));
+            Assert.DoesNotContain("z", collection);
         }
 
         [Fact]
@@ -225,7 +224,7 @@ namespace VPM.Tests.Models
             Assert.Equal(3, collection.Count);
 
             collection.Clear();
-            Assert.Equal(0, collection.Count);
+            Assert.Empty(collection);
         }
 
         [Fact]

@@ -222,7 +222,7 @@ namespace VPM.Services
             using (var stream = entry.OpenEntryStream())
             {
                 var buffer = new byte[entry.Size];
-                stream.Read(buffer, 0, buffer.Length);
+                stream.ReadExactly(buffer, 0, buffer.Length);
                 return buffer;
             }
         }
