@@ -51,8 +51,7 @@ namespace VPM.Windows
             {
                 Stretch = Stretch.UniformToFill,
                 SnapsToDevicePixels = true,
-                Source = null, // Will be set when image loads
-                Opacity = 0 // Start invisible for fade-in animation
+                Source = null // Will be set when image loads
             };
             
             // Create overlay grid for buttons
@@ -64,7 +63,7 @@ namespace VPM.Windows
             {
                 Padding = new Thickness(8, 5, 8, 5),
                 Height = 28,
-                Background = new SolidColorBrush(Color.FromArgb(140, 0, 120, 215)), // Semi-transparent blue
+                Background = new SolidColorBrush(Color.FromArgb(200, 51, 51, 51)), // #FF333333 with slight transparency
                 Foreground = new SolidColorBrush(Colors.White),
                 FontSize = 11,
                 FontWeight = FontWeights.SemiBold,
@@ -73,11 +72,13 @@ namespace VPM.Windows
                 Margin = new Thickness(0, 0, 6, 6),
                 Visibility = Visibility.Collapsed,
                 ToolTip = "Extract files from archive",
-                BorderThickness = new Thickness(0),
-                Cursor = System.Windows.Input.Cursors.Hand
+                BorderThickness = new Thickness(1),
+                BorderBrush = new SolidColorBrush(Colors.Transparent),
+                Cursor = System.Windows.Input.Cursors.Hand,
+                IsHitTestVisible = true // Keep button responsive to mouse even when disabled
             };
             
-            // Style the button with rounded corners
+            // Style the button with rounded corners and hover effects
             var buttonStyle = new System.Windows.Style(typeof(Button));
             buttonStyle.Setters.Add(new System.Windows.Setter(Button.TemplateProperty, CreateButtonTemplate()));
             _extractButton.Style = buttonStyle;
@@ -100,7 +101,7 @@ namespace VPM.Windows
             {
                 Padding = new Thickness(8, 5, 8, 5),
                 Height = 28,
-                Background = new SolidColorBrush(Color.FromArgb(180, 180, 40, 40)), // Semi-transparent red
+                Background = new SolidColorBrush(Color.FromArgb(200, 180, 40, 40)), // Semi-transparent red with better opacity
                 Foreground = new SolidColorBrush(Colors.White),
                 FontSize = 11,
                 FontWeight = FontWeights.SemiBold,
@@ -109,9 +110,11 @@ namespace VPM.Windows
                 Margin = new Thickness(6, 0, 0, 6),
                 Visibility = Visibility.Collapsed,
                 ToolTip = "Remove extracted files",
-                BorderThickness = new Thickness(0),
+                BorderThickness = new Thickness(1),
+                BorderBrush = new SolidColorBrush(Colors.Transparent),
                 Cursor = System.Windows.Input.Cursors.Hand,
-                Content = "X"
+                Content = "X",
+                IsHitTestVisible = true // Keep button responsive to mouse even when disabled
             };
 
             // Style the button with rounded corners
@@ -208,11 +211,10 @@ namespace VPM.Windows
                 
                 if (image != null)
                 {
-                    // Set the Source and show immediately without animation for performance
+                    // Set the Source and show immediately
                     await Dispatcher.InvokeAsync(() =>
                     {
                         _imageControl.Source = image;
-                        _imageControl.Opacity = 1;
                         _imageControl.Visibility = Visibility.Visible;
                         _isLoaded = true;
                     });
@@ -242,7 +244,6 @@ namespace VPM.Windows
                 Dispatcher.Invoke(() =>
                 {
                     _imageControl.Source = null;
-                    _imageControl.Opacity = 0; // Reset for potential reload with fade-in
                     _isLoaded = false;
                 });
                 
@@ -386,8 +387,11 @@ namespace VPM.Windows
             
             // Main border with rounded corners
             var border = new FrameworkElementFactory(typeof(Border));
+            border.Name = "ButtonBorder";
             border.SetValue(Border.BackgroundProperty, new TemplateBindingExtension(Button.BackgroundProperty));
-            border.SetValue(Border.CornerRadiusProperty, new CornerRadius(4));
+            border.SetValue(Border.BorderBrushProperty, new TemplateBindingExtension(Button.BorderBrushProperty));
+            border.SetValue(Border.BorderThicknessProperty, new TemplateBindingExtension(Button.BorderThicknessProperty));
+            border.SetValue(Border.CornerRadiusProperty, new CornerRadius(6)); // Match theme corner radius
             border.SetValue(Border.PaddingProperty, new TemplateBindingExtension(Button.PaddingProperty));
             
             // Content presenter
@@ -403,10 +407,31 @@ namespace VPM.Windows
             hoverTrigger.Conditions.Add(new Condition(Button.IsMouseOverProperty, true));
             hoverTrigger.Conditions.Add(new Condition(Button.IsEnabledProperty, true));
             
-            // Lighter transparent gray for hover
+            // Use theme hover color #FF454545
             hoverTrigger.Setters.Add(new Setter(Button.BackgroundProperty, 
-                new SolidColorBrush(Color.FromArgb(180, 100, 100, 100))));
+                new SolidColorBrush(Color.FromArgb(200, 69, 69, 69))));
+            // Add blue border on hover - target the border element
+            hoverTrigger.Setters.Add(new Setter(Border.BorderBrushProperty, 
+                new SolidColorBrush(Color.FromArgb(255, 0, 120, 215)), "ButtonBorder")); // #FF0078D7
+            hoverTrigger.Setters.Add(new Setter(Border.BorderThicknessProperty, new Thickness(1), "ButtonBorder"));
             template.Triggers.Add(hoverTrigger);
+            
+            // Hover trigger for disabled buttons (show blue border even when disabled)
+            var disabledHoverMulti = new MultiTrigger();
+            disabledHoverMulti.Conditions.Add(new Condition(Button.IsMouseOverProperty, true));
+            disabledHoverMulti.Conditions.Add(new Condition(Button.IsEnabledProperty, false));
+            disabledHoverMulti.Setters.Add(new Setter(Border.BorderBrushProperty, 
+                new SolidColorBrush(Color.FromArgb(255, 0, 120, 215)), "ButtonBorder")); // #FF0078D7
+            template.Triggers.Add(disabledHoverMulti);
+            
+            // Disabled state trigger - preserve appearance when disabled
+            var disabledTrigger = new Trigger
+            {
+                Property = Button.IsEnabledProperty,
+                Value = false
+            };
+            disabledTrigger.Setters.Add(new Setter(Button.OpacityProperty, 1.0)); // Keep full opacity
+            template.Triggers.Add(disabledTrigger);
             
             // Pressed trigger
             var pressedTrigger = new Trigger
@@ -414,7 +439,9 @@ namespace VPM.Windows
                 Property = Button.IsPressedProperty,
                 Value = true
             };
-            pressedTrigger.Setters.Add(new Setter(Button.OpacityProperty, 0.8));
+            // Use theme pressed color #FF555555
+            pressedTrigger.Setters.Add(new Setter(Button.BackgroundProperty, 
+                new SolidColorBrush(Color.FromArgb(200, 85, 85, 85))));
             template.Triggers.Add(pressedTrigger);
             
             return template;

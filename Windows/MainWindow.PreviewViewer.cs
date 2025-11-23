@@ -10,7 +10,6 @@ using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Documents;
 using System.Text.Json;
-using System.Windows.Media.Animation;
 using SharpCompress.Archives;
 using VPM.Services;
 using VPM.Models;
@@ -32,7 +31,7 @@ namespace VPM
         private RichTextBox _currentSearchRichTextBox = null;
 
         /// <summary>
-        /// Shows the preview panel with animation
+        /// Shows the preview panel
         /// </summary>
         private void ShowPreviewPanel()
         {
@@ -44,9 +43,6 @@ namespace VPM
             PreviewRowDefinition.Height = new GridLength(300, GridUnitType.Pixel);
             PreviewPanel.Visibility = Visibility.Visible;
             PreviewSplitter.Visibility = Visibility.Visible;
-
-            // Use .NET 10 storyboard animation via AnimationHelper for consistent performance
-            AnimationHelper.FadeIn(PreviewPanel, 200);
         }
 
         private bool _searchPanelInitialized = false;
@@ -102,23 +98,19 @@ namespace VPM
         }
 
         /// <summary>
-        /// Hides the preview panel with animation
+        /// Hides the preview panel
         /// </summary>
         private void HidePreviewPanel()
         {
             if (!_isPreviewVisible) return;
 
-            // Use .NET 10 storyboard animation via AnimationHelper with completion callback
-            AnimationHelper.FadeOut(PreviewPanel, 150, (s, e) =>
-            {
-                PreviewPanel.Visibility = Visibility.Collapsed;
-                PreviewSplitter.Visibility = Visibility.Collapsed;
-                PreviewRowDefinition.Height = new GridLength(0);
-                _isPreviewVisible = false;
-                _currentPreviewFile = null;
-                _currentPreviewPackage = null;
-                HideSearchPanel();
-            });
+            PreviewPanel.Visibility = Visibility.Collapsed;
+            PreviewSplitter.Visibility = Visibility.Collapsed;
+            PreviewRowDefinition.Height = new GridLength(0);
+            _isPreviewVisible = false;
+            _currentPreviewFile = null;
+            _currentPreviewPackage = null;
+            HideSearchPanel();
         }
 
         /// <summary>

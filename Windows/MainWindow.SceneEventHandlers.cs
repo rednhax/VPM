@@ -358,22 +358,6 @@ namespace VPM
 
                     // Update the details area to show scene info
                     UpdatePackageButtonBar();
-
-                    // Set opacity to 0 before animating to ensure animation runs
-                    if (DependenciesDataGrid != null)
-                        DependenciesDataGrid.Opacity = 0;
-                    if (ImagesPanel != null)
-                        ImagesPanel.Opacity = 0;
-
-                    // Snap in dependencies and images after update with smooth effect (prevents flicker on rapid switches)
-                    if (DependenciesDataGrid != null && Dependencies.Count > 0)
-                    {
-                        AnimationHelper.SnapInSmooth(DependenciesDataGrid, 250);
-                    }
-                    if (ImagesPanel != null && ImagesPanel.Children.Count > 0)
-                    {
-                        AnimationHelper.SnapInSmooth(ImagesPanel, 250);
-                    }
                 });
             });
 

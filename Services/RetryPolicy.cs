@@ -113,7 +113,7 @@ namespace VPM.Services
             var result = new RetryResult();
             var stopwatch = Stopwatch.StartNew();
 
-            for (int attempt = 1; attempt <= _config.MaxRetries; attempt++)
+            for (int attempt = 1; attempt <= _config.MaxRetries + 1; attempt++)
             {
                 if (cancellationToken.IsCancellationRequested)
                 {

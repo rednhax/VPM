@@ -91,6 +91,7 @@ namespace VPM.Services
         private DateTime _stateChangeTime = DateTime.UtcNow;
         private DateTime _openedAt = DateTime.MinValue;
         private int _currentTimeoutMs;
+        private int _openCount = 0;
         private long _totalRequests = 0;
         private long _totalFailures = 0;
         private readonly object _lock = new object();
@@ -99,6 +100,7 @@ namespace VPM.Services
         {
             _config = config ?? new CircuitBreakerConfig();
             _currentTimeoutMs = _config.OpenTimeoutMs;
+            _openCount = 0;
         }
 
         /// <summary>
@@ -222,11 +224,15 @@ namespace VPM.Services
             _openedAt = DateTime.UtcNow;
             _successCount = 0;
             _stateChangeTime = DateTime.UtcNow;
+            _openCount++;
 
-            // Increase timeout with exponential backoff
-            _currentTimeoutMs = (int)Math.Min(
-                _config.MaxTimeoutMs,
-                _currentTimeoutMs * _config.BackoffMultiplier);
+            // Increase timeout with exponential backoff (only after first open)
+            if (_openCount > 1)
+            {
+                _currentTimeoutMs = (int)Math.Min(
+                    _config.MaxTimeoutMs,
+                    _currentTimeoutMs * _config.BackoffMultiplier);
+            }
         }
 
         /// <summary>

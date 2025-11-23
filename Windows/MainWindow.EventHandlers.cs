@@ -2788,22 +2788,6 @@ namespace VPM
                         DisplayDependencies(packageItem);
                     
                     await DisplayPackageImagesAsync(packageItem);
-                    
-                    // Set opacity to 0 before animating to ensure animation runs
-                    if (DependenciesDataGrid != null)
-                        DependenciesDataGrid.Opacity = 0;
-                    if (ImagesPanel != null)
-                        ImagesPanel.Opacity = 0;
-                    
-                    // Animate dependencies and images after update with smooth effect (prevents flicker on rapid switches)
-                    if (DependenciesDataGrid != null && Dependencies.Count > 0)
-                    {
-                        AnimationHelper.SnapInSmooth(DependenciesDataGrid, 250);
-                    }
-                    if (ImagesPanel != null && ImagesPanel.Children.Count > 0)
-                    {
-                        AnimationHelper.SnapInSmooth(ImagesPanel, 250);
-                    }
                 }
                 else
                 {
@@ -2823,22 +2807,6 @@ namespace VPM
                     else
                     {
                         await DisplayMultiplePackageImagesAsync(selectedPackages);
-                    }
-                    
-                    // Set opacity to 0 before animating to ensure animation runs
-                    if (DependenciesDataGrid != null)
-                        DependenciesDataGrid.Opacity = 0;
-                    if (ImagesPanel != null)
-                        ImagesPanel.Opacity = 0;
-                    
-                    // Animate dependencies and images after update with smooth effect (prevents flicker on rapid switches)
-                    if (DependenciesDataGrid != null && Dependencies.Count > 0)
-                    {
-                        AnimationHelper.SnapInSmooth(DependenciesDataGrid, 250);
-                    }
-                    if (ImagesPanel != null && ImagesPanel.Children.Count > 0)
-                    {
-                        AnimationHelper.SnapInSmooth(ImagesPanel, 250);
                     }
                 }
                 
@@ -3498,18 +3466,18 @@ namespace VPM
                             collapsedGrid = SceneSourceFilterCollapsedGrid;
                             break;
                         case "PresetCategoryFilter":
-                            if (_settingsManager?.Settings != null)
-                            {
-                                _settingsManager.Settings.PresetCategoryFilterVisible = !_settingsManager.Settings.PresetCategoryFilterVisible;
-                                ApplyFilterVisibilityStates(_settingsManager.Settings);
-                            }
+                            newVisibility = !_settingsManager.Settings.PresetCategoryFilterVisible;
+                            _settingsManager.Settings.PresetCategoryFilterVisible = newVisibility;
+                            targetList = PresetCategoryFilterList;
+                            textBoxGrid = PresetCategoryFilterTextBoxGrid;
+                            collapsedGrid = PresetCategoryFilterCollapsedGrid;
                             break;
                         case "PresetSubfolderFilter":
-                            if (_settingsManager?.Settings != null)
-                            {
-                                _settingsManager.Settings.PresetSubfolderFilterVisible = !_settingsManager.Settings.PresetSubfolderFilterVisible;
-                                ApplyFilterVisibilityStates(_settingsManager.Settings);
-                            }
+                            newVisibility = !_settingsManager.Settings.PresetSubfolderFilterVisible;
+                            _settingsManager.Settings.PresetSubfolderFilterVisible = newVisibility;
+                            targetList = PresetSubfolderFilterList;
+                            textBoxGrid = PresetSubfolderFilterTextBoxGrid;
+                            collapsedGrid = PresetSubfolderFilterCollapsedGrid;
                             break;
                         case "SceneDateFilter":
                             if (_settingsManager?.Settings != null)
@@ -3526,18 +3494,18 @@ namespace VPM
                             }
                             break;
                         case "PresetDateFilter":
-                            if (_settingsManager?.Settings != null)
-                            {
-                                _settingsManager.Settings.PresetDateFilterVisible = !_settingsManager.Settings.PresetDateFilterVisible;
-                                ApplyFilterVisibilityStates(_settingsManager.Settings);
-                            }
+                            newVisibility = !_settingsManager.Settings.PresetDateFilterVisible;
+                            _settingsManager.Settings.PresetDateFilterVisible = newVisibility;
+                            targetList = PresetDateFilterList;
+                            expandedGrid = PresetDateFilterExpandedGrid;
+                            collapsedGrid = PresetDateFilterCollapsedGrid;
                             break;
                         case "PresetFileSizeFilter":
-                            if (_settingsManager?.Settings != null)
-                            {
-                                _settingsManager.Settings.PresetFileSizeFilterVisible = !_settingsManager.Settings.PresetFileSizeFilterVisible;
-                                ApplyFilterVisibilityStates(_settingsManager.Settings);
-                            }
+                            newVisibility = !_settingsManager.Settings.PresetFileSizeFilterVisible;
+                            _settingsManager.Settings.PresetFileSizeFilterVisible = newVisibility;
+                            targetList = PresetFileSizeFilterList;
+                            expandedGrid = PresetFileSizeFilterExpandedGrid;
+                            collapsedGrid = PresetFileSizeFilterCollapsedGrid;
                             break;
                         case "SceneStatusFilter":
                             if (_settingsManager?.Settings != null)
@@ -3547,11 +3515,11 @@ namespace VPM
                             }
                             break;
                         case "PresetStatusFilter":
-                            if (_settingsManager?.Settings != null)
-                            {
-                                _settingsManager.Settings.PresetStatusFilterVisible = !_settingsManager.Settings.PresetStatusFilterVisible;
-                                ApplyFilterVisibilityStates(_settingsManager.Settings);
-                            }
+                            newVisibility = !_settingsManager.Settings.PresetStatusFilterVisible;
+                            _settingsManager.Settings.PresetStatusFilterVisible = newVisibility;
+                            targetList = PresetStatusFilterList;
+                            expandedGrid = PresetStatusFilterExpandedGrid;
+                            collapsedGrid = PresetStatusFilterCollapsedGrid;
                             break;
                     }
                     

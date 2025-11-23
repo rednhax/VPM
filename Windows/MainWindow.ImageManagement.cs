@@ -471,22 +471,50 @@ namespace VPM
                     Margin = new Thickness(0, 0, 5, 0),
                     VerticalAlignment = VerticalAlignment.Center,
                     Visibility = Visibility.Collapsed,
-                    Background = new SolidColorBrush(Color.FromArgb(180, 180, 40, 40)), // Semi-transparent red
+                    Background = new SolidColorBrush(Color.FromArgb(200, 180, 40, 40)), // Semi-transparent red with better opacity
                     Foreground = new SolidColorBrush(Colors.White),
-                    BorderThickness = new Thickness(0)
+                    BorderThickness = new Thickness(1),
+                    BorderBrush = new SolidColorBrush(Colors.Transparent),
+                    Cursor = System.Windows.Input.Cursors.Hand
                 };
 
-                // Add rounded corners style
+                // Add rounded corners style with hover effects
                 var clearBtnTemplate = new ControlTemplate(typeof(Button));
                 var clearBtnBorder = new FrameworkElementFactory(typeof(Border));
+                clearBtnBorder.Name = "ClearBtnBorder";
                 clearBtnBorder.SetValue(Border.BackgroundProperty, new TemplateBindingExtension(Button.BackgroundProperty));
-                clearBtnBorder.SetValue(Border.CornerRadiusProperty, new CornerRadius(4));
+                clearBtnBorder.SetValue(Border.BorderBrushProperty, new TemplateBindingExtension(Button.BorderBrushProperty));
+                clearBtnBorder.SetValue(Border.BorderThicknessProperty, new TemplateBindingExtension(Button.BorderThicknessProperty));
+                clearBtnBorder.SetValue(Border.CornerRadiusProperty, new CornerRadius(6)); // Match theme corner radius
                 clearBtnBorder.SetValue(Border.PaddingProperty, new TemplateBindingExtension(Button.PaddingProperty));
                 var clearBtnContent = new FrameworkElementFactory(typeof(ContentPresenter));
                 clearBtnContent.SetValue(ContentPresenter.HorizontalAlignmentProperty, HorizontalAlignment.Center);
                 clearBtnContent.SetValue(ContentPresenter.VerticalAlignmentProperty, VerticalAlignment.Center);
                 clearBtnBorder.AppendChild(clearBtnContent);
                 clearBtnTemplate.VisualTree = clearBtnBorder;
+                
+                // Add hover trigger
+                var clearBtnHoverTrigger = new MultiTrigger();
+                clearBtnHoverTrigger.Conditions.Add(new Condition(Button.IsMouseOverProperty, true));
+                clearBtnHoverTrigger.Conditions.Add(new Condition(Button.IsEnabledProperty, true));
+                clearBtnHoverTrigger.Setters.Add(new Setter(Button.BackgroundProperty, 
+                    new SolidColorBrush(Color.FromArgb(200, 200, 60, 60)))); // Lighter red on hover
+                // Add blue border on hover - target the border element
+                clearBtnHoverTrigger.Setters.Add(new Setter(Border.BorderBrushProperty, 
+                    new SolidColorBrush(Color.FromArgb(255, 0, 120, 215)), "ClearBtnBorder")); // #FF0078D7
+                clearBtnHoverTrigger.Setters.Add(new Setter(Border.BorderThicknessProperty, new Thickness(1), "ClearBtnBorder"));
+                clearBtnTemplate.Triggers.Add(clearBtnHoverTrigger);
+                
+                // Add pressed trigger
+                var clearBtnPressedTrigger = new Trigger
+                {
+                    Property = Button.IsPressedProperty,
+                    Value = true
+                };
+                clearBtnPressedTrigger.Setters.Add(new Setter(Button.BackgroundProperty, 
+                    new SolidColorBrush(Color.FromArgb(200, 220, 80, 80)))); // Even lighter red when pressed
+                clearBtnTemplate.Triggers.Add(clearBtnPressedTrigger);
+                
                 clearExtractedButton.Template = clearBtnTemplate;
 
                 void UpdateHeaderButtonVisibility()
@@ -551,8 +579,53 @@ namespace VPM
                     Margin = new Thickness(0, 0, 2, 0),
                     VerticalAlignment = VerticalAlignment.Center,
                     Visibility = (packageItem.Status == "Available" && packageItem.Status != "Archived") ? Visibility.Visible : Visibility.Collapsed,
+                    Background = new SolidColorBrush(Color.FromArgb(200, 51, 51, 51)), // Theme button color
+                    Foreground = new SolidColorBrush(Colors.White),
+                    BorderThickness = new Thickness(1),
+                    BorderBrush = new SolidColorBrush(Colors.Transparent),
+                    Cursor = System.Windows.Input.Cursors.Hand,
                     Tag = new Tuple<Button, Button, PackageItem>(null, null, packageItem) // Will be updated after buttons are created
                 };
+                
+                // Apply theme button template with hover effects
+                var loadBtnTemplate = new ControlTemplate(typeof(Button));
+                var loadBtnBorder = new FrameworkElementFactory(typeof(Border));
+                loadBtnBorder.Name = "LoadBtnBorder";
+                loadBtnBorder.SetValue(Border.BackgroundProperty, new TemplateBindingExtension(Button.BackgroundProperty));
+                loadBtnBorder.SetValue(Border.BorderBrushProperty, new TemplateBindingExtension(Button.BorderBrushProperty));
+                loadBtnBorder.SetValue(Border.BorderThicknessProperty, new TemplateBindingExtension(Button.BorderThicknessProperty));
+                loadBtnBorder.SetValue(Border.CornerRadiusProperty, new CornerRadius(6)); // Match theme corner radius
+                loadBtnBorder.SetValue(Border.PaddingProperty, new TemplateBindingExtension(Button.PaddingProperty));
+                var loadBtnContent = new FrameworkElementFactory(typeof(ContentPresenter));
+                loadBtnContent.SetValue(ContentPresenter.HorizontalAlignmentProperty, HorizontalAlignment.Center);
+                loadBtnContent.SetValue(ContentPresenter.VerticalAlignmentProperty, VerticalAlignment.Center);
+                loadBtnBorder.AppendChild(loadBtnContent);
+                loadBtnTemplate.VisualTree = loadBtnBorder;
+                
+                // Add hover trigger
+                var loadBtnHoverTrigger = new MultiTrigger();
+                loadBtnHoverTrigger.Conditions.Add(new Condition(Button.IsMouseOverProperty, true));
+                loadBtnHoverTrigger.Conditions.Add(new Condition(Button.IsEnabledProperty, true));
+                loadBtnHoverTrigger.Setters.Add(new Setter(Button.BackgroundProperty, 
+                    new SolidColorBrush(Color.FromArgb(200, 69, 69, 69)))); // Theme hover color
+                // Add blue border on hover - target the border element
+                loadBtnHoverTrigger.Setters.Add(new Setter(Border.BorderBrushProperty, 
+                    new SolidColorBrush(Color.FromArgb(255, 0, 120, 215)), "LoadBtnBorder")); // #FF0078D7
+                loadBtnHoverTrigger.Setters.Add(new Setter(Border.BorderThicknessProperty, new Thickness(1), "LoadBtnBorder"));
+                loadBtnTemplate.Triggers.Add(loadBtnHoverTrigger);
+                
+                // Add pressed trigger
+                var loadBtnPressedTrigger = new Trigger
+                {
+                    Property = Button.IsPressedProperty,
+                    Value = true
+                };
+                loadBtnPressedTrigger.Setters.Add(new Setter(Button.BackgroundProperty, 
+                    new SolidColorBrush(Color.FromArgb(200, 85, 85, 85)))); // Theme pressed color
+                loadBtnTemplate.Triggers.Add(loadBtnPressedTrigger);
+                
+                loadButton.Template = loadBtnTemplate;
+                
                 loadButton.Click += async (s, e) =>
                 {
                     var btn = s as Button;
@@ -574,8 +647,53 @@ namespace VPM
                     Padding = new Thickness(6, 4, 6, 4),
                     VerticalAlignment = VerticalAlignment.Center,
                     Visibility = (packageItem.Status == "Loaded" && packageItem.Status != "Archived") ? Visibility.Visible : Visibility.Collapsed,
+                    Background = new SolidColorBrush(Color.FromArgb(200, 51, 51, 51)), // Theme button color
+                    Foreground = new SolidColorBrush(Colors.White),
+                    BorderThickness = new Thickness(1),
+                    BorderBrush = new SolidColorBrush(Colors.Transparent),
+                    Cursor = System.Windows.Input.Cursors.Hand,
                     Tag = new Tuple<Button, Button, PackageItem>(null, null, packageItem) // Will be updated after buttons are created
                 };
+                
+                // Apply theme button template with hover effects
+                var unloadBtnTemplate = new ControlTemplate(typeof(Button));
+                var unloadBtnBorder = new FrameworkElementFactory(typeof(Border));
+                unloadBtnBorder.Name = "UnloadBtnBorder";
+                unloadBtnBorder.SetValue(Border.BackgroundProperty, new TemplateBindingExtension(Button.BackgroundProperty));
+                unloadBtnBorder.SetValue(Border.BorderBrushProperty, new TemplateBindingExtension(Button.BorderBrushProperty));
+                unloadBtnBorder.SetValue(Border.BorderThicknessProperty, new TemplateBindingExtension(Button.BorderThicknessProperty));
+                unloadBtnBorder.SetValue(Border.CornerRadiusProperty, new CornerRadius(6)); // Match theme corner radius
+                unloadBtnBorder.SetValue(Border.PaddingProperty, new TemplateBindingExtension(Button.PaddingProperty));
+                var unloadBtnContent = new FrameworkElementFactory(typeof(ContentPresenter));
+                unloadBtnContent.SetValue(ContentPresenter.HorizontalAlignmentProperty, HorizontalAlignment.Center);
+                unloadBtnContent.SetValue(ContentPresenter.VerticalAlignmentProperty, VerticalAlignment.Center);
+                unloadBtnBorder.AppendChild(unloadBtnContent);
+                unloadBtnTemplate.VisualTree = unloadBtnBorder;
+                
+                // Add hover trigger
+                var unloadBtnHoverTrigger = new MultiTrigger();
+                unloadBtnHoverTrigger.Conditions.Add(new Condition(Button.IsMouseOverProperty, true));
+                unloadBtnHoverTrigger.Conditions.Add(new Condition(Button.IsEnabledProperty, true));
+                unloadBtnHoverTrigger.Setters.Add(new Setter(Button.BackgroundProperty, 
+                    new SolidColorBrush(Color.FromArgb(200, 69, 69, 69)))); // Theme hover color
+                // Add blue border on hover - target the border element
+                unloadBtnHoverTrigger.Setters.Add(new Setter(Border.BorderBrushProperty, 
+                    new SolidColorBrush(Color.FromArgb(255, 0, 120, 215)), "UnloadBtnBorder")); // #FF0078D7
+                unloadBtnHoverTrigger.Setters.Add(new Setter(Border.BorderThicknessProperty, new Thickness(1), "UnloadBtnBorder"));
+                unloadBtnTemplate.Triggers.Add(unloadBtnHoverTrigger);
+                
+                // Add pressed trigger
+                var unloadBtnPressedTrigger = new Trigger
+                {
+                    Property = Button.IsPressedProperty,
+                    Value = true
+                };
+                unloadBtnPressedTrigger.Setters.Add(new Setter(Button.BackgroundProperty, 
+                    new SolidColorBrush(Color.FromArgb(200, 85, 85, 85)))); // Theme pressed color
+                unloadBtnTemplate.Triggers.Add(unloadBtnPressedTrigger);
+                
+                unloadButton.Template = unloadBtnTemplate;
+                
                 unloadButton.Click += async (s, e) =>
                 {
                     var btn = s as Button;

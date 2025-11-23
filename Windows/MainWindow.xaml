@@ -5673,7 +5673,7 @@
                         <Border
                             x:Name="DependenciesButtonBar"
                             Grid.Row="1"
-                            Margin="0,0,0,9"
+                            Margin="0,0,0,0"
                             Padding="0,0"
                             Background="{DynamicResource {x:Static SystemColors.ControlBrushKey}}"
                             BorderBrush="{DynamicResource {x:Static SystemColors.ActiveBorderBrushKey}}"
@@ -5705,7 +5705,7 @@
                             </Border.Style>
                             <Grid
                                 x:Name="DependenciesButtonGrid"
-                                Margin="9,9,9,9"
+                                Margin="0,3,0,0"
                                 HorizontalAlignment="Stretch">
                                 <Grid.RowDefinitions>
                                     <RowDefinition Height="Auto" />
@@ -5907,7 +5907,7 @@
                     <TabControl
                         x:Name="PackageInfoTabControl"
                         Grid.Row="3"
-                        Margin="0,9,0,0"
+                        Margin="0,0,0,0"
                         VerticalAlignment="Stretch"
                         VerticalContentAlignment="Stretch"
                         Background="{DynamicResource {x:Static SystemColors.ControlBrushKey}}"

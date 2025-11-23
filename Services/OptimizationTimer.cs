@@ -108,6 +108,14 @@ namespace VPM.Services
                 if (_timings.Count == 0)
                 {
                     sb.AppendLine("No timing data collected.");
+                    sb.AppendLine();
+                    
+                    // Still include global elapsed time even if no operations recorded
+                    _globalStopwatch.Stop();
+                    sb.AppendLine(string.Format("Total Elapsed Time: {0}ms ({1:F2}s)", 
+                        _globalStopwatch.ElapsedMilliseconds, _globalStopwatch.Elapsed.TotalSeconds));
+                    sb.AppendLine();
+                    
                     return sb.ToString();
                 }
 

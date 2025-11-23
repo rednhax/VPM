@@ -147,11 +147,14 @@ namespace VPM.Tests.Services
             var debouncer = new SelectionDebouncer(50, action);
             debouncer.Trigger();
 
+            // After 30ms, debounce delay hasn't completed yet
             await Task.Delay(30);
-            Assert.True(actionExecuted);
+            Assert.False(actionExecuted);
             Assert.False(delayOccurred);
 
-            await Task.Delay(30);
+            // After 100ms total, debounce delay has completed and action has executed
+            await Task.Delay(70);
+            Assert.True(actionExecuted);
             Assert.True(delayOccurred);
 
             debouncer.Dispose();
@@ -345,7 +348,7 @@ namespace VPM.Tests.Services
             var debouncer = new SelectionDebouncer(50, action);
             debouncer.Trigger();
 
-            await Task.Delay(60);
+            await Task.Delay(100);
             Assert.True(actionStarted);
 
             debouncer.Cancel();

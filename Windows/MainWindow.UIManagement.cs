@@ -536,7 +536,7 @@ namespace VPM
             {
                 // Preset Category Filter
                 if (PresetCategoryFilterSection != null)
-                    PresetCategoryFilterSection.Visibility = settings.PresetCategoryFilterVisible ? System.Windows.Visibility.Visible : System.Windows.Visibility.Collapsed;
+                    PresetCategoryFilterSection.Visibility = System.Windows.Visibility.Visible;
                 if (PresetCategoryFilterList != null && PresetCategoryFilterTextBoxGrid != null && PresetCategoryFilterCollapsedGrid != null)
                 {
                     PresetCategoryFilterList.Visibility = settings.PresetCategoryFilterVisible ? System.Windows.Visibility.Visible : System.Windows.Visibility.Collapsed;
@@ -546,7 +546,7 @@ namespace VPM
                 
                 // Preset Subfolder Filter
                 if (PresetSubfolderFilterSection != null)
-                    PresetSubfolderFilterSection.Visibility = settings.PresetSubfolderFilterVisible ? System.Windows.Visibility.Visible : System.Windows.Visibility.Collapsed;
+                    PresetSubfolderFilterSection.Visibility = System.Windows.Visibility.Visible;
                 if (PresetSubfolderFilterList != null && PresetSubfolderFilterTextBoxGrid != null && PresetSubfolderFilterCollapsedGrid != null)
                 {
                     PresetSubfolderFilterList.Visibility = settings.PresetSubfolderFilterVisible ? System.Windows.Visibility.Visible : System.Windows.Visibility.Collapsed;
@@ -556,7 +556,7 @@ namespace VPM
                 
                 // Preset Date Filter
                 if (PresetDateFilterSection != null)
-                    PresetDateFilterSection.Visibility = settings.PresetDateFilterVisible ? System.Windows.Visibility.Visible : System.Windows.Visibility.Collapsed;
+                    PresetDateFilterSection.Visibility = System.Windows.Visibility.Visible;
                 if (PresetDateFilterList != null && PresetDateFilterExpandedGrid != null && PresetDateFilterCollapsedGrid != null)
                 {
                     PresetDateFilterList.Visibility = settings.PresetDateFilterVisible ? System.Windows.Visibility.Visible : System.Windows.Visibility.Collapsed;
@@ -566,7 +566,7 @@ namespace VPM
                 
                 // Preset File Size Filter
                 if (PresetFileSizeFilterSection != null)
-                    PresetFileSizeFilterSection.Visibility = settings.PresetFileSizeFilterVisible ? System.Windows.Visibility.Visible : System.Windows.Visibility.Collapsed;
+                    PresetFileSizeFilterSection.Visibility = System.Windows.Visibility.Visible;
                 if (PresetFileSizeFilterList != null && PresetFileSizeFilterExpandedGrid != null && PresetFileSizeFilterCollapsedGrid != null)
                 {
                     PresetFileSizeFilterList.Visibility = settings.PresetFileSizeFilterVisible ? System.Windows.Visibility.Visible : System.Windows.Visibility.Collapsed;
@@ -576,7 +576,7 @@ namespace VPM
                 
                 // Preset Status Filter
                 if (PresetStatusFilterSection != null)
-                    PresetStatusFilterSection.Visibility = settings.PresetStatusFilterVisible ? System.Windows.Visibility.Visible : System.Windows.Visibility.Collapsed;
+                    PresetStatusFilterSection.Visibility = System.Windows.Visibility.Visible;
                 if (PresetStatusFilterList != null && PresetStatusFilterExpandedGrid != null && PresetStatusFilterCollapsedGrid != null)
                 {
                     PresetStatusFilterList.Visibility = settings.PresetStatusFilterVisible ? System.Windows.Visibility.Visible : System.Windows.Visibility.Collapsed;
