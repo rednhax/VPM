@@ -177,77 +177,7 @@ namespace VPM.Services
             }
         }
 
-        /// <summary>
-        /// Submit an image compression task
-        /// </summary>
-        public bool SubmitImageCompressionTask(string inputPath, string outputPath, 
-            ImageCompressionOptions options = null, int priority = 0)
-        {
-            if (!_isRunning)
-                return false;
 
-            var task = new ImageCompressionTask(inputPath, outputPath, options);
-            task.Priority = priority;
-
-            _monitor.StartTask(task);
-            TaskStarted?.Invoke(this, new TaskEventArgs { Task = task, Timestamp = DateTime.UtcNow });
-
-            return _scheduler.EnqueueTask(task);
-        }
-
-        /// <summary>
-        /// Submit a JSON minification task
-        /// </summary>
-        public bool SubmitJsonMinificationTask(string inputPath, string outputPath,
-            JsonMinificationOptions options = null, int priority = 0)
-        {
-            if (!_isRunning)
-                return false;
-
-            var task = new JsonMinificationTask(inputPath, outputPath, options);
-            task.Priority = priority;
-
-            _monitor.StartTask(task);
-            TaskStarted?.Invoke(this, new TaskEventArgs { Task = task, Timestamp = DateTime.UtcNow });
-
-            return _scheduler.EnqueueTask(task);
-        }
-
-        /// <summary>
-        /// Submit a texture optimization task
-        /// </summary>
-        public bool SubmitTextureOptimizationTask(string inputPath, string outputPath,
-            TextureOptimizationOptions options = null, int priority = 0)
-        {
-            if (!_isRunning)
-                return false;
-
-            var task = new TextureOptimizationTask(inputPath, outputPath, options);
-            task.Priority = priority;
-
-            _monitor.StartTask(task);
-            TaskStarted?.Invoke(this, new TaskEventArgs { Task = task, Timestamp = DateTime.UtcNow });
-
-            return _scheduler.EnqueueTask(task);
-        }
-
-        /// <summary>
-        /// Submit an archive compression task
-        /// </summary>
-        public bool SubmitArchiveCompressionTask(string inputPath, string outputPath,
-            ArchiveCompressionOptions options = null, int priority = 0)
-        {
-            if (!_isRunning)
-                return false;
-
-            var task = new ArchiveCompressionTask(inputPath, outputPath, options);
-            task.Priority = priority;
-
-            _monitor.StartTask(task);
-            TaskStarted?.Invoke(this, new TaskEventArgs { Task = task, Timestamp = DateTime.UtcNow });
-
-            return _scheduler.EnqueueTask(task);
-        }
 
         /// <summary>
         /// Get current performance snapshot

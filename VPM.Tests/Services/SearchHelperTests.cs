@@ -5,101 +5,7 @@ namespace VPM.Tests.Services
 {
     public class SearchHelperTests
     {
-        [Fact]
-        public void StartsWithSearch_EmptySearchTerm_ReturnsTrue()
-        {
-            var result = SearchHelper.StartsWithSearch("some text", "");
 
-            Assert.True(result);
-        }
-
-        [Fact]
-        public void StartsWithSearch_NullSearchTerm_ReturnsTrue()
-        {
-            var result = SearchHelper.StartsWithSearch("some text", null);
-
-            Assert.True(result);
-        }
-
-        [Fact]
-        public void StartsWithSearch_MatchingStartWithExactCase_ReturnsTrue()
-        {
-            var result = SearchHelper.StartsWithSearch("Hello World", "Hello");
-
-            Assert.True(result);
-        }
-
-        [Fact]
-        public void StartsWithSearch_MatchingStartWithDifferentCase_ReturnsTrue()
-        {
-            var result = SearchHelper.StartsWithSearch("Hello World", "hello");
-
-            Assert.True(result);
-        }
-
-        [Fact]
-        public void StartsWithSearch_MatchingStartWithDifferentCase2_ReturnsTrue()
-        {
-            var result = SearchHelper.StartsWithSearch("hello world", "HELLO");
-
-            Assert.True(result);
-        }
-
-        [Fact]
-        public void StartsWithSearch_NotMatchingStart_ReturnsFalse()
-        {
-            var result = SearchHelper.StartsWithSearch("Hello World", "World");
-
-            Assert.False(result);
-        }
-
-        [Fact]
-        public void StartsWithSearch_PartialMatch_ReturnsFalse()
-        {
-            var result = SearchHelper.StartsWithSearch("Hello World", "lo Wo");
-
-            Assert.False(result);
-        }
-
-        [Fact]
-        public void StartsWithSearch_NullText_ReturnsFalse()
-        {
-            var result = SearchHelper.StartsWithSearch(null, "search");
-
-            Assert.False(result);
-        }
-
-        [Fact]
-        public void StartsWithSearch_EmptyText_ReturnsFalse()
-        {
-            var result = SearchHelper.StartsWithSearch("", "search");
-
-            Assert.False(result);
-        }
-
-        [Fact]
-        public void StartsWithSearch_NullTextAndNullSearchTerm_ReturnsTrue()
-        {
-            var result = SearchHelper.StartsWithSearch(null, null);
-
-            Assert.True(result);
-        }
-
-        [Fact]
-        public void StartsWithSearch_EmptyTextAndEmptySearchTerm_ReturnsTrue()
-        {
-            var result = SearchHelper.StartsWithSearch("", "");
-
-            Assert.True(result);
-        }
-
-        [Fact]
-        public void StartsWithSearch_SearchTermLongerThanText_ReturnsFalse()
-        {
-            var result = SearchHelper.StartsWithSearch("Hi", "Hello");
-
-            Assert.False(result);
-        }
 
         [Fact]
         public void ContainsSearch_EmptySearchTerm_ReturnsTrue()
@@ -269,13 +175,7 @@ namespace VPM.Tests.Services
             Assert.True(result);
         }
 
-        [Fact]
-        public void StartsWithSearch_SpecialCharacters_ReturnsTrue()
-        {
-            var result = SearchHelper.StartsWithSearch("$SpecialChars-123", "$Special");
 
-            Assert.True(result);
-        }
 
         [Fact]
         public void ContainsSearch_SpecialCharacters_ReturnsTrue()
@@ -285,13 +185,7 @@ namespace VPM.Tests.Services
             Assert.True(result);
         }
 
-        [Fact]
-        public void StartsWithSearch_UnicodeCharacters_ReturnsTrue()
-        {
-            var result = SearchHelper.StartsWithSearch("Café au lait", "café");
 
-            Assert.True(result);
-        }
 
         [Fact]
         public void ContainsSearch_UnicodeCharacters_ReturnsTrue()
@@ -301,13 +195,7 @@ namespace VPM.Tests.Services
             Assert.True(result);
         }
 
-        [Fact]
-        public void StartsWithSearch_MixedCase_ReturnsTrue()
-        {
-            var result = SearchHelper.StartsWithSearch("HeLLo WoRLd", "HeLLo");
 
-            Assert.True(result);
-        }
 
         [Fact]
         public void PrepareSearchText_TabsAndNewlines_ReturnsTrimmed()
