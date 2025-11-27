@@ -2785,8 +2785,16 @@ namespace VPM
             
             // Always allow new selections to interrupt previous image loading
             // This ensures clicking on a package always loads its images, even if previous loading is in progress
+            
+            // Skip if already displaying images to prevent concurrent operations
+            if (_isDisplayingImages)
+            {
+                return;
+            }
+            
             try
             {
+                _isDisplayingImages = true;
                 var selectedPackages = PackageDataGrid.SelectedItems.Cast<PackageItem>().ToList();
                 
                 if (selectedPackages.Count == 0)
@@ -2989,6 +2997,12 @@ namespace VPM
             {
                 // Skip dependency image display in scene mode - scenes manage their own image display
                 if (_currentContentMode == "Scenes")
+                {
+                    return;
+                }
+                
+                // Skip if already displaying images to prevent concurrent operations
+                if (_isDisplayingImages)
                 {
                     return;
                 }

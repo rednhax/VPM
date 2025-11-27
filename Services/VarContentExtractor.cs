@@ -774,6 +774,48 @@ namespace VPM.Services
                             {
                                 var vajDirectory = Path.GetDirectoryName(depEntry.Key)?.Replace('\\', '/');
                                 extractedCount += ExtractVajDependencies(archive, depEntry, gameFolder, vajDirectory);
+
+                                // Extract parent image preview
+                                try
+                                {
+                                    var vajBaseName = Path.GetFileNameWithoutExtension(depEntry.Key);
+                                    var vajDir = Path.GetDirectoryName(depEntry.Key)?.Replace('\\', '/') ?? "";
+                                    
+                                    var imageEntry = archive.Entries.FirstOrDefault(e => 
+                                    {
+                                        if (e.Key.EndsWith("/")) return false;
+                                        var eBase = Path.GetFileNameWithoutExtension(e.Key);
+                                        var eDir = Path.GetDirectoryName(e.Key)?.Replace('\\', '/') ?? "";
+                                        var ext = Path.GetExtension(e.Key).ToLowerInvariant();
+                                        
+                                        return eBase.Equals(vajBaseName, StringComparison.OrdinalIgnoreCase) &&
+                                               eDir.Equals(vajDir, StringComparison.OrdinalIgnoreCase) &&
+                                               (ext == ".jpg" || ext == ".jpeg" || ext == ".png");
+                                    });
+
+                                    if (imageEntry != null)
+                                    {
+                                        var imageTargetPath = Path.Combine(gameFolder, imageEntry.Key.Replace('/', Path.DirectorySeparatorChar));
+                                        if (!File.Exists(imageTargetPath))
+                                        {
+                                            var imageTargetDirectory = Path.GetDirectoryName(imageTargetPath);
+                                            if (!Directory.Exists(imageTargetDirectory))
+                                            {
+                                                Directory.CreateDirectory(imageTargetDirectory);
+                                            }
+                                            using (var entryStream = imageEntry.OpenEntryStream())
+                                            using (var fileStream = File.Create(imageTargetPath))
+                                            {
+                                                entryStream.CopyTo(fileStream);
+                                            }
+                                            extractedCount++;
+                                        }
+                                    }
+                                }
+                                catch (Exception ex)
+                                {
+                                    System.Diagnostics.Debug.WriteLine($"Failed to extract parent image preview: {ex.Message}");
+                                }
                             }
                             // Recursively extract dependencies for .vam files (presets)
                             else if (dependency.EndsWith(".vam", StringComparison.OrdinalIgnoreCase))

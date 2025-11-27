@@ -181,7 +181,8 @@ namespace VPM
                                         PackageName = package.Name,
                                         InternalPath = location.InternalPath,
                                         StatusBrush = new SolidColorBrush(package.StatusColor),
-                                        PackageItem = package
+                                        PackageItem = package,
+                                        IsExtracted = IsContentExtracted(location.InternalPath)
                                     });
                                 }
                             }
@@ -195,6 +196,140 @@ namespace VPM
             }
             catch (Exception)
             {
+            }
+        }
+
+        private bool IsContentExtracted(string internalPath)
+        {
+            try
+            {
+                if (_settingsManager == null || string.IsNullOrEmpty(_settingsManager.Settings.SelectedFolder))
+                    return false;
+
+                var targetPath = System.IO.Path.Combine(_settingsManager.Settings.SelectedFolder, internalPath.Replace('/', System.IO.Path.DirectorySeparatorChar));
+                return System.IO.File.Exists(targetPath);
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        private async void ExtractContent_Click(object sender, RoutedEventArgs e)
+        {
+            Button button = null;
+            try
+            {
+                button = sender as Button;
+                if (button == null) return;
+                
+                var imageItem = button.DataContext as ImagePreviewItem;
+                if (imageItem == null) return;
+                
+                // Prevent double clicks
+                button.IsEnabled = false;
+                
+                var packageItem = imageItem.PackageItem;
+                if (packageItem == null) return;
+                
+                var metadata = GetCachedPackageMetadata(!string.IsNullOrEmpty(packageItem.MetadataKey) ? packageItem.MetadataKey : packageItem.Name);
+                if (metadata == null || string.IsNullOrEmpty(metadata.FilePath)) return;
+                
+                var gameFolder = _settingsManager.Settings.SelectedFolder;
+                if (string.IsNullOrEmpty(gameFolder)) 
+                {
+                    MessageBox.Show("Game folder not set in settings.", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                    return;
+                }
+                
+                if (imageItem.IsExtracted)
+                {
+                    // Open in explorer
+                    OpenExtractedFilesInExplorer(imageItem.InternalPath);
+                }
+                else
+                {
+                    // Extract
+                    await VPM.Services.VarContentExtractor.ExtractRelatedFilesAsync(metadata.FilePath, imageItem.InternalPath, gameFolder);
+                    imageItem.IsExtracted = true;
+                }
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Error during extraction: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+            finally
+            {
+                if (button != null) button.IsEnabled = true;
+            }
+        }
+
+        private async void DeleteExtractedContent_Click(object sender, RoutedEventArgs e)
+        {
+            Button button = null;
+            try
+            {
+                button = sender as Button;
+                if (button == null) return;
+                
+                var imageItem = button.DataContext as ImagePreviewItem;
+                if (imageItem == null) return;
+                
+                // Prevent double clicks
+                button.IsEnabled = false;
+                
+                var packageItem = imageItem.PackageItem;
+                if (packageItem == null) return;
+
+                var metadata = GetCachedPackageMetadata(!string.IsNullOrEmpty(packageItem.MetadataKey) ? packageItem.MetadataKey : packageItem.Name);
+                if (metadata == null || string.IsNullOrEmpty(metadata.FilePath)) return;
+
+                var gameFolder = _settingsManager.Settings.SelectedFolder;
+                if (string.IsNullOrEmpty(gameFolder)) 
+                    return;
+                
+                // Use the extractor service to remove related files
+                await VPM.Services.VarContentExtractor.RemoveRelatedFilesAsync(metadata.FilePath, imageItem.InternalPath, gameFolder);
+                
+                imageItem.IsExtracted = false;
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Error deleting files: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+            finally
+            {
+                if (button != null) button.IsEnabled = true;
+            }
+        }
+
+        private void OpenExtractedFilesInExplorer(string internalPath)
+        {
+            try
+            {
+                if (_settingsManager == null || string.IsNullOrEmpty(_settingsManager.Settings.SelectedFolder))
+                    return;
+
+                var targetPath = System.IO.Path.Combine(_settingsManager.Settings.SelectedFolder, internalPath.Replace('/', System.IO.Path.DirectorySeparatorChar));
+                
+                if (System.IO.File.Exists(targetPath))
+                {
+                    // Select the file in Explorer
+                    System.Diagnostics.Process.Start("explorer.exe", $"/select,\"{targetPath}\"");
+                }
+                else
+                {
+                    // If file doesn't exist, try opening the folder
+                    var directory = System.IO.Path.GetDirectoryName(targetPath);
+                    if (System.IO.Directory.Exists(directory))
+                    {
+                        System.Diagnostics.Process.Start("explorer.exe", directory);
+                    }
+                }
+            }
+            catch
+            {
+                // Ignore errors opening explorer
             }
         }
 

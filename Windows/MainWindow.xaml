@@ -4,8 +4,8 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:System="clr-namespace:System;assembly=mscorlib"
     xmlns:local="clr-namespace:VPM"
-    xmlns:windows="clr-namespace:VPM.Windows"
     xmlns:shell="clr-namespace:System.Windows.Shell;assembly=PresentationFramework"
+    xmlns:windows="clr-namespace:VPM.Windows"
     x:Name="VPMWindow"
     Title="VPM - Ready"
     Width="1200"
@@ -3769,7 +3769,11 @@
                                             <StackPanel Margin="6,2,4,2" VerticalAlignment="Center">
                                                 <DockPanel HorizontalAlignment="Left" LastChildFill="True">
                                                     <!--  Status Icons Container  -->
-                                                    <StackPanel DockPanel.Dock="Right" Margin="6,0,0,0" Orientation="Horizontal" VerticalAlignment="Center">
+                                                    <StackPanel
+                                                        Margin="6,0,0,0"
+                                                        VerticalAlignment="Center"
+                                                        DockPanel.Dock="Right"
+                                                        Orientation="Horizontal">
                                                         <!--  Favorite heart  -->
                                                         <TextBlock
                                                             Margin="0,0,3,0"
@@ -5907,16 +5911,16 @@
                     <Grid Grid.Row="1">
                         <windows:ImageListView
                             x:Name="ImagesListView"
-                            ItemsSource="{Binding Source={StaticResource PreviewImagesView}}"
-                            BorderThickness="0"
                             Background="Transparent"
+                            BorderThickness="0"
+                            ItemsSource="{Binding Source={StaticResource PreviewImagesView}}"
+                            PreviewMouseWheel="ImagesListView_PreviewMouseWheel"
                             ScrollViewer.HorizontalScrollBarVisibility="Disabled"
                             ScrollViewer.VerticalScrollBarVisibility="Auto"
-                            PreviewMouseWheel="ImagesListView_PreviewMouseWheel"
                             SizeChanged="ImagesListView_SizeChanged">
-                            
+
                             <windows:ImageListView.ItemContainerStyle>
-                                <Style TargetType="ListViewItem" BasedOn="{StaticResource {x:Type ListBoxItem}}">
+                                <Style BasedOn="{StaticResource {x:Type ListBoxItem}}" TargetType="ListViewItem">
                                     <Setter Property="HorizontalContentAlignment" Value="Stretch" />
                                     <Setter Property="VerticalContentAlignment" Value="Top" />
                                     <Setter Property="Padding" Value="0" />
@@ -5928,7 +5932,11 @@
 
                             <windows:ImageListView.ItemsPanel>
                                 <ItemsPanelTemplate>
-                                    <WrapPanel Orientation="Horizontal" VerticalAlignment="Top" Margin="0" Width="{Binding ActualWidth, RelativeSource={RelativeSource AncestorType=windows:ImageListView}}" />
+                                    <WrapPanel
+                                        Width="{Binding ActualWidth, RelativeSource={RelativeSource AncestorType=windows:ImageListView}}"
+                                        Margin="0"
+                                        VerticalAlignment="Top"
+                                        Orientation="Horizontal" />
                                 </ItemsPanelTemplate>
                             </windows:ImageListView.ItemsPanel>
 
@@ -5940,15 +5948,16 @@
                                                 <Setter.Value>
                                                     <ControlTemplate TargetType="{x:Type GroupItem}">
                                                         <StackPanel Orientation="Vertical">
-                                                            <!-- Package header spanning full width -->
-                                                            <Border Background="#2A2A2A" 
-                                                                    BorderBrush="#444444" 
-                                                                    BorderThickness="1" 
-                                                                    Padding="6,4" 
-                                                                    CornerRadius="3"
-                                                                    Margin="0,8,0,0"
-                                                                    HorizontalAlignment="Stretch"
-                                                                    Height="48">
+                                                            <!--  Package header spanning full width  -->
+                                                            <Border
+                                                                Height="48"
+                                                                Margin="0,8,0,0"
+                                                                Padding="6,4"
+                                                                HorizontalAlignment="Stretch"
+                                                                Background="#2A2A2A"
+                                                                BorderBrush="#444444"
+                                                                BorderThickness="1"
+                                                                CornerRadius="3">
                                                                 <Grid>
                                                                     <Grid.ColumnDefinitions>
                                                                         <ColumnDefinition Width="Auto" />
@@ -5956,31 +5965,33 @@
                                                                         <ColumnDefinition Width="*" MinWidth="100" />
                                                                         <ColumnDefinition Width="Auto" />
                                                                     </Grid.ColumnDefinitions>
-                                                                    
-                                                                    <!-- Load/Unload button -->
-                                                                    <Button Grid.Column="0" 
-                                                                            x:Name="PackageHeaderLoadUnloadButton"
-                                                                            Width="Auto" 
-                                                                            Padding="12,6" 
-                                                                            Margin="0,0,8,0"
-                                                                            Content="{Binding Items[0].PackageItem.Status, Converter={StaticResource PackageStatusToLoadButtonConverter}}"
-                                                                            FontSize="12"
-                                                                            FontWeight="SemiBold"
-                                                                            ToolTip="Load/Unload package"
-                                                                            Background="#20FFFFFF"
-                                                                            Foreground="White"
-                                                                            BorderThickness="1"
-                                                                            BorderBrush="#40FFFFFF"
-                                                                            Click="PackageHeaderLoadUnload_Click">
+
+                                                                    <!--  Load/Unload button  -->
+                                                                    <Button
+                                                                        x:Name="PackageHeaderLoadUnloadButton"
+                                                                        Grid.Column="0"
+                                                                        Width="Auto"
+                                                                        Margin="0,0,8,0"
+                                                                        Padding="12,6"
+                                                                        Background="#20FFFFFF"
+                                                                        BorderBrush="#40FFFFFF"
+                                                                        BorderThickness="1"
+                                                                        Click="PackageHeaderLoadUnload_Click"
+                                                                        Content="{Binding Items[0].PackageItem.Status, Converter={StaticResource PackageStatusToLoadButtonConverter}}"
+                                                                        FontSize="12"
+                                                                        FontWeight="SemiBold"
+                                                                        Foreground="White"
+                                                                        ToolTip="Load/Unload package">
                                                                         <Button.Style>
                                                                             <Style TargetType="Button">
                                                                                 <Setter Property="Template">
                                                                                     <Setter.Value>
                                                                                         <ControlTemplate TargetType="Button">
-                                                                                            <Border Background="{TemplateBinding Background}" 
-                                                                                                    BorderBrush="{TemplateBinding BorderBrush}" 
-                                                                                                    BorderThickness="{TemplateBinding BorderThickness}" 
-                                                                                                    CornerRadius="3">
+                                                                                            <Border
+                                                                                                Background="{TemplateBinding Background}"
+                                                                                                BorderBrush="{TemplateBinding BorderBrush}"
+                                                                                                BorderThickness="{TemplateBinding BorderThickness}"
+                                                                                                CornerRadius="3">
                                                                                                 <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
                                                                                             </Border>
                                                                                             <ControlTemplate.Triggers>
@@ -5994,36 +6005,42 @@
                                                                             </Style>
                                                                         </Button.Style>
                                                                     </Button>
-                                                                    
-                                                                    <!-- Status line -->
-                                                                    <Border Grid.Column="1" 
-                                                                            Width="4" 
-                                                                            Height="20" 
-                                                                            Background="{Binding Items[0].StatusBrush}" 
-                                                                            CornerRadius="2" 
-                                                                            Margin="4,0,12,0" 
-                                                                            VerticalAlignment="Center" />
-                                                                    
-                                                                    <!-- Package name with clipping -->
-                                                                    <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
-                                                                        <TextBlock Text="{Binding Items[0].PackageName}" 
-                                                                                   Foreground="White" 
-                                                                                   FontSize="13" 
-                                                                                   FontWeight="SemiBold"
-                                                                                   TextTrimming="CharacterEllipsis"
-                                                                                   Margin="0,0,8,0" />
+
+                                                                    <!--  Status line  -->
+                                                                    <Border
+                                                                        Grid.Column="1"
+                                                                        Width="4"
+                                                                        Height="20"
+                                                                        Margin="4,0,12,0"
+                                                                        VerticalAlignment="Center"
+                                                                        Background="{Binding Items[0].StatusBrush}"
+                                                                        CornerRadius="2" />
+
+                                                                    <!--  Package name with clipping  -->
+                                                                    <StackPanel
+                                                                        Grid.Column="2"
+                                                                        VerticalAlignment="Center"
+                                                                        Orientation="Horizontal">
+                                                                        <TextBlock
+                                                                            Margin="0,0,8,0"
+                                                                            FontSize="13"
+                                                                            FontWeight="SemiBold"
+                                                                            Foreground="White"
+                                                                            Text="{Binding Items[0].PackageName}"
+                                                                            TextTrimming="CharacterEllipsis" />
                                                                     </StackPanel>
-                                                                    
-                                                                    <!-- Package size (always visible) -->
-                                                                    <TextBlock Grid.Column="3" 
-                                                                               Foreground="#AAAAAA" 
-                                                                               FontSize="13" 
-                                                                               VerticalAlignment="Center"
-                                                                               Margin="8,0,16,0"
-                                                                               Text="{Binding Items[0].PackageItem.FileSizeFormatted}" />
+
+                                                                    <!--  Package size (always visible)  -->
+                                                                    <TextBlock
+                                                                        Grid.Column="3"
+                                                                        Margin="8,0,16,0"
+                                                                        VerticalAlignment="Center"
+                                                                        FontSize="13"
+                                                                        Foreground="#AAAAAA"
+                                                                        Text="{Binding Items[0].PackageItem.FileSizeFormatted}" />
                                                                 </Grid>
                                                             </Border>
-                                                            <!-- Items container -->
+                                                            <!--  Items container  -->
                                                             <ItemsPresenter />
                                                         </StackPanel>
                                                     </ControlTemplate>
@@ -6036,15 +6053,20 @@
 
                             <windows:ImageListView.ItemTemplate>
                                 <DataTemplate>
-                                    <!-- Image with rounded corners using OpacityMask -->
+                                    <!--  Image with rounded corners using OpacityMask  -->
                                     <Grid Margin="3">
-                                        <Image Source="{Binding Image}" 
-                                               Stretch="Uniform" 
-                                               HorizontalAlignment="Center">
+                                        <Image
+                                            HorizontalAlignment="Center"
+                                            Source="{Binding Image}"
+                                            Stretch="Uniform">
                                             <Image.OpacityMask>
                                                 <VisualBrush>
                                                     <VisualBrush.Visual>
-                                                        <Border CornerRadius="6" Background="White" Width="{Binding ActualWidth, RelativeSource={RelativeSource AncestorType=Grid}}" Height="{Binding ActualHeight, RelativeSource={RelativeSource AncestorType=Grid}}" />
+                                                        <Border
+                                                            Width="{Binding ActualWidth, RelativeSource={RelativeSource AncestorType=Grid}}"
+                                                            Height="{Binding ActualHeight, RelativeSource={RelativeSource AncestorType=Grid}}"
+                                                            Background="White"
+                                                            CornerRadius="6" />
                                                     </VisualBrush.Visual>
                                                 </VisualBrush>
                                             </Image.OpacityMask>
@@ -6061,11 +6083,88 @@
                                                 </MultiBinding>
                                             </Image.Height>
                                         </Image>
+                                        
+                                        <!-- Delete button (only visible when extracted) -->
+                                        <Button
+                                            HorizontalAlignment="Left"
+                                            VerticalAlignment="Bottom"
+                                            Margin="6,0,0,6"
+                                            Padding="18,5"
+                                            Height="28"
+                                            Background="#CC803030"
+                                            Foreground="White"
+                                            BorderThickness="1"
+                                            BorderBrush="Transparent"
+                                            Click="DeleteExtractedContent_Click"
+                                            ToolTip="Delete extracted files"
+                                            Cursor="Hand"
+                                            Visibility="{Binding IsExtracted, Converter={StaticResource BoolToVis}}">
+                                            <TextBlock Text="✕" FontWeight="Bold" FontSize="12" />
+                                            <Button.Style>
+                                                <Style TargetType="Button">
+                                                    <Setter Property="Template">
+                                                        <Setter.Value>
+                                                            <ControlTemplate TargetType="Button">
+                                                                <Border Background="{TemplateBinding Background}" 
+                                                                        BorderBrush="{TemplateBinding BorderBrush}" 
+                                                                        BorderThickness="{TemplateBinding BorderThickness}" 
+                                                                        CornerRadius="3">
+                                                                    <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                                                </Border>
+                                                                <ControlTemplate.Triggers>
+                                                                    <Trigger Property="IsMouseOver" Value="True">
+                                                                        <Setter Property="Opacity" Value="0.9" />
+                                                                    </Trigger>
+                                                                </ControlTemplate.Triggers>
+                                                            </ControlTemplate>
+                                                        </Setter.Value>
+                                                    </Setter>
+                                                </Style>
+                                            </Button.Style>
+                                        </Button>
+
+                                        <!-- Extract button -->
+                                        <Button
+                                            HorizontalAlignment="Right"
+                                            VerticalAlignment="Bottom"
+                                            Margin="0,0,6,6"
+                                            Padding="18,5"
+                                            Height="28"
+                                            Background="{Binding ExtractionButtonBackground}"
+                                            Content="{Binding ExtractionButtonContent}"
+                                            Foreground="White"
+                                            BorderThickness="1"
+                                            BorderBrush="Transparent"
+                                            Click="ExtractContent_Click"
+                                            ToolTip="Extract files from archive"
+                                            Cursor="Hand">
+                                            <Button.Style>
+                                                <Style TargetType="Button">
+                                                    <Setter Property="Template">
+                                                        <Setter.Value>
+                                                            <ControlTemplate TargetType="Button">
+                                                                <Border Background="{TemplateBinding Background}" 
+                                                                        BorderBrush="{TemplateBinding BorderBrush}" 
+                                                                        BorderThickness="{TemplateBinding BorderThickness}" 
+                                                                        CornerRadius="3">
+                                                                    <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                                                </Border>
+                                                                <ControlTemplate.Triggers>
+                                                                    <Trigger Property="IsMouseOver" Value="True">
+                                                                        <Setter Property="Opacity" Value="0.9" />
+                                                                    </Trigger>
+                                                                </ControlTemplate.Triggers>
+                                                            </ControlTemplate>
+                                                        </Setter.Value>
+                                                    </Setter>
+                                                </Style>
+                                            </Button.Style>
+                                        </Button>
                                     </Grid>
                                 </DataTemplate>
                             </windows:ImageListView.ItemTemplate>
                         </windows:ImageListView>
-                        
+
 
                         <!--  Hoverable overlay controls - positioned at bottom right of image area  -->
                         <Border

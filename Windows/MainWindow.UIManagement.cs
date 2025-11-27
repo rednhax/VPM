@@ -88,11 +88,10 @@ namespace VPM
         private List<string> PreserveDataGridSelections()
         {
             if (PackageDataGrid?.SelectedItems == null)
-                return new List<string>();
+                return [];
                 
-            return PackageDataGrid.SelectedItems.Cast<PackageItem>()
-                .Select(p => p.Name)
-                .ToList();
+            return [.. PackageDataGrid.SelectedItems.Cast<PackageItem>()
+                .Select(p => p.Name)];
         }
         
         /// <summary>
@@ -188,11 +187,10 @@ namespace VPM
         private List<string> PreserveDependenciesDataGridSelections()
         {
             if (DependenciesDataGrid?.SelectedItems == null)
-                return new List<string>();
+                return [];
                 
-            return DependenciesDataGrid.SelectedItems.Cast<DependencyItem>()
-                .Select(d => d.Name)
-                .ToList();
+            return [.. DependenciesDataGrid.SelectedItems.Cast<DependencyItem>()
+                .Select(d => d.Name)];
         }
         
         /// <summary>
@@ -309,13 +307,13 @@ namespace VPM
             try
             {
                 // Update menu item checkmarks based on current theme
-                if (LightThemeMenuItem != null)
+                if (LightThemeMenuItem is not null)
                     LightThemeMenuItem.IsChecked = _currentTheme == "Light";
                 
-                if (DarkThemeMenuItem != null)
+                if (DarkThemeMenuItem is not null)
                     DarkThemeMenuItem.IsChecked = _currentTheme == "Dark";
                 
-                if (SystemThemeMenuItem != null)
+                if (SystemThemeMenuItem is not null)
                     SystemThemeMenuItem.IsChecked = _currentTheme == "System";
             }
             catch (Exception)
@@ -334,7 +332,7 @@ namespace VPM
                     // Try Windows 11/10 20H1+ attribute first, then fall back to older Windows 10 attribute
                     if (DwmSetWindowAttribute(hwnd, DWMWA_USE_IMMERSIVE_DARK_MODE, ref darkMode, sizeof(int)) != 0)
                     {
-                        DwmSetWindowAttribute(hwnd, DWMWA_USE_IMMERSIVE_DARK_MODE_BEFORE_20H1, ref darkMode, sizeof(int));
+                        _ = DwmSetWindowAttribute(hwnd, DWMWA_USE_IMMERSIVE_DARK_MODE_BEFORE_20H1, ref darkMode, sizeof(int));
                     }
                 }
             }

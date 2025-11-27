@@ -74,7 +74,7 @@ namespace VPM
         private bool _cascadeFiltering = true;
         
         // Store original dependencies for filtering
-        private List<DependencyItem> _originalDependencies = new List<DependencyItem>();
+        private List<DependencyItem> _originalDependencies = [];
         
         // Track whether we're showing dependencies or dependents
         private bool _showingDependents = false;
@@ -82,6 +82,9 @@ namespace VPM
         // Store counts for both tabs
         private int _dependenciesCount = 0;
         private int _dependentsCount = 0;
+        
+        // Track whether images are currently being displayed
+        private bool _isDisplayingImages = false;
         
         // Selection debouncers for scene, preset, and package modes
         private SelectionDebouncer _sceneSelectionDebouncer;
@@ -96,7 +99,7 @@ namespace VPM
         // Cancellation token for image loading operations
         private System.Threading.CancellationTokenSource _imageLoadingCts;
         
-        private bool _isDisplayingImages = false;
+
         
         // Animation configuration - reduced for better responsiveness
         private const int SELECTION_DEBOUNCE_DELAY_MS = 15;
@@ -118,10 +121,10 @@ namespace VPM
             }
 
             // Initialize collections
-            Packages = new OptimizedObservableCollection<PackageItem>();
-            Dependencies = new AsyncObservableCollection<DependencyItem>();
-            Scenes = new OptimizedObservableCollection<SceneItem>();
-            CustomAtomItems = new OptimizedObservableCollection<CustomAtomItem>();
+            Packages = new();
+            Dependencies = new();
+            Scenes = new();
+            CustomAtomItems = new();
 
             var packagesSource = (CollectionViewSource)FindResource("PackagesView");
             packagesSource.Source = Packages;
