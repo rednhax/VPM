@@ -141,9 +141,13 @@ namespace VPM.Services
         public async Task ReleasePackagesAsync(IEnumerable<string> packageNames)
         {
             var pathsToRelease = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var packageNamesList = packageNames.ToList();
             
-            foreach (var packageName in packageNames)
+            foreach (var packageName in packageNamesList)
             {
+                // Invalidate all caches for this package (bitmap, preview index, signatures)
+                InvalidatePackageCache(packageName);
+                
                 // Try to find path from ImageIndex
                 if (ImageIndex.TryGetValue(packageName, out var locations) && locations.Count > 0)
                 {
@@ -156,25 +160,9 @@ namespace VPM.Services
                 {
                     pathsToRelease.Add(metadata.FilePath);
                 }
-                
-                // Clear from caches
-                _bitmapCacheLock.EnterWriteLock();
-                try
-                {
-                    // We can't easily remove by package name from the cache keys if they are just paths
-                    // But the cache keys seem to be "VarPath|InternalPath" or similar?
-                    // Let's check TryGetCached usage.
-                    // It uses VarPath + InternalPath.
-                    // So we can't easily clear without iterating.
-                    // But BitmapImage OnLoad shouldn't lock the file.
-                    // The main issue is the open file stream in ImageLoaderAsyncPool.
-                }
-                finally
-                {
-                    _bitmapCacheLock.ExitWriteLock();
-                }
             }
             
+            // Release file locks from async pool (handles open streams)
             if (pathsToRelease.Count > 0)
             {
                 await _asyncPool.ReleaseFileLocksAsync(pathsToRelease);
@@ -234,6 +222,34 @@ namespace VPM.Services
             await Task.WhenAll(indexTasks);
 
             return true;
+        }
+        
+        /// <summary>
+        /// Rebuilds the image index for a specific package after it has been moved
+        /// Call this after load/unload operations to refresh image previews
+        /// </summary>
+        public async Task RebuildImageIndexForPackageAsync(string varFilePath)
+        {
+            if (string.IsNullOrEmpty(varFilePath) || !File.Exists(varFilePath))
+                return;
+            
+            var packageName = Path.GetFileNameWithoutExtension(varFilePath);
+            
+            // Remove the old signature to force rebuild
+            _signatureLock.EnterWriteLock();
+            try
+            {
+                _imageIndexSignatures.Remove(packageName);
+                // Also remove from index to force rebuild
+                ImageIndex.Remove(packageName);
+            }
+            finally
+            {
+                _signatureLock.ExitWriteLock();
+            }
+            
+            // Rebuild the index for this package
+            await BuildImageIndexFromVarsAsync(new[] { varFilePath }, forceRebuild: false);
         }
         
 
@@ -1129,81 +1145,65 @@ namespace VPM.Services
         /// </summary>
         public async Task<BitmapImage> LoadImageAsync(string varPath, string internalPath, int decodeWidth = 0, int decodeHeight = 0)
         {
-            if (string.IsNullOrEmpty(varPath) || string.IsNullOrEmpty(internalPath))
+            // 1. Validate inputs and file existence
+            if (string.IsNullOrEmpty(varPath) || string.IsNullOrEmpty(internalPath)) return null;
+            if (!File.Exists(varPath)) return null;
+
+            try
+            {
+                var fileInfo = new FileInfo(varPath);
+                long fileSize = fileInfo.Length;
+                long lastWriteTicks = fileInfo.LastWriteTime.Ticks;
+
+                // 2. Check Binary Cache first
+                // This avoids opening the archive if we already have the processed image
+                var cachedImage = _diskCache.TryGetCached(varPath, internalPath, fileSize, lastWriteTicks);
+                if (cachedImage != null)
+                {
+                    return cachedImage;
+                }
+
+                // 3. Read from Archive (Cache Miss)
+                byte[] imageData = null;
+                
+                // Open the archive, read the data, and IMMEDIATELY close it via 'using'
+                // This prevents file locking issues when packages are moved or modified
+                using (var archive = SharpCompressHelper.OpenForRead(varPath))
+                {
+                    var entry = SharpCompressHelper.FindEntryByPath(archive, internalPath);
+                    if (entry != null)
+                    {
+                        int chunkSize = SharpCompressHelper.GetAdaptiveChunkSize(entry.Size);
+                        imageData = SharpCompressHelper.ReadEntryChunked(archive, entry, chunkSize);
+                    }
+                }
+
+                if (imageData == null || imageData.Length == 0) return null;
+
+                // 4. Create BitmapImage from memory
+                var bitmap = new BitmapImage();
+                using (var stream = new MemoryStream(imageData))
+                {
+                    bitmap.BeginInit();
+                    bitmap.CacheOption = BitmapCacheOption.OnLoad; // Loads immediately, closes stream
+                    bitmap.StreamSource = stream;
+                    if (decodeWidth > 0) bitmap.DecodePixelWidth = decodeWidth;
+                    if (decodeHeight > 0) bitmap.DecodePixelHeight = decodeHeight;
+                    bitmap.EndInit();
+                    bitmap.Freeze(); // Make thread-safe
+                }
+
+                // 5. Save to Disk Cache for future use
+                _diskCache.TrySaveToCache(varPath, internalPath, fileSize, lastWriteTicks, bitmap);
+
+                return bitmap;
+            }
+            catch (Exception ex)
+            {
+                // Log error if needed, but return null to avoid crashing UI
+                Console.WriteLine($"[ImageManager] Error loading image {internalPath} from {varPath}: {ex.Message}");
                 return null;
-
-            // Include dimensions in cache key if specified
-            var cacheKey = $"{varPath}::{internalPath}";
-            if (decodeWidth > 0 || decodeHeight > 0)
-            {
-                cacheKey += $"::{decodeWidth}x{decodeHeight}";
             }
-
-            var cachedBitmap = GetCachedImage(cacheKey);
-            if (cachedBitmap != null)
-            {
-                return cachedBitmap;
-            }
-
-            var tcs = new TaskCompletionSource<BitmapImage>();
-            
-            var qi = new QueuedImage
-            {
-                VarPath = varPath,
-                InternalPath = internalPath,
-                DecodeWidth = decodeWidth,
-                DecodeHeight = decodeHeight,
-                Callback = (q) =>
-                {
-                    if (q.HadError)
-                    {
-                        // Return null on error instead of throwing to avoid crashing UI
-                        tcs.TrySetResult(null);
-                    }
-                    else
-                    {
-                        // Cache it
-                        if (q.Texture != null)
-                        {
-                            _bitmapCacheLock.EnterWriteLock();
-                            try
-                            {
-                                AddToStrongCache(cacheKey, q.Texture);
-                                _bitmapCache[cacheKey] = new WeakReference<BitmapImage>(q.Texture);
-                            }
-                            finally
-                            {
-                                _bitmapCacheLock.ExitWriteLock();
-                            }
-                        }
-                        tcs.TrySetResult(q.Texture);
-                    }
-                }
-            };
-            
-            // Optimization: Try to get file signature from index to avoid disk I/O in thread pool
-            try 
-            {
-                var packageName = Path.GetFileNameWithoutExtension(varPath);
-                _signatureLock.EnterReadLock();
-                try
-                {
-                    if (_imageIndexSignatures.TryGetValue(packageName, out var signature))
-                    {
-                        qi.FileSize = signature.length;
-                        qi.LastWriteTicks = signature.lastWriteTicks;
-                    }
-                }
-                finally
-                {
-                    _signatureLock.ExitReadLock();
-                }
-            }
-            catch { }
-            
-            _asyncPool.QueueImage(qi);
-            
-            return await tcs.Task;
         }
 
         public async Task<List<BitmapImage>> LoadImagesFromCacheAsync(string packageName, int maxImages = 50)
@@ -2327,11 +2327,13 @@ namespace VPM.Services
                 // Clear from preview image index as well
                 PreviewImageIndex.TryRemove(packageName, out _);
                 
-                // Clear from main image index
+                // NOTE: Do NOT clear ImageIndex here - we need to preserve the image locations
+                // even after closing file handles. The index is only cleared when the package
+                // is actually unloaded/removed from the system.
+                // Only clear the signatures so the index will be rebuilt if the file changes
                 _varArchiveLock.EnterWriteLock();
                 try
                 {
-                    ImageIndex.Remove(packageName);
                     _imageIndexSignatures.Remove(packageName);
                 }
                 finally
@@ -2393,13 +2395,15 @@ namespace VPM.Services
                     _bitmapCacheLock.ExitWriteLock();
                 }
                 
-                // Clear from indices
+                // Clear from preview image index (temporary cache)
                 PreviewImageIndex.TryRemove(packageName, out _);
                 
+                // NOTE: Do NOT remove from ImageIndex here - we need to preserve the image locations
+                // The image index should only be cleared when the package is permanently removed from the system
+                // Only clear the signatures so the index will be rebuilt if the file changes
                 _varArchiveLock.EnterWriteLock();
                 try
                 {
-                    ImageIndex.Remove(packageName);
                     _imageIndexSignatures.Remove(packageName);
                 }
                 finally
@@ -2422,16 +2426,24 @@ namespace VPM.Services
 
             var packageName = System.IO.Path.GetFileNameWithoutExtension(oldPath);
 
-            // Update ImageIndex entries
-            if (ImageIndex.TryGetValue(packageName, out var locations))
+            _varArchiveLock.EnterWriteLock();
+            try
             {
-                foreach (var location in locations)
+                // Update ImageIndex entries
+                if (ImageIndex.TryGetValue(packageName, out var locations))
                 {
-                    if (location.VarFilePath == oldPath)
+                    foreach (var location in locations)
                     {
-                        location.VarFilePath = newPath;
+                        if (string.Equals(location.VarFilePath, oldPath, StringComparison.OrdinalIgnoreCase))
+                        {
+                            location.VarFilePath = newPath;
+                        }
                     }
                 }
+            }
+            finally
+            {
+                _varArchiveLock.ExitWriteLock();
             }
         }
     }

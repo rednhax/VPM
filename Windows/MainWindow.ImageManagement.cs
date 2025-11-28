@@ -145,6 +145,10 @@ namespace VPM
                     return;
 
                 // Load images for each package
+                // Strategy: Use binary cache-first approach to avoid archive locks
+                // 1. Check binary cache for each image
+                // 2. If cache miss, load from archive and save to cache
+                // 3. Archive is opened/closed immediately per image (no persistent locks)
                 foreach (var package in selectedPackages)
                 {
                     if (cancellationToken.IsCancellationRequested) 
@@ -153,16 +157,17 @@ namespace VPM
                     var packageKey = !string.IsNullOrEmpty(package.MetadataKey) ? package.MetadataKey : package.Name;
                     var metadata = GetCachedPackageMetadata(packageKey);
                     
-                    if (metadata == null || string.IsNullOrEmpty(metadata.FilePath)) 
+                    if (metadata == null || string.IsNullOrEmpty(metadata.FilePath))
                         continue;
 
                     // Get the package base name for image index lookup
                     var packageBase = System.IO.Path.GetFileNameWithoutExtension(metadata.Filename);
                     
                     // Check if images are indexed for this package
-                    if (_imageManager.ImageIndex.TryGetValue(packageBase, out var locations))
+                    if (_imageManager.ImageIndex.TryGetValue(packageBase, out var locations) && locations != null && locations.Count > 0)
                     {
-                        // Load images from the indexed locations
+                        // Load images from the indexed locations using cache-first strategy
+                        // LoadImageAsync handles: binary cache check → archive read (if miss) → cache save
                         foreach (var location in locations)
                         {
                             if (cancellationToken.IsCancellationRequested) 
@@ -170,7 +175,11 @@ namespace VPM
 
                             try
                             {
-                                // Load the image from the VAR file
+                                // LoadImageAsync uses binary cache-first strategy:
+                                // 1. Checks binary cache (no archive lock)
+                                // 2. On cache miss: opens archive, reads image, closes archive immediately
+                                // 3. Saves to binary cache for future use
+                                // This prevents persistent archive locks during grid display
                                 var image = await _imageManager.LoadImageAsync(location.VarFilePath, location.InternalPath, 0, 0);
                                 
                                 if (image != null)
@@ -193,6 +202,34 @@ namespace VPM
                         }
                     }
                 }
+            }
+            catch (Exception)
+            {
+            }
+        }
+
+        /// <summary>
+        /// Refreshes the image preview grid for currently selected packages.
+        /// Call this after package status changes (Load/Unload) to reload images.
+        /// </summary>
+        private async Task RefreshCurrentlyDisplayedImagesAsync()
+        {
+            try
+            {
+                // Get currently selected packages from the grid
+                if (PackageDataGrid?.SelectedItems == null || PackageDataGrid.SelectedItems.Count == 0)
+                {
+                    PreviewImages.Clear();
+                    return;
+                }
+
+                var selectedPackages = PackageDataGrid.SelectedItems.Cast<PackageItem>().ToList();
+                
+                // Clear the metadata cache to ensure fresh lookups
+                ClearPackageMetadataCache();
+                
+                // Reload images for the currently selected packages
+                await DisplayMultiplePackageImagesAsync(selectedPackages);
             }
             catch (Exception)
             {
@@ -452,7 +489,7 @@ namespace VPM
             }
         }
 
-        private void PackageHeaderLoadUnload_Click(object sender, RoutedEventArgs e)
+        private async void PackageHeaderLoadUnload_Click(object sender, RoutedEventArgs e)
         {
             try
             {
@@ -473,23 +510,31 @@ namespace VPM
                     if (group.Items.Count > 0 && group.Items[0] is ImagePreviewItem imageItem)
                     {
                         var packageItem = imageItem.PackageItem;
-                        if (packageItem != null && PackageDataGrid != null)
+                        if (packageItem != null && _packageFileManager != null)
                         {
-                            // Select the package in the PackageDataGrid
-                            PackageDataGrid.SelectedItem = packageItem;
-                            PackageDataGrid.ScrollIntoView(packageItem);
-
-                            // Toggle between Load and Unload based on current status
+                            // Perform load/unload directly without changing DataGrid selection
+                            // This preserves the current selection and only updates the status
                             if (packageItem.Status == "Loaded")
                             {
                                 // Unload the package
-                                UnloadPackages_Click(null, null);
+                                var (success, error) = await _packageFileManager.UnloadPackageAsync(packageItem.Name);
+                                if (success)
+                                {
+                                    packageItem.Status = "Available";
+                                }
                             }
                             else if (packageItem.Status == "Available")
                             {
                                 // Load the package
-                                LoadPackages_Click(null, null);
+                                var (success, error) = await _packageFileManager.LoadPackageAsync(packageItem.Name);
+                                if (success)
+                                {
+                                    packageItem.Status = "Loaded";
+                                }
                             }
+                            
+                            // Refresh images to show updated status
+                            await RefreshCurrentlyDisplayedImagesAsync();
                         }
                     }
                 }

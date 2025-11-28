@@ -73,6 +73,10 @@ namespace VPM
                     // Use enhanced batch operation with progress reporting
                     var packageNames = selectedPackages.Select(p => p.Name).ToList();
                     
+                    // Cancel any pending image loading operations to free up file handles
+                    _imageLoadingCts?.Cancel();
+                    _imageLoadingCts = new System.Threading.CancellationTokenSource();
+                    
                     // Release file locks before operation to prevent conflicts with image grid
                     await _imageManager.ReleasePackagesAsync(packageNames);
 
@@ -85,6 +89,9 @@ namespace VPM
                     });
 
                     var results = await _packageFileManager.LoadPackagesAsync(packageNames, progress);
+
+                    // Clear metadata cache to ensure new paths are picked up
+                    ClearPackageMetadataCache();
 
                     // Update package statuses based on results
                     var statusUpdates = new List<(string packageName, string status, Color statusColor)>();
@@ -120,6 +127,9 @@ namespace VPM
                     {
                         await BulkUpdatePackageStatus(successfullyLoaded, "Loaded");
                     }
+
+                    // Refresh image grid to show newly loaded packages
+                    await RefreshCurrentlyDisplayedImagesAsync();
 
                     // Enhanced status reporting
                     var successCount = results.Count(r => r.success);
@@ -310,6 +320,9 @@ namespace VPM
                         await BulkUpdatePackageStatus(successfullyLoaded, "Loaded");
                     }
 
+                    // Refresh image grid to show newly loaded packages and dependencies
+                    await RefreshCurrentlyDisplayedImagesAsync();
+
                     var successCount = results.Count(r => r.success);
                     var failureCount = results.Count(r => !r.success);
                     var throttledCount = results.Count(r => !r.success && r.error.Contains("recently performed"));
@@ -409,6 +422,11 @@ namespace VPM
                 {
                     // Use enhanced batch operation with progress reporting
                     var packageNames = selectedPackages.Select(p => p.Name).ToList();
+                    
+                    // Cancel any pending image loading operations to free up file handles
+                    _imageLoadingCts?.Cancel();
+                    _imageLoadingCts = new System.Threading.CancellationTokenSource();
+                    
                     var progress = new Progress<(int completed, int total, string currentPackage)>(p =>
                     {
                         // Update status with progress
@@ -418,6 +436,9 @@ namespace VPM
                     });
 
                     var results = await _packageFileManager.UnloadPackagesAsync(packageNames, progress);
+
+                    // Clear metadata cache to ensure new paths are picked up
+                    ClearPackageMetadataCache();
 
                     // Update package statuses based on results
                     var statusUpdates = new List<(string packageName, string status, Color statusColor)>();
@@ -453,6 +474,9 @@ namespace VPM
                     {
                         await BulkUpdatePackageStatus(successfullyUnloaded, "Available");
                     }
+
+                    // Refresh image grid to show updated package status
+                    await RefreshCurrentlyDisplayedImagesAsync();
 
                     // Enhanced status reporting
                     var successCount = results.Count(r => r.success);
@@ -583,6 +607,9 @@ namespace VPM
                     {
                         await BulkUpdatePackageStatus(successfullyLoaded, "Loaded");
                     }
+
+                    // Refresh image grid to show newly loaded dependencies
+                    await RefreshCurrentlyDisplayedImagesAsync();
 
                     // Enhanced status reporting
                     var successCount = results.Count(r => r.success);

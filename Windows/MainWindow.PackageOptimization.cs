@@ -2156,6 +2156,10 @@ namespace VPM
         {
             try
             {
+                // Cancel any pending image loading operations to free up file handles
+                _imageLoadingCts?.Cancel();
+                _imageLoadingCts = new System.Threading.CancellationTokenSource();
+                
                 // Group items by package (only actual conversions - different from current resolution)
                 var texturesByPackage = textureResult.Textures.Where(t => t.HasActualConversion).GroupBy(t => t.PackageName).ToDictionary(g => g.Key, g => g.ToList());
                 var hairsByPackage = hairResult.HairItems.Where(h => h.HasConversionSelected).GroupBy(h => h.PackageName).ToDictionary(g => g.Key, g => g.ToList());

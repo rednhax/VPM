@@ -123,6 +123,19 @@ namespace VPM
                 return;
             }
 
+            // If drag selection is in progress, skip image loading and wait for mouse release
+            if (_isDragging)
+            {
+                // Start or restart the drag watch timer to detect when drag ends
+                if (_dragWatchTimer == null)
+                {
+                    _dragWatchTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(50) };
+                    _dragWatchTimer.Tick += DragWatchTimer_Tick;
+                }
+                _dragWatchTimer.Start();
+                return; // Skip image loading during drag
+            }
+
             // Cancel any pending package selection update
             _packageSelectionCts?.Cancel();
             _packageSelectionCts?.Dispose();
@@ -617,6 +630,14 @@ namespace VPM
                 _dragButton = null;
                 _dragStartItem = null;
                 _suppressSelectionEvents = false;
+                
+                // Trigger image loading now that drag has ended
+                // This ensures images are only loaded after the user finishes selecting rows
+                if (PackageDataGrid?.SelectedItems?.Count > 0)
+                {
+                    // Re-trigger the selection changed handler to load images
+                    PackageDataGrid_SelectionChanged(PackageDataGrid, null);
+                }
             }
         }
 
@@ -2587,6 +2608,93 @@ namespace VPM
             }
         }
 
+        private void PackageDataGrid_PreviewMouseDown(object sender, MouseButtonEventArgs e)
+        {
+            if (e.ChangedButton == MouseButton.Left)
+            {
+                var dataGrid = sender as DataGrid;
+                var hitTest = VisualTreeHelper.HitTest(dataGrid, e.GetPosition(dataGrid));
+                var dataGridRow = FindParent<DataGridRow>(hitTest?.VisualHit as DependencyObject);
+                
+                if (dataGridRow != null)
+                {
+                    _dragStartPoint = e.GetPosition(dataGrid);
+                    _dragStartItem = dataGridRow;
+                    _dragButton = e.ChangedButton;
+                    _isDragging = false;
+
+                    // Start drag watch timer
+                    _dragWatchTimer?.Stop();
+                    _dragWatchTimer = new DispatcherTimer
+                    {
+                        Interval = TimeSpan.FromMilliseconds(50)
+                    };
+                    _dragWatchTimer.Tick += DragWatchTimer_Tick;
+                    _dragWatchTimer.Start();
+                }
+            }
+        }
+
+        private void PackageDataGrid_PreviewMouseUp(object sender, MouseButtonEventArgs e)
+        {
+            if (e.ChangedButton == _dragButton)
+            {
+                var wasDragging = _isDragging;
+                
+                _dragWatchTimer?.Stop();
+                _isDragging = false;
+                _dragButton = null;
+                _dragStartItem = null;
+                
+                // Ensure selection events are re-enabled
+                _suppressSelectionEvents = false;
+                
+                // Trigger image loading if we were dragging
+                if (wasDragging && PackageDataGrid?.SelectedItems?.Count > 0)
+                {
+                    // Re-trigger the selection changed handler to load images
+                    PackageDataGrid_SelectionChanged(PackageDataGrid, null);
+                }
+            }
+        }
+
+        private void PackageDataGrid_PreviewMouseMove(object sender, MouseEventArgs e)
+        {
+            if (_dragButton == MouseButton.Left && _dragStartItem != null)
+            {
+                var dataGrid = sender as DataGrid;
+                var currentPoint = e.GetPosition(dataGrid);
+                
+                // Only start drag selection if we've moved a reasonable distance
+                if (Math.Abs(currentPoint.X - _dragStartPoint.X) > 8 || Math.Abs(currentPoint.Y - _dragStartPoint.Y) > 8)
+                {
+                    // Now we're actually dragging
+                    if (!_isDragging)
+                    {
+                        _isDragging = true;
+                    }
+                    
+                    var hitTest = VisualTreeHelper.HitTest(dataGrid, currentPoint);
+                    var currentItem = FindParent<DataGridRow>(hitTest?.VisualHit as DependencyObject);
+                    
+                    // Normal left button drag selection - select range
+                    if (currentItem != null && _dragStartItem != null)
+                    {
+                        // Suppress selection events only during actual dragging
+                        _suppressSelectionEvents = true;
+                        try
+                        {
+                            SelectItemsBetween(dataGrid, _dragStartItem, currentItem);
+                        }
+                        finally
+                        {
+                            // Don't re-enable here - wait for mouse up
+                        }
+                    }
+                }
+            }
+        }
+
         private void DependenciesDataGrid_PreviewMouseDown(object sender, MouseButtonEventArgs e)
         {
             if (e.ChangedButton == MouseButton.Left)
@@ -3011,6 +3119,16 @@ namespace VPM
                 var selectedPackages = PackageDataGrid?.SelectedItems?.Cast<PackageItem>()?.ToList() ?? new List<PackageItem>();
                 var selectedDependencies = DependenciesDataGrid?.SelectedItems?.Cast<DependencyItem>()?.ToList() ?? new List<DependencyItem>();
 
+                // Skip image loading for large selections to prevent UI hang
+                // Large selections are typically for batch operations (load/unload/optimize)
+                if (selectedDependencies.Count > 50)
+                {
+                    PreviewImages.Clear();
+                    SetStatus($"{selectedDependencies.Count} dependencies selected – image preview disabled for performance");
+                    _isDisplayingImages = false;
+                    return;
+                }
+
                 // Check if the selection has actually changed
                 var currentPackageNames = selectedPackages.Select(p => p.Name).OrderBy(n => n).ToList();
                 var currentDependencyNames = selectedDependencies.Select(d => d.Name).OrderBy(n => n).ToList();
@@ -3029,35 +3147,38 @@ namespace VPM
                 _currentlyDisplayedPackages = currentPackageNames;
                 _currentlyDisplayedDependencies = currentDependencyNames;
 
-                // Convert selected dependencies to package items and pre-index images in background
-                // This avoids blocking the UI thread on dependency lookup and image indexing
+                // Convert selected dependencies to package items
+                // DisplayMultiplePackageImagesAsync uses LoadImageAsync which has cache-first strategy
+                // and doesn't hold archives open, so no pre-indexing needed here
                 List<PackageItem> dependencyPackages = await Task.Run(() =>
                 {
-                    var packages = ConvertDependenciesToPackages(selectedDependencies);
-                    
-                    // Pre-index images for dependency packages to avoid on-demand scanning during display
-                    // Only index if not already indexed (check cache first to avoid redundant VAR scans)
-                    if (packages.Count > 0 && _imageManager != null && _packageManager != null)
+                    return ConvertDependenciesToPackages(selectedDependencies);
+                });
+                
+                // Ensure dependency/dependent packages are indexed for image display
+                // This is necessary because dependents may not have been in the initial index build
+                if (dependencyPackages.Count > 0 && _imageManager != null && _packageManager != null)
+                {
+                    var unindexedPaths = new List<string>();
+                    foreach (var depPackage in dependencyPackages)
                     {
-                        foreach (var depPackage in packages)
+                        var packageKey = !string.IsNullOrEmpty(depPackage.MetadataKey) ? depPackage.MetadataKey : depPackage.Name;
+                        if (_packageManager.PackageMetadata.TryGetValue(packageKey, out var metadata))
                         {
-                            var packageKey = !string.IsNullOrEmpty(depPackage.MetadataKey) ? depPackage.MetadataKey : depPackage.Name;
-                            if (_packageManager.PackageMetadata.TryGetValue(packageKey, out var metadata))
+                            var packageBase = System.IO.Path.GetFileNameWithoutExtension(metadata.Filename);
+                            if (!_imageManager.ImageIndex.ContainsKey(packageBase))
                             {
-                                // Extract base name for cache lookup
-                                var packageBase = Path.GetFileNameWithoutExtension(metadata.Filename);
-                                
-                                // Only pre-index if not already in cache (avoids redundant VAR scans)
-                                if (_imageManager.GetCachedImageCount(packageBase) == 0)
-                                {
-                                    _imageManager.PreIndexImagesForPackage(metadata.FilePath);
-                                }
+                                unindexedPaths.Add(metadata.FilePath);
                             }
                         }
                     }
                     
-                    return packages;
-                });
+                    // Index any missing packages
+                    if (unindexedPaths.Count > 0)
+                    {
+                        await _imageManager.BuildImageIndexFromVarsAsync(unindexedPaths, false);
+                    }
+                }
 
                 // If dependencies are selected, show ONLY their images, not the parent packages
                 var allPackages = new List<PackageItem>();
@@ -3083,13 +3204,19 @@ namespace VPM
                 else
                 {
                     // Display images for either parent packages or selected dependencies/dependents
+                    // Use cancellation token so image loading can be interrupted by load/unload/optimize operations
+                    if (_imageLoadingCts == null)
+                    {
+                        _imageLoadingCts = new System.Threading.CancellationTokenSource();
+                    }
+                    
                     if (allPackages.Count == 1)
                     {
-                        await DisplayPackageImagesAsync(allPackages[0]);
+                        await DisplayPackageImagesAsync(allPackages[0], _imageLoadingCts.Token);
                     }
                     else
                     {
-                        await DisplayMultiplePackageImagesAsync(allPackages, packageSources);
+                        await DisplayMultiplePackageImagesAsync(allPackages, packageSources, _imageLoadingCts.Token);
                     }
                 }
             }

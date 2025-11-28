@@ -47,6 +47,7 @@ namespace VPM.Services
         private Dictionary<string, string> _packageExactIndex = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         private volatile bool _packageIndexDirty = true;
         private readonly Dictionary<string, DateTime> _packageIndexDirectorySignatures = new Dictionary<string, DateTime>(StringComparer.OrdinalIgnoreCase);
+        private readonly Dictionary<string, (int fileCount, long lastWriteTicks)> _statusIndexDirectorySignatures = new Dictionary<string, (int, long)>(StringComparer.OrdinalIgnoreCase);
 
 
         // Disposal tracking
@@ -108,9 +109,9 @@ namespace VPM.Services
             // Ensure directories exist
             EnsureDirectoriesExist();
             
-            // Don't build package status index here - it will be built lazily on first use
-            // to avoid blocking the UI thread during startup
-            _statusIndexBuilt = false;
+            // Build package status index eagerly in background to avoid lazy initialization delays
+            // This prevents lock contention on first access
+            _ = Task.Run(() => BuildPackageStatusIndex());
         }
 
         private void EnsureDirectoriesExist()
@@ -666,10 +667,8 @@ namespace VPM.Services
                 // First ensure any open file handles are closed
                 if (_imageManager != null) await _imageManager.CloseFileHandlesAsync(sourceFile);
                 
-                // Give the OS time to release file handles and for pending tasks to cancel
-                await Task.Delay(200);
-
                 // Move the file with enhanced error handling (skip validation to allow corrupt VARs to move)
+                // SafeMoveFileAsync includes retry logic with exponential backoff for transient failures
                 var (success, error) = await SafeMoveFileAsync(sourceFile, destinationFile, 5, true);
                 
                 if (success)
@@ -681,17 +680,13 @@ namespace VPM.Services
                     RemoveEmptyDirectories(sourceDirectory, _allPackagesFolder);
                     
                     // Update status index - package is now loaded
-                    await Task.Run(() => 
+                    lock (_statusIndexLock)
                     {
-                        lock (_statusIndexLock)
-                        {
-                            UpdatePackageStatusInIndex(packageName, "Loaded");
-                            // Also refresh status index to ensure accuracy
-                            BuildPackageStatusIndex();
-                        }
-                    });
-                    // Update image index paths
-                    _imageManager?.UpdateVarPath(sourceFile, destinationFile);
+                        UpdatePackageStatusInIndex(packageName, "Loaded");
+                    }
+                    
+                    // Rebuild image index for this package to show previews
+                    await _imageManager?.RebuildImageIndexForPackageAsync(destinationFile);
 
                     InvalidatePackageIndex();
                 }
@@ -788,9 +783,7 @@ namespace VPM.Services
                         _imageManager?.InvalidatePackageCache(packageName);
                         if (_imageManager != null) await _imageManager.CloseFileHandlesAsync(sourceFile);
                         
-                        // Give the OS time to release file handles and for pending tasks to cancel
-                        await Task.Delay(250);
-                        
+                        // Delete the loaded copy (retry on transient failures)
                         File.Delete(sourceFile);
                         
                         // Remove empty directories from source location
@@ -831,10 +824,8 @@ namespace VPM.Services
                 _imageManager?.InvalidatePackageCache(packageName);
                 if (_imageManager != null) await _imageManager.CloseFileHandlesAsync(sourceFile);
                 
-                // Give the OS time to release file handles
-                await Task.Delay(150);
-
                 // Move the file (skip validation to allow corrupt VARs to move)
+                // SafeMoveFileAsync includes retry logic with exponential backoff for transient failures
                 var (success, error) = await SafeMoveFileAsync(sourceFile, destinationFile, 5, true);
 
                 if (success)
@@ -847,6 +838,10 @@ namespace VPM.Services
                     
                     // Update status index - package is now available (unloaded)
                     UpdatePackageStatusInIndex(packageName, "Available");
+                    
+                    // Rebuild image index for this package to show previews
+                    await _imageManager?.RebuildImageIndexForPackageAsync(destinationFile);
+                    
                     InvalidatePackageIndex();
                 }
 
@@ -1017,12 +1012,25 @@ namespace VPM.Services
         }
         
         /// <summary>
-        /// Builds the complete package status index by scanning all directories including archived packages
+        /// Builds the package status index by scanning available package locations
+        /// Uses directory signatures to avoid redundant scans
         /// </summary>
         private void BuildPackageStatusIndex()
         {
             lock (_statusIndexLock)
             {
+                // Check if directories have changed before rebuilding
+                bool needsRebuild = true;
+                
+                if (_statusIndexBuilt && _packageStatusIndex.Count > 0)
+                {
+                    // Quick check: if directory signatures haven't changed, skip rebuild
+                    needsRebuild = HasDirectoriesChanged();
+                }
+                
+                if (!needsRebuild)
+                    return;
+                
                 _packageStatusIndex.Clear();
                 
                 // Scan AddonPackages folder (Loaded packages) - including subfolders
@@ -1070,7 +1078,57 @@ namespace VPM.Services
                     }
                 }
                 
+                // Update directory signatures for next check
+                UpdateDirectorySignatures();
                 _statusIndexBuilt = true;
+            }
+        }
+        
+        /// <summary>
+        /// Checks if any package directories have changed since last scan
+        /// </summary>
+        private bool HasDirectoriesChanged()
+        {
+            var directories = new[] { _addonPackagesFolder, _allPackagesFolder, _archivedPackagesFolder };
+            
+            foreach (var dir in directories)
+            {
+                if (!Directory.Exists(dir))
+                    continue;
+                
+                var dirInfo = new DirectoryInfo(dir);
+                var currentSignature = (dirInfo.GetFiles("*.var", SearchOption.AllDirectories).Length, 
+                                       dirInfo.LastWriteTimeUtc.Ticks);
+                
+                if (!_statusIndexDirectorySignatures.TryGetValue(dir, out var lastSignature) || 
+                    lastSignature != currentSignature)
+                {
+                    return true;
+                }
+            }
+            
+            return false;
+        }
+        
+        /// <summary>
+        /// Updates directory signatures for change detection
+        /// </summary>
+        private void UpdateDirectorySignatures()
+        {
+            var directories = new[] { _addonPackagesFolder, _allPackagesFolder, _archivedPackagesFolder };
+            
+            foreach (var dir in directories)
+            {
+                if (!Directory.Exists(dir))
+                {
+                    _statusIndexDirectorySignatures.Remove(dir);
+                    continue;
+                }
+                
+                var dirInfo = new DirectoryInfo(dir);
+                var signature = (dirInfo.GetFiles("*.var", SearchOption.AllDirectories).Length, 
+                                dirInfo.LastWriteTimeUtc.Ticks);
+                _statusIndexDirectorySignatures[dir] = signature;
             }
         }
         
