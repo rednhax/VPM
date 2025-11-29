@@ -36,9 +36,11 @@
         <windows:DebugConverter x:Key="DebugConverter" />
         <windows:CountToColumnsConverter x:Key="CountToColumnsConverter" />
         <windows:ImageWidthConverter x:Key="ImageWidthConverter" />
+        <windows:PanelWidthConverter x:Key="PanelWidthConverter" />
         <windows:FirstImageOfPackageConverter x:Key="FirstImageOfPackageConverter" />
         <windows:BytesToMegabytesConverter x:Key="BytesToMegabytesConverter" />
         <windows:PackageStatusToLoadButtonConverter x:Key="PackageStatusToLoadButtonConverter" />
+        <local:HasExtractedItemsConverter x:Key="HasExtractedItemsConverter" />
         <System:Double x:Key="FilterToggleButtonSize">27</System:Double>
         <System:Double x:Key="LinkedButtonHeight">36</System:Double>
         <Thickness x:Key="StandardMargin">6</Thickness>
@@ -948,7 +950,7 @@
                                                 <TextBlock
                                                     VerticalAlignment="Center"
                                                     Foreground="{TemplateBinding Foreground}"
-                                                    Text="Mode" />
+                                                    Text="♾️ Mode" />
                                                 <TextBlock
                                                     Margin="6,0,0,0"
                                                     VerticalAlignment="Center"
@@ -1017,7 +1019,7 @@
                                 <TextBlock
                                     VerticalAlignment="Center"
                                     FontSize="15"
-                                    Text="📦 " />
+                                    Text="🔗 " />
                                 <TextBlock
                                     x:Name="LinkedStatusText"
                                     VerticalAlignment="Center"
@@ -2851,7 +2853,7 @@
                                         <Button
                                             x:Name="PresetCategoryFilterToggleButtonExpanded"
                                             Grid.Column="0"
-                                            Width="27"
+                                            Width="36"
                                             Height="{Binding ElementName=PresetCategoryFilterBox, Path=ActualHeight}"
                                             Margin="0,0,6,0"
                                             Padding="0"
@@ -2888,9 +2890,9 @@
                                         <Button
                                             x:Name="PresetCategorySortButton"
                                             Grid.Column="3"
-                                            Width="27"
+                                            Width="36"
                                             Height="{Binding ElementName=PresetCategoryFilterBox, Path=ActualHeight}"
-                                            Margin="3,0,0,0"
+                                            Margin="6,0,0,0"
                                             Padding="0"
                                             Click="PresetCategorySortButton_Click"
                                             Content="⇅"
@@ -2992,7 +2994,7 @@
                                         <Button
                                             x:Name="PresetSubfolderFilterToggleButtonExpanded"
                                             Grid.Column="0"
-                                            Width="27"
+                                            Width="36"
                                             Height="{Binding ElementName=PresetSubfolderFilterBox, Path=ActualHeight}"
                                             Margin="0,0,6,0"
                                             Padding="0"
@@ -3029,9 +3031,9 @@
                                         <Button
                                             x:Name="PresetSubfolderSortButton"
                                             Grid.Column="3"
-                                            Width="27"
+                                            Width="36"
                                             Height="{Binding ElementName=PresetSubfolderFilterBox, Path=ActualHeight}"
-                                            Margin="3,0,0,0"
+                                            Margin="6,0,0,0"
                                             Padding="0"
                                             Click="PresetSubfolderSortButton_Click"
                                             Content="⇅"
@@ -4223,7 +4225,7 @@
                                         <Border
                                             Width="60"
                                             Height="60"
-                                            Margin="3"
+                                            Margin="0"
                                             Background="{DynamicResource {x:Static SystemColors.WindowBrushKey}}"
                                             BorderBrush="{DynamicResource {x:Static SystemColors.ActiveBorderBrushKey}}"
                                             BorderThickness="1"
@@ -5543,6 +5545,9 @@
                         BorderBrush="{DynamicResource {x:Static SystemColors.ActiveBorderBrushKey}}"
                         BorderThickness="0"
                         CornerRadius="3">
+                        <Border.Resources>
+                            <local:CountToVisibilityConverter x:Key="CountToVis" />
+                        </Border.Resources>
                         <Border.Style>
                             <Style TargetType="Border">
                                 <Style.Triggers>
@@ -5939,6 +5944,23 @@
                             ScrollViewer.HorizontalScrollBarVisibility="Disabled"
                             ScrollViewer.VerticalScrollBarVisibility="Auto"
                             SizeChanged="ImagesListView_SizeChanged">
+                            <windows:ImageListView.Template>
+                                <ControlTemplate TargetType="windows:ImageListView">
+                                    <Border
+                                        Background="{TemplateBinding Background}"
+                                        BorderBrush="{TemplateBinding BorderBrush}"
+                                        BorderThickness="{TemplateBinding BorderThickness}">
+                                        <ScrollViewer
+                                            Focusable="false"
+                                            HorizontalScrollBarVisibility="Disabled"
+                                            VerticalScrollBarVisibility="Auto">
+                                            <StackPanel Orientation="Vertical">
+                                                <ItemsPresenter />
+                                            </StackPanel>
+                                        </ScrollViewer>
+                                    </Border>
+                                </ControlTemplate>
+                            </windows:ImageListView.Template>
 
                             <windows:ImageListView.ItemContainerStyle>
                                 <Style BasedOn="{StaticResource {x:Type ListBoxItem}}" TargetType="ListViewItem">
@@ -5953,11 +5975,14 @@
 
                             <windows:ImageListView.ItemsPanel>
                                 <ItemsPanelTemplate>
-                                    <WrapPanel
-                                        Width="{Binding ActualWidth, RelativeSource={RelativeSource AncestorType=windows:ImageListView}}"
+                                    <windows:ImageWrapPanel
+                                        Width="{Binding ActualWidth, RelativeSource={RelativeSource AncestorType=windows:ImageListView}, Converter={StaticResource PanelWidthConverter}}"
+                                        Height="Auto"
                                         Margin="0"
                                         VerticalAlignment="Top"
-                                        Orientation="Horizontal" />
+                                        Orientation="Horizontal"
+                                        ImageMatchWidth="{Binding ImageMatchWidth, RelativeSource={RelativeSource AncestorType=Window}}"
+                                        Columns="{Binding ImageColumns, RelativeSource={RelativeSource AncestorType=Window}}" />
                                 </ItemsPanelTemplate>
                             </windows:ImageListView.ItemsPanel>
 
@@ -5968,11 +5993,11 @@
                                             <Setter Property="Template">
                                                 <Setter.Value>
                                                     <ControlTemplate TargetType="{x:Type GroupItem}">
-                                                        <StackPanel Orientation="Vertical">
+                                                        <StackPanel Height="Auto" Orientation="Vertical">
                                                             <!--  Package header spanning full width  -->
                                                             <Border
                                                                 Height="36"
-                                                                Margin="0,6,24,3"
+                                                                Margin="0,6,0,3"
                                                                 Padding="4,4"
                                                                 HorizontalAlignment="Stretch"
                                                                 Background="#2A2A2A"
@@ -5984,6 +6009,7 @@
                                                                         <ColumnDefinition Width="Auto" />
                                                                         <ColumnDefinition Width="Auto" />
                                                                         <ColumnDefinition Width="*" MinWidth="10" />
+                                                                        <ColumnDefinition Width="Auto" />
                                                                         <ColumnDefinition Width="Auto" />
                                                                     </Grid.ColumnDefinitions>
 
@@ -6052,9 +6078,57 @@
                                                                             TextTrimming="CharacterEllipsis" />
                                                                     </StackPanel>
 
+                                                                    <!--  Delete extracted items button  -->
+                                                                    <Button
+                                                                        x:Name="DeletePackageButton"
+                                                                        Grid.Column="3"
+                                                                        Width="28"
+                                                                        Height="26"
+                                                                        Margin="0,0,8,0"
+                                                                        Padding="0"
+                                                                        Background="#CC803030"
+                                                                        BorderBrush="Transparent"
+                                                                        BorderThickness="1"
+                                                                        Click="DeletePackageExtractedContent_Click"
+                                                                        Cursor="Hand"
+                                                                        Foreground="White"
+                                                                        ToolTip="Delete all extracted items in this package">
+                                                                        <Button.Visibility>
+                                                                            <MultiBinding Converter="{StaticResource HasExtractedItemsConverter}">
+                                                                                <Binding Path="Items" />
+                                                                            </MultiBinding>
+                                                                        </Button.Visibility>
+                                                                        <TextBlock
+                                                                            FontSize="12"
+                                                                            FontWeight="Bold"
+                                                                            Text="✕" />
+                                                                        <Button.Style>
+                                                                            <Style TargetType="Button">
+                                                                                <Setter Property="Template">
+                                                                                    <Setter.Value>
+                                                                                        <ControlTemplate TargetType="Button">
+                                                                                            <Border
+                                                                                                Background="{TemplateBinding Background}"
+                                                                                                BorderBrush="{TemplateBinding BorderBrush}"
+                                                                                                BorderThickness="{TemplateBinding BorderThickness}"
+                                                                                                CornerRadius="3">
+                                                                                                <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                                                                            </Border>
+                                                                                            <ControlTemplate.Triggers>
+                                                                                                <Trigger Property="IsMouseOver" Value="True">
+                                                                                                    <Setter Property="Opacity" Value="0.9" />
+                                                                                                </Trigger>
+                                                                                            </ControlTemplate.Triggers>
+                                                                                        </ControlTemplate>
+                                                                                    </Setter.Value>
+                                                                                </Setter>
+                                                                            </Style>
+                                                                        </Button.Style>
+                                                                    </Button>
+
                                                                     <!--  Package size (always visible)  -->
                                                                     <TextBlock
-                                                                        Grid.Column="3"
+                                                                        Grid.Column="4"
                                                                         Margin="8,0,16,0"
                                                                         VerticalAlignment="Center"
                                                                         FontSize="16"
@@ -6078,51 +6152,66 @@
                                     <!--  Image with rounded corners using LazyLoadImage  -->
                                     <Grid Margin="3">
                                         <windows:LazyLoadImage
-                                            HorizontalAlignment="Center"
-                                            LoadImageCallback="{Binding LoadImageCallback}"
-                                            PackageKey="{Binding PackageName}"
-                                            InternalImagePath="{Binding InternalPath}"
-                                            ImageWidth="{Binding ImageWidth}"
+                                            HorizontalAlignment="Stretch"
+                                            VerticalAlignment="Stretch"
                                             ImageHeight="{Binding ImageHeight}"
+                                            ImageWidth="{Binding ImageWidth}"
+                                            InternalImagePath="{Binding InternalPath}"
+                                            LoadImageCallback="{Binding LoadImageCallback}"
                                             Loaded="LazyLoadImage_Loaded"
+                                            PackageKey="{Binding PackageName}"
                                             Unloaded="LazyLoadImage_Unloaded">
                                             <windows:LazyLoadImage.Width>
                                                 <MultiBinding Converter="{StaticResource ImageWidthConverter}" ConverterParameter="3,1">
                                                     <Binding Path="ActualWidth" RelativeSource="{RelativeSource AncestorType=windows:ImageListView}" />
                                                     <Binding Path="ImageColumns" RelativeSource="{RelativeSource AncestorType=Window}" />
+                                                    <Binding Path="ImageMatchWidth" RelativeSource="{RelativeSource AncestorType=Window}" />
                                                 </MultiBinding>
                                             </windows:LazyLoadImage.Width>
+                                            <windows:LazyLoadImage.MaxWidth>
+                                                <MultiBinding Converter="{StaticResource ImageWidthConverter}" ConverterParameter="3,1">
+                                                    <Binding Path="ActualWidth" RelativeSource="{RelativeSource AncestorType=windows:ImageListView}" />
+                                                    <Binding Path="ImageColumns" RelativeSource="{RelativeSource AncestorType=Window}" />
+                                                    <Binding Path="ImageMatchWidth" RelativeSource="{RelativeSource AncestorType=Window}" />
+                                                </MultiBinding>
+                                            </windows:LazyLoadImage.MaxWidth>
                                             <windows:LazyLoadImage.Height>
                                                 <MultiBinding Converter="{StaticResource ImageWidthConverter}" ConverterParameter="3,1">
                                                     <Binding Path="ActualWidth" RelativeSource="{RelativeSource AncestorType=windows:ImageListView}" />
                                                     <Binding Path="ImageColumns" RelativeSource="{RelativeSource AncestorType=Window}" />
+                                                    <Binding Path="ImageMatchWidth" RelativeSource="{RelativeSource AncestorType=Window}" />
                                                 </MultiBinding>
                                             </windows:LazyLoadImage.Height>
-                                            <windows:LazyLoadImage.CornerRadius>6</windows:LazyLoadImage.CornerRadius>
+                                            <windows:LazyLoadImage.CornerRadius>3</windows:LazyLoadImage.CornerRadius>
                                         </windows:LazyLoadImage>
 
                                         <!--  Delete button (only visible when extracted)  -->
                                         <Button
-                                            HorizontalAlignment="Left"
-                                            VerticalAlignment="Bottom"
+                                            Width="28"
+                                            Height="28"
                                             Margin="6,0,0,6"
                                             Padding="18,5"
-                                            Height="28"
+                                            HorizontalAlignment="Left"
+                                            VerticalAlignment="Bottom"
                                             Background="#CC803030"
-                                            Foreground="White"
-                                            BorderThickness="1"
                                             BorderBrush="Transparent"
+                                            BorderThickness="1"
                                             Click="DeleteExtractedContent_Click"
-                                            ToolTip="Delete extracted files"
                                             Cursor="Hand"
+                                            Foreground="White"
+                                            ToolTip="Delete extracted files"
                                             Visibility="{Binding IsExtracted, Converter={StaticResource BoolToVis}}">
-                                            <TextBlock Text="✕" FontWeight="Bold" FontSize="12" />
+                                            <TextBlock
+                                                FontSize="12"
+                                                FontWeight="Bold"
+                                                Text="✕" />
                                             <Button.Style>
                                                 <Style TargetType="Button">
                                                     <Setter Property="Template">
                                                         <Setter.Value>
                                                             <ControlTemplate TargetType="Button">
-                                                                <Border Background="{TemplateBinding Background}" 
+                                                                <Border
+                                                                    Background="{TemplateBinding Background}"
                                                                     BorderBrush="{TemplateBinding BorderBrush}"
                                                                     BorderThickness="{TemplateBinding BorderThickness}"
                                                                     CornerRadius="3">
@@ -6140,40 +6229,42 @@
                                             </Button.Style>
                                         </Button>
 
-                                        <!-- Extract button -->
+                                        <!--  Extract button  -->
                                         <Button
-                                            HorizontalAlignment="Right"
-                                            VerticalAlignment="Bottom"
+                                            Height="28"
                                             Margin="0,0,6,6"
                                             Padding="18,5"
-                                            Height="28"
+                                            HorizontalAlignment="Right"
+                                            VerticalAlignment="Bottom"
                                             Background="{Binding ExtractionButtonBackground}"
-                                            Foreground="White"
-                                            BorderThickness="1"
                                             BorderBrush="Transparent"
+                                            BorderThickness="1"
                                             Click="ExtractContent_Click"
-                                            ToolTip="Extract files from archive"
-                                            Cursor="Hand">
-                                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                            Cursor="Hand"
+                                            Foreground="White"
+                                            ToolTip="Extract files from archive">
+                                            <StackPanel VerticalAlignment="Center" Orientation="Horizontal">
                                                 <TextBlock
-                                                    Margin="0,0,6,0"
-                                                    FontWeight="Bold"
+                                                    Margin="6,0,6,0"
                                                     VerticalAlignment="Center"
                                                     FontFamily="Segoe UI Emoji, Segoe UI Symbol"
                                                     FontSize="12"
+                                                    FontWeight="Bold"
                                                     Text="{Binding ExtractionStatusIcon}" />
                                                 <TextBlock
-                                                    Text="{Binding ExtractionStatusText}"
+                                                    Margin="0,0,6,0"
                                                     VerticalAlignment="Center"
+                                                    FontSize="12"
                                                     FontWeight="SemiBold"
-                                                    FontSize="12" />
+                                                    Text="{Binding ExtractionStatusText}" />
                                             </StackPanel>
                                             <Button.Style>
                                                 <Style TargetType="Button">
                                                     <Setter Property="Template">
                                                         <Setter.Value>
                                                             <ControlTemplate TargetType="Button">
-                                                                <Border Background="{TemplateBinding Background}" 
+                                                                <Border
+                                                                    Background="{TemplateBinding Background}"
                                                                     BorderBrush="{TemplateBinding BorderBrush}"
                                                                     BorderThickness="{TemplateBinding BorderThickness}"
                                                                     CornerRadius="3">
@@ -6194,7 +6285,6 @@
                                 </DataTemplate>
                             </windows:ImageListView.ItemTemplate>
                         </windows:ImageListView>
-
 
                         <!--  Hoverable overlay controls - positioned at bottom right of image area  -->
                         <Border
@@ -6225,6 +6315,55 @@
 
                                 <!--  Column adjustment buttons on the right  -->
                                 <StackPanel Grid.Column="2" Orientation="Horizontal">
+                                    <Button
+                                        x:Name="MatchWidthButton"
+                                        Width="26"
+                                        Height="26"
+                                        Margin="0,0,6,0"
+                                        Padding="0,0"
+                                        Click="ToggleMatchWidth_Click"
+                                        Content="⊡"
+                                        FontSize="12"
+                                        FontWeight="Bold"
+                                        ToolTip="Toggle match width (fill last row)">
+                                        <Button.Style>
+                                            <Style TargetType="Button">
+                                                <Setter Property="Foreground" Value="White" />
+                                                <Setter Property="BorderThickness" Value="1" />
+                                                <Setter Property="Background" Value="#40FFFFFF" />
+                                                <Setter Property="BorderBrush" Value="#60FFFFFF" />
+                                                <Setter Property="Template">
+                                                    <Setter.Value>
+                                                        <ControlTemplate TargetType="Button">
+                                                            <Border
+                                                                Background="{TemplateBinding Background}"
+                                                                BorderBrush="{TemplateBinding BorderBrush}"
+                                                                BorderThickness="{TemplateBinding BorderThickness}"
+                                                                CornerRadius="3">
+                                                                <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                                            </Border>
+                                                            <ControlTemplate.Triggers>
+                                                                <Trigger Property="IsMouseOver" Value="True">
+                                                                    <Setter Property="Background" Value="#80FFFFFF" />
+                                                                    <Setter Property="BorderBrush" Value="#FFFFFFFF" />
+                                                                </Trigger>
+                                                                <Trigger Property="IsPressed" Value="True">
+                                                                    <Setter Property="Background" Value="#A0FFFFFF" />
+                                                                    <Setter Property="BorderBrush" Value="#FFFFFFFF" />
+                                                                </Trigger>
+                                                            </ControlTemplate.Triggers>
+                                                        </ControlTemplate>
+                                                    </Setter.Value>
+                                                </Setter>
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding ImageMatchWidth, RelativeSource={RelativeSource AncestorType=Window}}" Value="True">
+                                                        <Setter Property="Background" Value="#80FFFFFF" />
+                                                        <Setter Property="BorderBrush" Value="#FFFFFFFF" />
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </Button.Style>
+                                    </Button>
                                     <Button
                                         Width="26"
                                         Height="26"

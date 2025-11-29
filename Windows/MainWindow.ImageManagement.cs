@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 using System.Windows;
@@ -11,6 +12,8 @@ using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Threading;
 using VPM.Models;
+using VPM.Services;
+using VPM.Windows;
 
 namespace VPM
 {
@@ -21,6 +24,9 @@ namespace VPM
     {
         // Collection for binding to ImageListView
         public ObservableCollection<ImagePreviewItem> PreviewImages { get; set; } = new ObservableCollection<ImagePreviewItem>();
+
+        // Service for ImageListView integration
+        private ImageListViewService _imageListViewService = new ImageListViewService();
 
         public static readonly DependencyProperty TileSizeProperty = DependencyProperty.Register(
             "TileSize", typeof(double), typeof(MainWindow), new PropertyMetadata(200.0));
@@ -40,6 +46,18 @@ namespace VPM
             set 
             { 
                 SetValue(ImageColumnsProperty, value); 
+            }
+        }
+
+        public static readonly DependencyProperty ImageMatchWidthProperty = DependencyProperty.Register(
+            "ImageMatchWidth", typeof(bool), typeof(MainWindow), new PropertyMetadata(false));
+
+        public bool ImageMatchWidth
+        {
+            get { return (bool)GetValue(ImageMatchWidthProperty); }
+            set 
+            { 
+                SetValue(ImageMatchWidthProperty, value); 
             }
         }
         
@@ -103,11 +121,11 @@ namespace VPM
         private void ImagesListView_PreviewMouseWheel(object sender, MouseWheelEventArgs e)
         {
             // Increase scroll sensitivity by multiplying the delta by 3
-            var listView = sender as ListView;
-            if (listView != null)
+            var imageListView = sender as ImageListView;
+            if (imageListView != null)
             {
-                // Find the ScrollViewer inside the ListView
-                var scrollViewer = FindVisualChild<ScrollViewer>(listView);
+                // Find the ScrollViewer inside the ImageListView
+                var scrollViewer = FindVisualChild<ScrollViewer>(imageListView);
                 if (scrollViewer != null)
                 {
                     scrollViewer.ScrollToVerticalOffset(scrollViewer.VerticalOffset - (e.Delta * 3));
@@ -416,8 +434,19 @@ namespace VPM
                 else
                 {
                     // Extract
-                    await VPM.Services.VarContentExtractor.ExtractRelatedFilesAsync(metadata.FilePath, imageItem.InternalPath, gameFolder);
-                    imageItem.IsExtracted = true;
+                    int extractedCount = await VPM.Services.VarContentExtractor.ExtractRelatedFilesAsync(metadata.FilePath, imageItem.InternalPath, gameFolder);
+                    
+                    if (extractedCount > 0)
+                    {
+                        imageItem.IsExtracted = true;
+                        
+                        // Refresh the header button binding to show the delete button
+                        RefreshPackageHeaderBinding(packageItem);
+                    }
+                    else
+                    {
+                        MessageBox.Show($"Failed to extract files from {Path.GetFileName(metadata.FilePath)}. The file may be corrupted or invalid.", "Extraction Failed", MessageBoxButton.OK, MessageBoxImage.Warning);
+                    }
                 }
             }
             catch (Exception ex)
@@ -472,6 +501,124 @@ namespace VPM
             finally
             {
                 if (button != null) button.IsEnabled = true;
+            }
+        }
+
+        private async void DeletePackageExtractedContent_Click(object sender, RoutedEventArgs e)
+        {
+            Button button = null;
+            try
+            {
+                button = sender as Button;
+                if (button == null) return;
+
+                // Get the GroupItem from the button's DataContext
+                var groupItem = button.DataContext as System.Windows.Data.CollectionViewGroup;
+                if (groupItem == null) return;
+
+                // Prevent double clicks
+                button.IsEnabled = false;
+
+                var gameFolder = _settingsManager.Settings.SelectedFolder;
+                if (string.IsNullOrEmpty(gameFolder))
+                    return;
+
+                // Get all extracted items in this package group
+                var extractedItems = groupItem.Items
+                    .OfType<ImagePreviewItem>()
+                    .Where(item => item.IsExtracted)
+                    .ToList();
+
+                if (extractedItems.Count == 0)
+                    return;
+
+                // Get package info from first item
+                var firstItem = extractedItems.First();
+                var packageItem = firstItem.PackageItem;
+                if (packageItem == null) return;
+
+                var metadata = GetCachedPackageMetadata(!string.IsNullOrEmpty(packageItem.MetadataKey) ? packageItem.MetadataKey : packageItem.Name);
+                if (metadata == null || string.IsNullOrEmpty(metadata.FilePath)) return;
+
+                if (!System.IO.File.Exists(metadata.FilePath))
+                {
+                    MessageBox.Show($"Package file not found: {metadata.FilePath}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                    return;
+                }
+
+                // Delete all extracted items in this package
+                foreach (var item in extractedItems)
+                {
+                    try
+                    {
+                        await VPM.Services.VarContentExtractor.RemoveRelatedFilesAsync(metadata.FilePath, item.InternalPath, gameFolder);
+                        item.IsExtracted = false;
+                    }
+                    catch (Exception ex)
+                    {
+                        System.Diagnostics.Debug.WriteLine($"Error deleting {item.InternalPath}: {ex.Message}");
+                    }
+                }
+
+                // Refresh the header button binding to hide the delete button
+                RefreshPackageHeaderBinding(packageItem);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Error deleting extracted items: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+            finally
+            {
+                if (button != null) button.IsEnabled = true;
+            }
+        }
+
+        private async void GlobalClearButton_Click(object sender, RoutedEventArgs e)
+        {
+            if (PreviewImages.Count == 0) return;
+
+            try
+            {
+                var gameFolder = _settingsManager.Settings.SelectedFolder;
+                if (string.IsNullOrEmpty(gameFolder)) return;
+
+                // Create a copy of items to iterate
+                var items = PreviewImages.ToList();
+                
+                // Clear UI immediately (Requirement 5)
+                PreviewImages.Clear();
+                if (_imageManager != null)
+                {
+                    _imageManager.Clear();
+                }
+
+                await Task.Run(async () =>
+                {
+                    foreach (var item in items)
+                    {
+                        try
+                        {
+                            var packageItem = item.PackageItem;
+                            if (packageItem == null) continue;
+
+                            var metadata = GetCachedPackageMetadata(!string.IsNullOrEmpty(packageItem.MetadataKey) ? packageItem.MetadataKey : packageItem.Name);
+                            if (metadata == null || string.IsNullOrEmpty(metadata.FilePath)) continue;
+
+                            if (!System.IO.File.Exists(metadata.FilePath)) continue;
+
+                            // Trigger removal logic (Requirement 3)
+                            await VPM.Services.VarContentExtractor.RemoveRelatedFilesAsync(metadata.FilePath, item.InternalPath, gameFolder);
+                        }
+                        catch
+                        {
+                            // Ignore individual errors
+                        }
+                    }
+                });
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Error clearing items: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
 
@@ -612,6 +759,27 @@ namespace VPM
             }
         }
 
+        private void ToggleMatchWidth_Click(object sender, RoutedEventArgs e)
+        {
+            ImageMatchWidth = !ImageMatchWidth;
+            SaveImageMatchWidthSetting();
+        }
+
+        private void SaveImageMatchWidthSetting()
+        {
+            try
+            {
+                if (_settingsManager != null)
+                {
+                    _settingsManager.Settings.ImageMatchWidth = ImageMatchWidth;
+                    _settingsManager.SaveSettingsImmediate();
+                }
+            }
+            catch (Exception)
+            {
+            }
+        }
+
         public async Task CancelImageLoading()
         {
             try
@@ -687,6 +855,87 @@ namespace VPM
             catch (Exception)
             {
             }
+        }
+
+        /// <summary>
+        /// Refreshes the package header binding to update the delete button visibility
+        /// </summary>
+        private void RefreshPackageHeaderBinding(PackageItem packageItem)
+        {
+            try
+            {
+                // Find the ImageListView control
+                var imageListView = this.FindName("ImagesListView") as ImageListView;
+                if (imageListView == null) return;
+
+                // Get the items source and find the group for this package
+                var collectionView = System.Windows.Data.CollectionViewSource.GetDefaultView(imageListView.ItemsSource);
+                if (collectionView?.Groups == null) return;
+
+                foreach (var group in collectionView.Groups)
+                {
+                    var groupItem = group as System.Windows.Data.CollectionViewGroup;
+                    if (groupItem?.Items.Count > 0)
+                    {
+                        var firstItem = groupItem.Items[0] as ImagePreviewItem;
+                        if (firstItem?.PackageItem == packageItem)
+                        {
+                            // With the official ImageListView, grouping is handled natively
+                            // Refresh the collection view to update the UI
+                            collectionView.Refresh();
+                            return;
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Error refreshing package header binding: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// Helper method to find a visual child by name
+        /// </summary>
+        private T FindVisualChild<T>(System.Windows.DependencyObject parent, string name = null) where T : System.Windows.DependencyObject
+        {
+            for (int i = 0; i < System.Windows.Media.VisualTreeHelper.GetChildrenCount(parent); i++)
+            {
+                var child = System.Windows.Media.VisualTreeHelper.GetChild(parent, i);
+                if (child is T typedChild)
+                {
+                    if (name == null || (child is System.Windows.FrameworkElement fe && fe.Name == name))
+                    {
+                        return typedChild;
+                    }
+                }
+
+                var result = FindVisualChild<T>(child, name);
+                if (result != null)
+                {
+                    return result;
+                }
+            }
+            return null;
+        }
+
+        /// <summary>
+        /// Helper method to find all visual children of a specific type
+        /// </summary>
+        private List<T> FindAllVisualChildren<T>(System.Windows.DependencyObject parent) where T : System.Windows.DependencyObject
+        {
+            var children = new List<T>();
+            for (int i = 0; i < System.Windows.Media.VisualTreeHelper.GetChildrenCount(parent); i++)
+            {
+                var child = System.Windows.Media.VisualTreeHelper.GetChild(parent, i);
+                if (child is T typedChild)
+                {
+                    children.Add(typedChild);
+                }
+
+                children.AddRange(FindAllVisualChildren<T>(child));
+            }
+            return children;
         }
     }
 }

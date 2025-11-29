@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
+using System.Windows.Media.Imaging;
 using VPM.Models;
 using VPM.Services;
 
@@ -197,6 +198,9 @@ namespace VPM
             {
                 // Clear existing images
                 PreviewImages.Clear();
+                
+                // Clear the virtualized manager if it exists
+                _virtualizedImageGridManager?.Clear();
 
                 if (items == null || items.Count == 0)
                 {
@@ -212,28 +216,57 @@ namespace VPM
                 // Display thumbnail for each selected item
                 foreach (var item in items)
                 {
-                    if (string.IsNullOrEmpty(item.ThumbnailPath) || !System.IO.File.Exists(item.ThumbnailPath))
-                        continue;
-
-                    try 
+                    // Always add the item, even if thumbnail is missing
+                    // This allows the grid to show a placeholder/loading state
+                    
+                    var previewItem = new ImagePreviewItem
                     {
-                        // Create preview item
-                        var previewItem = new ImagePreviewItem
-                        {
-                            Image = new System.Windows.Media.Imaging.BitmapImage(new System.Uri(item.ThumbnailPath, System.UriKind.Absolute)),
-                            PackageName = item.Name,
-                            InternalPath = item.ThumbnailPath,
-                            StatusBrush = System.Windows.Media.Brushes.Transparent,
-                            PackageItem = customItemsPackage
-                        };
+                        Image = null, // Load lazily via callback
+                        PackageName = item.Name,
+                        InternalPath = item.ThumbnailPath ?? "",
+                        StatusBrush = System.Windows.Media.Brushes.Transparent,
+                        PackageItem = customItemsPackage,
                         
-                        PreviewImages.Add(previewItem);
-                    }
-                    catch
-                    {
-                        // Ignore individual image load failures
-                    }
+                        // Use LoadImageCallback for async lazy loading
+                        LoadImageCallback = async () => 
+                        {
+                            // If no thumbnail path, return null (LazyLoadImage handles this)
+                            if (string.IsNullOrEmpty(item.ThumbnailPath) || !System.IO.File.Exists(item.ThumbnailPath))
+                            {
+                                return null;
+                            }
+
+                            return await Task.Run(() => 
+                            {
+                                try 
+                                {
+                                    // Load bitmap from file efficiently
+                                    // Use OnLoad cache option to avoid locking the file
+                                    var bi = new BitmapImage();
+                                    bi.BeginInit();
+                                    bi.UriSource = new Uri(item.ThumbnailPath, UriKind.Absolute);
+                                    bi.CacheOption = BitmapCacheOption.OnLoad;
+                                    bi.CreateOptions = BitmapCreateOptions.IgnoreColorProfile | BitmapCreateOptions.PreservePixelFormat;
+                                    // Decode to a reasonable size for thumbnails to save memory
+                                    bi.DecodePixelWidth = 300; 
+                                    bi.EndInit();
+                                    bi.Freeze(); // Must freeze to pass between threads
+                                    return bi;
+                                }
+                                catch
+                                {
+                                    return null;
+                                }
+                            });
+                        }
+                    };
+                    
+                    PreviewImages.Add(previewItem);
                 }
+                
+                // Trigger initial load for visible images
+                // Use fire-and-forget pattern as we can't await here easily
+                _ = _virtualizedImageGridManager?.LoadInitialVisibleImagesAsync();
             }
             catch
             {

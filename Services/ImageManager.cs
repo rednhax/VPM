@@ -2561,6 +2561,15 @@ namespace VPM.Services
                 _varArchiveLock.ExitWriteLock();
             }
         }
+
+        /// <summary>
+        /// Clears all cached images and preview indices
+        /// </summary>
+        public void Clear()
+        {
+            ClearBitmapCache();
+            PreviewImageIndex.Clear();
+        }
     }
 
     /// <summary>

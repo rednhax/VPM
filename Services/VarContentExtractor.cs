@@ -55,18 +55,29 @@ namespace VPM.Services
                 directoryPath = directoryPath?.Replace('\\', '/') ?? "";
 
                 // Find all files in the archive with the same base name
-                var relatedEntries = archive.Entries
-                    .Where(e => !e.Key.EndsWith("/"))
-                    .Where(e =>
-                    {
-                        var entryBaseName = Path.GetFileNameWithoutExtension(e.Key);
-                        var entryDir = Path.GetDirectoryName(e.Key)?.Replace('\\', '/') ?? "";
+                List<IArchiveEntry> relatedEntries;
+                try
+                {
+                    relatedEntries = archive.Entries
+                        .Where(e => !e.Key.EndsWith("/"))
+                        .Where(e =>
+                        {
+                            var entryBaseName = Path.GetFileNameWithoutExtension(e.Key);
+                            var entryDir = Path.GetDirectoryName(e.Key)?.Replace('\\', '/') ?? "";
 
-                        // Match if same base name and same directory
-                        return entryBaseName.Equals(baseName, StringComparison.OrdinalIgnoreCase) &&
-                               entryDir.Equals(directoryPath, StringComparison.OrdinalIgnoreCase);
-                    })
-                    .ToList();
+                            // Match if same base name and same directory
+                            return entryBaseName.Equals(baseName, StringComparison.OrdinalIgnoreCase) &&
+                                   entryDir.Equals(directoryPath, StringComparison.OrdinalIgnoreCase);
+                        })
+                        .ToList();
+                }
+                catch (SharpCompress.Common.ArchiveException archiveEx)
+                {
+                    System.Diagnostics.Debug.WriteLine($"Archive is corrupted or invalid: {archiveEx.Message}");
+                    // Log the error but don't throw - return 0 to indicate no files were extracted
+                    System.Diagnostics.Debug.WriteLine($"Failed to extract from corrupted VAR file: {Path.GetFileName(varFilePath)}");
+                    return 0;
+                }
 
                 if (relatedEntries.Count == 0)
                     return 0;
@@ -120,7 +131,7 @@ namespace VPM.Services
             catch (Exception ex)
             {
                 System.Diagnostics.Debug.WriteLine($"Error during extraction: {ex.Message}");
-                throw;
+                return 0; // Return 0 on any error to indicate no files were extracted
             }
         }
 
@@ -155,17 +166,26 @@ namespace VPM.Services
                 directoryPath = directoryPath?.Replace('\\', '/') ?? "";
 
                 // Find all files in the archive with the same base name
-                var relatedEntries = archive.Entries
-                    .Where(e => !e.Key.EndsWith("/"))
-                    .Where(e =>
-                    {
-                        var entryBaseName = Path.GetFileNameWithoutExtension(e.Key);
-                        var entryDir = Path.GetDirectoryName(e.Key)?.Replace('\\', '/') ?? "";
+                List<IArchiveEntry> relatedEntries;
+                try
+                {
+                    relatedEntries = archive.Entries
+                        .Where(e => !e.Key.EndsWith("/"))
+                        .Where(e =>
+                        {
+                            var entryBaseName = Path.GetFileNameWithoutExtension(e.Key);
+                            var entryDir = Path.GetDirectoryName(e.Key)?.Replace('\\', '/') ?? "";
 
-                        return entryBaseName.Equals(baseName, StringComparison.OrdinalIgnoreCase) &&
-                               entryDir.Equals(directoryPath, StringComparison.OrdinalIgnoreCase);
-                    })
-                    .ToList();
+                            return entryBaseName.Equals(baseName, StringComparison.OrdinalIgnoreCase) &&
+                                   entryDir.Equals(directoryPath, StringComparison.OrdinalIgnoreCase);
+                        })
+                        .ToList();
+                }
+                catch (SharpCompress.Common.ArchiveException archiveEx)
+                {
+                    System.Diagnostics.Debug.WriteLine($"Archive is corrupted or invalid: {archiveEx.Message}");
+                    return 0; // Return 0 removed items for corrupted archives
+                }
 
                 if (relatedEntries.Count == 0)
                     return 0;
@@ -546,17 +566,26 @@ namespace VPM.Services
                 directoryPath = directoryPath?.Replace('\\', '/') ?? "";
 
                 // Find all files in the archive with the same base name
-                var relatedEntries = archive.Entries
-                    .Where(e => !e.Key.EndsWith("/"))
-                    .Where(e =>
-                    {
-                        var entryBaseName = Path.GetFileNameWithoutExtension(e.Key);
-                        var entryDir = Path.GetDirectoryName(e.Key)?.Replace('\\', '/') ?? "";
+                List<IArchiveEntry> relatedEntries;
+                try
+                {
+                    relatedEntries = archive.Entries
+                        .Where(e => !e.Key.EndsWith("/"))
+                        .Where(e =>
+                        {
+                            var entryBaseName = Path.GetFileNameWithoutExtension(e.Key);
+                            var entryDir = Path.GetDirectoryName(e.Key)?.Replace('\\', '/') ?? "";
 
-                        return entryBaseName.Equals(baseName, StringComparison.OrdinalIgnoreCase) &&
-                               entryDir.Equals(directoryPath, StringComparison.OrdinalIgnoreCase);
-                    })
-                    .ToList();
+                            return entryBaseName.Equals(baseName, StringComparison.OrdinalIgnoreCase) &&
+                                   entryDir.Equals(directoryPath, StringComparison.OrdinalIgnoreCase);
+                        })
+                        .ToList();
+                }
+                catch (SharpCompress.Common.ArchiveException archiveEx)
+                {
+                    System.Diagnostics.Debug.WriteLine($"Archive is corrupted or invalid: {archiveEx.Message}");
+                    return false; // Corrupted archive means files are not extracted
+                }
 
                 if (relatedEntries.Count == 0)
                     return false;
@@ -588,6 +617,11 @@ namespace VPM.Services
                 }
 
                 return true;
+            }
+            catch (SharpCompress.Common.ArchiveException ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Archive error checking extracted files: {ex.Message}");
+                return false;
             }
             catch (Exception ex)
             {

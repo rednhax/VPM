@@ -290,5 +290,33 @@ namespace VPM
             return checkboxStyle;
         }
     }
+
+    /// <summary>
+    /// Converts an integer count to visibility
+    /// parameter "GT0": Visible if Count > 0
+    /// parameter "EQ0": Visible if Count == 0
+    /// Default: Visible if Count > 0
+    /// </summary>
+    public class CountToVisibilityConverter : System.Windows.Data.IValueConverter
+    {
+        public object Convert(object value, Type targetType, object parameter, System.Globalization.CultureInfo culture)
+        {
+            if (value is int count)
+            {
+                string param = parameter as string;
+                if (param == "EQ0")
+                    return count == 0 ? Visibility.Visible : Visibility.Collapsed;
+
+                // Default or GT0
+                return count > 0 ? Visibility.Visible : Visibility.Collapsed;
+            }
+            return Visibility.Collapsed;
+        }
+
+        public object ConvertBack(object value, Type targetType, object parameter, System.Globalization.CultureInfo culture)
+        {
+            throw new NotImplementedException();
+        }
+    }
 }
 

@@ -172,6 +172,9 @@ namespace VPM.Windows
             _overlayGrid = new Grid();
             _overlayGrid.Children.Add(_imageControl);
             
+            // Apply clipping to respect the CornerRadius
+            this.ClipToBounds = true;
+            
             // Create extract button at bottom-right
             _extractButton = new Button
             {
@@ -245,6 +248,27 @@ namespace VPM.Windows
             // Light background visible until image loads
             this.Background = new SolidColorBrush(Color.FromArgb(15, 100, 149, 237));
             this.Cursor = System.Windows.Input.Cursors.Hand;
+        }
+        
+        protected override void OnRenderSizeChanged(SizeChangedInfo sizeInfo)
+        {
+            base.OnRenderSizeChanged(sizeInfo);
+            
+            // Apply clipping geometry based on CornerRadius
+            if (sizeInfo.NewSize.Width > 0 && sizeInfo.NewSize.Height > 0)
+            {
+                var cornerRadius = this.CornerRadius;
+                var radiusX = cornerRadius.TopLeft;
+                var radiusY = cornerRadius.TopLeft;
+                
+                var clipGeometry = new RectangleGeometry(
+                    new Rect(0, 0, sizeInfo.NewSize.Width, sizeInfo.NewSize.Height),
+                    radiusX,
+                    radiusY
+                );
+                
+                this.Clip = clipGeometry;
+            }
         }
         
         private void UpdateImageSource(ImageSource image)

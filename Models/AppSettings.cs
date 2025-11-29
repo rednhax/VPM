@@ -16,6 +16,7 @@ namespace VPM.Models
         // UI Settings
         private string _theme = "System";
         private int _imageColumns = 3;
+        private bool _imageMatchWidth = false;
         private string _selectedFolder = "";
         private string _cacheFolder = "";
         private bool _cascadeFiltering = true;
@@ -140,6 +141,12 @@ namespace VPM.Models
         {
             get => _imageColumns;
             set => SetProperty(ref _imageColumns, Math.Max(1, Math.Min(12, value)));
+        }
+
+        public bool ImageMatchWidth
+        {
+            get => _imageMatchWidth;
+            set => SetProperty(ref _imageMatchWidth, value);
         }
 
         public string SelectedFolder
@@ -658,6 +665,7 @@ namespace VPM.Models
                 IsFirstLaunch = true,
                 Theme = "Dark",
                 ImageColumns = 3,
+                ImageMatchWidth = false,
                 SelectedFolder = "",
                 CacheFolder = System.IO.Path.Combine(Environment.CurrentDirectory, "cache"),
                 CascadeFiltering = false,

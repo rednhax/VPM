@@ -361,6 +361,8 @@ namespace VPM
             // Apply image columns
             ImageColumns = settings.ImageColumns;
             
+            // Apply image match width setting
+            ImageMatchWidth = settings.ImageMatchWidth;
             
             // Apply cascade filtering setting
             _cascadeFiltering = settings.CascadeFiltering;
@@ -609,6 +611,12 @@ namespace VPM
             {
                 ImageColumns = settings.ImageColumns;
                 RefreshImageDisplay();
+            }
+            
+            // Apply image match width if changed
+            if (ImageMatchWidth != settings.ImageMatchWidth)
+            {
+                ImageMatchWidth = settings.ImageMatchWidth;
             }
             
         }
