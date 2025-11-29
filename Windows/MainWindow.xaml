@@ -61,7 +61,7 @@
                             Background="{TemplateBinding Background}"
                             BorderBrush="{TemplateBinding BorderBrush}"
                             BorderThickness="{TemplateBinding BorderThickness}"
-                            CornerRadius="{StaticResource CornerRadiusValue}">
+                            CornerRadius="3">
                             <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}" VerticalAlignment="{TemplateBinding VerticalContentAlignment}" />
                         </Border>
                     </ControlTemplate>
@@ -101,7 +101,7 @@
                                                 Opacity="0" />
                                         </Track.DecreaseRepeatButton>
                                         <Track.Thumb>
-                                            <Thumb MinHeight="60">
+                                            <Thumb MinHeight="0">
                                                 <Thumb.Style>
                                                     <Style TargetType="Thumb">
                                                         <Setter Property="Background" Value="#40808080" />
@@ -112,7 +112,7 @@
                                                                     <Border
                                                                         Margin="3,0,3,0"
                                                                         Background="{TemplateBinding Background}"
-                                                                        CornerRadius="{StaticResource CornerRadiusValue}" />
+                                                                        CornerRadius="3" />
                                                                 </ControlTemplate>
                                                             </Setter.Value>
                                                         </Setter>
@@ -242,14 +242,14 @@
                     <ControlTemplate TargetType="{x:Type DataGridRow}">
                         <Grid SnapsToDevicePixels="True">
                             <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="8" />
+                                <ColumnDefinition Width="10" />
                                 <ColumnDefinition Width="*" />
                             </Grid.ColumnDefinitions>
                             <!--  Left Status Line  -->
                             <Border
                                 Grid.Column="0"
-                                Width="4"
-                                Margin="2,3,0,3"
+                                Width="6"
+                                Margin="1,2,0,2"
                                 HorizontalAlignment="Left"
                                 Background="{Binding StatusColor, Converter={x:Static local:ColorToBrushConverter.Instance}}"
                                 CornerRadius="2" />
@@ -300,13 +300,13 @@
                     <ControlTemplate TargetType="{x:Type DataGridRow}">
                         <Grid SnapsToDevicePixels="True">
                             <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="6" />
+                                <ColumnDefinition Width="12" />
                                 <ColumnDefinition Width="*" />
                             </Grid.ColumnDefinitions>
                             <!--  Left Status Line  -->
                             <Border
                                 Grid.Column="0"
-                                Width="4"
+                                Width="6"
                                 Margin="2,2,0,2"
                                 HorizontalAlignment="Left"
                                 Background="{Binding StatusColor, Converter={x:Static local:ColorToBrushConverter.Instance}}"
@@ -865,7 +865,7 @@
                 Background="{DynamicResource {x:Static SystemColors.ControlBrushKey}}"
                 BorderBrush="{DynamicResource {x:Static SystemColors.ActiveBorderBrushKey}}"
                 BorderThickness="1"
-                CornerRadius="{StaticResource CornerRadiusValue}">
+                CornerRadius="3">
                 <Grid>
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto" />
@@ -876,7 +876,7 @@
                     <!--  Static Button Area at Top  -->
                     <Grid
                         Grid.Row="0"
-                        Margin="6,6,6,6"
+                        Margin="6"
                         PreviewMouseWheel="FilterArea_PreviewMouseWheel">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*" />
@@ -1580,7 +1580,7 @@
                                                             <Border
                                                                 Padding="{TemplateBinding Padding}"
                                                                 Background="{TemplateBinding Background}"
-                                                                CornerRadius="6">
+                                                                CornerRadius="3">
                                                                 <TextBlock
                                                                     Margin="6,0,0,0"
                                                                     Text="{Binding}"
@@ -3392,7 +3392,7 @@
             <!--  Splitter  -->
             <GridSplitter
                 Grid.Column="1"
-                Width="2"
+                Width="1"
                 HorizontalAlignment="Stretch"
                 Background="{DynamicResource {x:Static SystemColors.ControlBrushKey}}" />
 
@@ -3402,8 +3402,8 @@
                 Background="{DynamicResource {x:Static SystemColors.ControlBrushKey}}"
                 BorderBrush="{DynamicResource {x:Static SystemColors.ActiveBorderBrushKey}}"
                 BorderThickness="1"
-                CornerRadius="{StaticResource CornerRadiusValue}">
-                <Grid Margin="6,6,6,6">
+                CornerRadius="3">
+                <Grid Margin="6">
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto" />
                         <RowDefinition Height="*" />
@@ -3584,7 +3584,8 @@
                             Grid.Row="1"
                             Grid.Column="0"
                             Margin="0,6,0,0"
-                            Padding="5"
+                            Padding="3"
+                            FontSize="16"
                             Foreground="{DynamicResource {x:Static SystemColors.GrayTextBrushKey}}"
                             GotFocus="FilterTextBox_GotFocus"
                             LostFocus="FilterTextBox_LostFocus"
@@ -3595,13 +3596,11 @@
                             Grid.Row="1"
                             Grid.Column="1"
                             MinWidth="30"
-                            Margin="3,6,0,0"
-                            Padding="3,0"
+                            Margin="6,6,0,0"
+                            Padding="0,0"
                             VerticalAlignment="Center"
                             Click="ClearFilterButton_Click"
                             Content="✕"
-                            FontSize="12"
-                            FontWeight="Bold"
                             ToolTip="Clear filter"
                             Visibility="Collapsed">
                             <Button.Style>
@@ -3616,13 +3615,11 @@
                             Grid.Row="1"
                             Grid.Column="2"
                             MinWidth="30"
-                            Margin="2,6,0,0"
+                            Margin="6,6,0,0"
                             Padding="0"
                             VerticalAlignment="Center"
                             Click="PackageSortButton_Click"
                             Content="⇅"
-                            FontSize="14"
-                            FontWeight="Bold"
                             MouseWheel="PackageSortButton_MouseWheel"
                             ToolTip="Sort (Scroll to navigate)">
                             <Button.Style>
@@ -3705,195 +3702,203 @@
                     </Grid>
 
                     <!--  Package List  -->
-                    <DataGrid
-                        x:Name="PackageDataGrid"
+                    <Border
                         Grid.Row="1"
                         Margin="0,0,0,0"
-                        AutoGenerateColumns="False"
-                        Background="Transparent"
+                        Background="{DynamicResource {x:Static SystemColors.WindowBrushKey}}"
+                        BorderBrush="{DynamicResource {x:Static SystemColors.ActiveBorderBrushKey}}"
                         BorderThickness="1"
-                        CanUserAddRows="False"
-                        CanUserDeleteRows="False"
-                        CanUserReorderColumns="True"
-                        CanUserResizeColumns="True"
-                        CanUserSortColumns="True"
-                        EnableColumnVirtualization="True"
-                        EnableRowVirtualization="True"
-                        FontSize="12"
-                        GridLinesVisibility="Horizontal"
-                        HeadersVisibility="None"
-                        IsManipulationEnabled="False"
-                        IsReadOnly="True"
-                        ItemsSource="{Binding Source={StaticResource PackagesView}}"
-                        PreviewMouseDown="PackageDataGrid_PreviewMouseDown"
-                        PreviewMouseMove="PackageDataGrid_PreviewMouseMove"
-                        PreviewMouseUp="PackageDataGrid_PreviewMouseUp"
-                        RowHeaderWidth="0"
-                        RowHeight="65"
-                        RowStyle="{StaticResource RoundedDataGridRowStyle}"
-                        ScrollViewer.CanContentScroll="True"
-                        ScrollViewer.HorizontalScrollBarVisibility="Disabled"
-                        ScrollViewer.IsDeferredScrollingEnabled="True"
-                        SelectionChanged="PackageDataGrid_SelectionChanged"
-                        SelectionMode="Extended"
-                        VirtualizingPanel.CacheLength="10,10"
-                        VirtualizingPanel.CacheLengthUnit="Item"
-                        VirtualizingPanel.IsContainerVirtualizable="True"
-                        VirtualizingPanel.IsVirtualizing="True"
-                        VirtualizingPanel.ScrollUnit="Item"
-                        VirtualizingPanel.VirtualizationMode="Recycling">
-                        <DataGrid.Resources>
-                            <Style BasedOn="{StaticResource DataGridScrollBarStyle}" TargetType="{x:Type ScrollBar}" />
-                        </DataGrid.Resources>
-                        <DataGrid.ColumnHeaderStyle>
-                            <Style TargetType="DataGridColumnHeader">
-                                <Setter Property="Background" Value="{DynamicResource {x:Static SystemColors.ControlBrushKey}}" />
-                                <Setter Property="Foreground" Value="{DynamicResource {x:Static SystemColors.ControlTextBrushKey}}" />
-                                <Setter Property="BorderBrush" Value="{DynamicResource {x:Static SystemColors.ActiveBorderBrushKey}}" />
-                                <Setter Property="BorderThickness" Value="0,0,1,1" />
-                                <Setter Property="Padding" Value="8,6" />
-                                <Setter Property="FontSize" Value="12" />
-                                <Setter Property="FontWeight" Value="SemiBold" />
-                                <Setter Property="HorizontalContentAlignment" Value="Left" />
-                                <Setter Property="VerticalContentAlignment" Value="Center" />
-                            </Style>
-                        </DataGrid.ColumnHeaderStyle>
-                        <DataGrid.Columns>
-                            <!--  Package Name Column with metadata in second row and status border  -->
-                            <DataGridTemplateColumn
-                                Width="*"
-                                CanUserSort="True"
-                                Header="Package Name"
-                                SortMemberPath="DisplayName">
-                                <DataGridTemplateColumn.CellTemplate>
-                                    <DataTemplate>
-                                        <Border Padding="0" Background="Transparent">
-                                            <!--  Content  -->
-                                            <StackPanel Margin="6,2,4,2" VerticalAlignment="Center">
-                                                <DockPanel HorizontalAlignment="Left" LastChildFill="True">
-                                                    <!--  Status Icons Container  -->
-                                                    <StackPanel
-                                                        Margin="6,0,0,0"
-                                                        VerticalAlignment="Center"
-                                                        DockPanel.Dock="Right"
-                                                        Orientation="Horizontal">
-                                                        <!--  Favorite heart  -->
+                        ClipToBounds="True"
+                        CornerRadius="3">
+                        <DataGrid
+                            x:Name="PackageDataGrid"
+                            AutoGenerateColumns="False"
+                            Background="Transparent"
+                            BorderThickness="0"
+                            CanUserAddRows="False"
+                            CanUserDeleteRows="False"
+                            CanUserReorderColumns="True"
+                            CanUserResizeColumns="True"
+                            CanUserSortColumns="True"
+                            EnableColumnVirtualization="True"
+                            EnableRowVirtualization="True"
+                            FontSize="12"
+                            GridLinesVisibility="Horizontal"
+                            HeadersVisibility="None"
+                            IsManipulationEnabled="False"
+                            IsReadOnly="True"
+                            ItemsSource="{Binding Source={StaticResource PackagesView}}"
+                            PreviewMouseDown="PackageDataGrid_PreviewMouseDown"
+                            PreviewMouseMove="PackageDataGrid_PreviewMouseMove"
+                            PreviewMouseUp="PackageDataGrid_PreviewMouseUp"
+                            RowHeaderWidth="0"
+                            RowHeight="65"
+                            RowStyle="{StaticResource RoundedDataGridRowStyle}"
+                            ScrollViewer.CanContentScroll="True"
+                            ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                            ScrollViewer.IsDeferredScrollingEnabled="True"
+                            SelectionChanged="PackageDataGrid_SelectionChanged"
+                            SelectionMode="Extended"
+                            VirtualizingPanel.CacheLength="10,10"
+                            VirtualizingPanel.CacheLengthUnit="Item"
+                            VirtualizingPanel.IsContainerVirtualizable="True"
+                            VirtualizingPanel.IsVirtualizing="True"
+                            VirtualizingPanel.ScrollUnit="Item"
+                            VirtualizingPanel.VirtualizationMode="Recycling">
+
+                            <DataGrid.Resources>
+                                <Style BasedOn="{StaticResource DataGridScrollBarStyle}" TargetType="{x:Type ScrollBar}" />
+                            </DataGrid.Resources>
+                            <DataGrid.ColumnHeaderStyle>
+                                <Style TargetType="DataGridColumnHeader">
+                                    <Setter Property="Background" Value="{DynamicResource {x:Static SystemColors.ControlBrushKey}}" />
+                                    <Setter Property="Foreground" Value="{DynamicResource {x:Static SystemColors.ControlTextBrushKey}}" />
+                                    <Setter Property="BorderBrush" Value="{DynamicResource {x:Static SystemColors.ActiveBorderBrushKey}}" />
+                                    <Setter Property="BorderThickness" Value="0,0,1,1" />
+                                    <Setter Property="Padding" Value="8,6" />
+                                    <Setter Property="FontSize" Value="12" />
+                                    <Setter Property="FontWeight" Value="SemiBold" />
+                                    <Setter Property="HorizontalContentAlignment" Value="Left" />
+                                    <Setter Property="VerticalContentAlignment" Value="Center" />
+                                </Style>
+                            </DataGrid.ColumnHeaderStyle>
+                            <DataGrid.Columns>
+                                <!--  Package Name Column with metadata in second row and status border  -->
+                                <DataGridTemplateColumn
+                                    Width="*"
+                                    CanUserSort="True"
+                                    Header="Package Name"
+                                    SortMemberPath="DisplayName">
+                                    <DataGridTemplateColumn.CellTemplate>
+                                        <DataTemplate>
+                                            <Border Padding="0" Background="Transparent">
+                                                <!--  Content  -->
+                                                <StackPanel Margin="3,2,4,2" VerticalAlignment="Center">
+                                                    <DockPanel HorizontalAlignment="Left" LastChildFill="True">
+                                                        <!--  Status Icons Container  -->
+                                                        <StackPanel
+                                                            Margin="6,0,0,0"
+                                                            VerticalAlignment="Center"
+                                                            DockPanel.Dock="Right"
+                                                            Orientation="Horizontal">
+                                                            <!--  Favorite heart  -->
+                                                            <TextBlock
+                                                                Margin="0,0,3,0"
+                                                                FontSize="11"
+                                                                FontWeight="Bold"
+                                                                Foreground="#FF1493"
+                                                                Text="❤️"
+                                                                ToolTip="Favorite package"
+                                                                Visibility="{Binding IsFavorite, Converter={StaticResource BoolToVis}}" />
+                                                            <!--  AutoInstall A icon  -->
+                                                            <TextBlock
+                                                                Margin="0,0,3,0"
+                                                                FontSize="11"
+                                                                FontWeight="Bold"
+                                                                Foreground="#00CED1"
+                                                                Text="A"
+                                                                ToolTip="AutoInstall package"
+                                                                Visibility="{Binding IsAutoInstall, Converter={StaticResource BoolToVis}}" />
+                                                            <!--  Optimized lightning bolt  -->
+                                                            <TextBlock
+                                                                Margin="0,0,3,0"
+                                                                FontSize="11"
+                                                                FontWeight="Bold"
+                                                                Foreground="#FFC107"
+                                                                Text="⚡"
+                                                                ToolTip="Package has been optimized by VPM"
+                                                                Visibility="{Binding IsOptimized, Converter={StaticResource BoolToVis}}" />
+                                                            <!--  Old Version indicator hourglass  -->
+                                                            <TextBlock
+                                                                Margin="0,0,3,0"
+                                                                FontSize="11"
+                                                                FontWeight="Bold"
+                                                                Foreground="#FF5722"
+                                                                Text="⏳"
+                                                                ToolTip="Old version available"
+                                                                Visibility="{Binding IsOldVersion, Converter={StaticResource BoolToVis}}" />
+                                                        </StackPanel>
                                                         <TextBlock
-                                                            Margin="0,0,3,0"
-                                                            FontSize="11"
-                                                            FontWeight="Bold"
-                                                            Foreground="#FF1493"
-                                                            Text="❤️"
-                                                            ToolTip="Favorite package"
-                                                            Visibility="{Binding IsFavorite, Converter={StaticResource BoolToVis}}" />
-                                                        <!--  AutoInstall A icon  -->
+                                                            FontSize="16"
+                                                            FontWeight="SemiBold"
+                                                            Text="{Binding DisplayName}"
+                                                            TextTrimming="CharacterEllipsis" />
+                                                    </DockPanel>
+                                                    <StackPanel Orientation="Horizontal">
+
+                                                        <!--  Damaged Package indicator  -->
                                                         <TextBlock
-                                                            Margin="0,0,3,0"
-                                                            FontSize="11"
-                                                            FontWeight="Bold"
-                                                            Foreground="#00CED1"
-                                                            Text="A"
-                                                            ToolTip="AutoInstall package"
-                                                            Visibility="{Binding IsAutoInstall, Converter={StaticResource BoolToVis}}" />
-                                                        <!--  Optimized lightning bolt  -->
+                                                            Margin="0,0,2,0"
+                                                            FontSize="12"
+                                                            Foreground="#F44336"
+                                                            Text="{Binding DamageIndicator}"
+                                                            ToolTip="{Binding DamageTooltip}">
+                                                            <TextBlock.Style>
+                                                                <Style TargetType="TextBlock">
+                                                                    <Setter Property="Visibility" Value="Collapsed" />
+                                                                    <Style.Triggers>
+                                                                        <DataTrigger Binding="{Binding IsDamaged}" Value="True">
+                                                                            <Setter Property="Visibility" Value="Visible" />
+                                                                        </DataTrigger>
+                                                                    </Style.Triggers>
+                                                                </Style>
+                                                            </TextBlock.Style>
+                                                        </TextBlock>
+
                                                         <TextBlock
-                                                            Margin="0,0,3,0"
-                                                            FontSize="11"
-                                                            FontWeight="Bold"
-                                                            Foreground="#FFC107"
-                                                            Text="⚡"
-                                                            ToolTip="Package has been optimized by VPM"
-                                                            Visibility="{Binding IsOptimized, Converter={StaticResource BoolToVis}}" />
-                                                        <!--  Old Version indicator hourglass  -->
+                                                            FontSize="13"
+                                                            Foreground="{DynamicResource {x:Static SystemColors.GrayTextBrushKey}}"
+                                                            Text="Deps: " />
                                                         <TextBlock
-                                                            Margin="0,0,3,0"
-                                                            FontSize="11"
+                                                            FontSize="13"
                                                             FontWeight="Bold"
-                                                            Foreground="#FF5722"
-                                                            Text="⏳"
-                                                            ToolTip="Old version available"
-                                                            Visibility="{Binding IsOldVersion, Converter={StaticResource BoolToVis}}" />
+                                                            Foreground="{DynamicResource {x:Static SystemColors.GrayTextBrushKey}}"
+                                                            Text="{Binding DependencyCount}" />
+                                                        <TextBlock
+                                                            Margin="10,0,0,0"
+                                                            FontSize="13"
+                                                            Foreground="{DynamicResource {x:Static SystemColors.GrayTextBrushKey}}"
+                                                            Text="•  Dependents: " />
+                                                        <TextBlock
+                                                            FontSize="13"
+                                                            FontWeight="Bold"
+                                                            Foreground="{DynamicResource {x:Static SystemColors.GrayTextBrushKey}}"
+                                                            Text="{Binding DependentsCount}" />
+                                                        <TextBlock
+                                                            Margin="10,0,0,0"
+                                                            FontSize="13"
+                                                            Foreground="{DynamicResource {x:Static SystemColors.GrayTextBrushKey}}"
+                                                            Text="•  Size: " />
+                                                        <TextBlock
+                                                            FontSize="13"
+                                                            FontWeight="Bold"
+                                                            Foreground="{DynamicResource {x:Static SystemColors.GrayTextBrushKey}}"
+                                                            Text="{Binding FileSizeFormatted}" />
+                                                        <TextBlock
+                                                            Margin="10,0,0,0"
+                                                            FontSize="13"
+                                                            Foreground="{DynamicResource {x:Static SystemColors.GrayTextBrushKey}}"
+                                                            Text="•  Date: " />
+                                                        <TextBlock
+                                                            FontSize="13"
+                                                            FontWeight="Bold"
+                                                            Foreground="{DynamicResource {x:Static SystemColors.GrayTextBrushKey}}"
+                                                            Text="{Binding DateFormatted}" />
                                                     </StackPanel>
                                                     <TextBlock
-                                                        FontSize="16"
-                                                        FontWeight="SemiBold"
-                                                        Text="{Binding DisplayName}"
-                                                        TextTrimming="CharacterEllipsis" />
-                                                </DockPanel>
-                                                <StackPanel Orientation="Horizontal">
-
-                                                    <!--  Damaged Package indicator  -->
-                                                    <TextBlock
-                                                        Margin="0,0,2,0"
-                                                        FontSize="12"
-                                                        Foreground="#F44336"
-                                                        Text="{Binding DamageIndicator}"
-                                                        ToolTip="{Binding DamageTooltip}">
-                                                        <TextBlock.Style>
-                                                            <Style TargetType="TextBlock">
-                                                                <Setter Property="Visibility" Value="Collapsed" />
-                                                                <Style.Triggers>
-                                                                    <DataTrigger Binding="{Binding IsDamaged}" Value="True">
-                                                                        <Setter Property="Visibility" Value="Visible" />
-                                                                    </DataTrigger>
-                                                                </Style.Triggers>
-                                                            </Style>
-                                                        </TextBlock.Style>
-                                                    </TextBlock>
-
-                                                    <TextBlock
+                                                        Margin="0,4,0,0"
                                                         FontSize="13"
                                                         Foreground="{DynamicResource {x:Static SystemColors.GrayTextBrushKey}}"
-                                                        Text="Deps: " />
-                                                    <TextBlock
-                                                        FontSize="13"
-                                                        FontWeight="Bold"
-                                                        Foreground="{DynamicResource {x:Static SystemColors.GrayTextBrushKey}}"
-                                                        Text="{Binding DependencyCount}" />
-                                                    <TextBlock
-                                                        Margin="10,0,0,0"
-                                                        FontSize="13"
-                                                        Foreground="{DynamicResource {x:Static SystemColors.GrayTextBrushKey}}"
-                                                        Text="•  Dependents: " />
-                                                    <TextBlock
-                                                        FontSize="13"
-                                                        FontWeight="Bold"
-                                                        Foreground="{DynamicResource {x:Static SystemColors.GrayTextBrushKey}}"
-                                                        Text="{Binding DependentsCount}" />
-                                                    <TextBlock
-                                                        Margin="10,0,0,0"
-                                                        FontSize="13"
-                                                        Foreground="{DynamicResource {x:Static SystemColors.GrayTextBrushKey}}"
-                                                        Text="•  Size: " />
-                                                    <TextBlock
-                                                        FontSize="13"
-                                                        FontWeight="Bold"
-                                                        Foreground="{DynamicResource {x:Static SystemColors.GrayTextBrushKey}}"
-                                                        Text="{Binding FileSizeFormatted}" />
-                                                    <TextBlock
-                                                        Margin="10,0,0,0"
-                                                        FontSize="13"
-                                                        Foreground="{DynamicResource {x:Static SystemColors.GrayTextBrushKey}}"
-                                                        Text="•  Date: " />
-                                                    <TextBlock
-                                                        FontSize="13"
-                                                        FontWeight="Bold"
-                                                        Foreground="{DynamicResource {x:Static SystemColors.GrayTextBrushKey}}"
-                                                        Text="{Binding DateFormatted}" />
+                                                        Text="{Binding Converter={StaticResource ContentCountsConverter}}"
+                                                        TextWrapping="Wrap" />
                                                 </StackPanel>
-                                                <TextBlock
-                                                    Margin="0,4,0,0"
-                                                    FontSize="13"
-                                                    Foreground="{DynamicResource {x:Static SystemColors.GrayTextBrushKey}}"
-                                                    Text="{Binding Converter={StaticResource ContentCountsConverter}}"
-                                                    TextWrapping="Wrap" />
-                                            </StackPanel>
-                                        </Border>
-                                    </DataTemplate>
-                                </DataGridTemplateColumn.CellTemplate>
-                            </DataGridTemplateColumn>
-                        </DataGrid.Columns>
-                    </DataGrid>
+                                            </Border>
+                                        </DataTemplate>
+                                    </DataGridTemplateColumn.CellTemplate>
+                                </DataGridTemplateColumn>
+                            </DataGrid.Columns>
+                        </DataGrid>
+                    </Border>
 
                     <!--  Scenes List  -->
                     <DataGrid
@@ -3945,7 +3950,7 @@
                                             BorderBrush="{DynamicResource {x:Static SystemColors.ActiveBorderBrushKey}}"
                                             BorderThickness="1"
                                             ClipToBounds="True"
-                                            CornerRadius="{StaticResource CornerRadiusValue}">
+                                            CornerRadius="3">
                                             <Image
                                                 Source="{Binding ThumbnailPath, Converter={StaticResource ThumbnailPathConverter}}"
                                                 Stretch="UniformToFill"
@@ -4223,7 +4228,7 @@
                                             BorderBrush="{DynamicResource {x:Static SystemColors.ActiveBorderBrushKey}}"
                                             BorderThickness="1"
                                             ClipToBounds="True"
-                                            CornerRadius="{StaticResource CornerRadiusValue}">
+                                            CornerRadius="3">
                                             <Image
                                                 Source="{Binding ThumbnailPath, Converter={StaticResource ThumbnailPathConverter}}"
                                                 Stretch="UniformToFill"
@@ -4237,7 +4242,7 @@
                             <DataGridTemplateColumn Width="*" IsReadOnly="True">
                                 <DataGridTemplateColumn.CellTemplate>
                                     <DataTemplate>
-                                        <StackPanel Margin="6,2,4,2" Orientation="Vertical">
+                                        <StackPanel Margin="6,2,8,2" Orientation="Vertical">
                                             <!--  Row 1: Package Name + Icons + Category  -->
                                             <StackPanel Margin="0,0,0,0" Orientation="Horizontal">
                                                 <Grid>
@@ -4249,7 +4254,7 @@
                                                         <TextBlock
                                                             x:Name="PresetDisplayTextBlock"
                                                             VerticalAlignment="Center"
-                                                            FontSize="12"
+                                                            FontSize="14"
                                                             FontWeight="SemiBold"
                                                             Foreground="{DynamicResource {x:Static SystemColors.ControlTextBrushKey}}"
                                                             Text="{Binding DisplayName}"
@@ -4324,7 +4329,7 @@
                                                                 BorderBrush="{DynamicResource {x:Static SystemColors.ActiveBorderBrushKey}}"
                                                                 BorderThickness="1"
                                                                 CaretBrush="{DynamicResource {x:Static SystemColors.ControlTextBrushKey}}"
-                                                                FontSize="12"
+                                                                FontSize="14"
                                                                 FontWeight="SemiBold"
                                                                 Foreground="{DynamicResource {x:Static SystemColors.ControlTextBrushKey}}"
                                                                 KeyDown="PresetNameEdit_KeyDown"
@@ -4389,37 +4394,37 @@
                                                 <TextBlock
                                                     Margin="2,0,0,0"
                                                     VerticalAlignment="Center"
-                                                    FontSize="11"
+                                                    FontSize="12"
                                                     Foreground="{DynamicResource {x:Static SystemColors.GrayTextBrushKey}}"
                                                     Text="{Binding Category}" />
                                             </StackPanel>
                                             <!--  Row 2: Deps, Size, Date  -->
                                             <StackPanel Margin="0,2,0,0" Orientation="Horizontal">
                                                 <TextBlock
-                                                    FontSize="11"
+                                                    FontSize="12"
                                                     Foreground="{DynamicResource {x:Static SystemColors.GrayTextBrushKey}}"
                                                     Text="Deps: " />
                                                 <TextBlock
-                                                    FontSize="11"
+                                                    FontSize="12"
                                                     FontWeight="Bold"
                                                     Foreground="{DynamicResource {x:Static SystemColors.GrayTextBrushKey}}"
                                                     Text="{Binding DependencyCount}"
                                                     ToolTip="Number of package dependencies" />
                                                 <TextBlock
-                                                    FontSize="11"
+                                                    FontSize="12"
                                                     Foreground="{DynamicResource {x:Static SystemColors.GrayTextBrushKey}}"
                                                     Text="  •  Size: " />
                                                 <TextBlock
-                                                    FontSize="11"
+                                                    FontSize="12"
                                                     FontWeight="Bold"
                                                     Foreground="{DynamicResource {x:Static SystemColors.GrayTextBrushKey}}"
                                                     Text="{Binding FileSizeFormatted}" />
                                                 <TextBlock
-                                                    FontSize="11"
+                                                    FontSize="12"
                                                     Foreground="{DynamicResource {x:Static SystemColors.GrayTextBrushKey}}"
                                                     Text="  •  Date: " />
                                                 <TextBlock
-                                                    FontSize="11"
+                                                    FontSize="12"
                                                     FontWeight="Bold"
                                                     Foreground="{DynamicResource {x:Static SystemColors.GrayTextBrushKey}}"
                                                     Text="{Binding DateFormatted}" />
@@ -4427,11 +4432,11 @@
                                             <!--  Row 3: Path  -->
                                             <StackPanel Margin="0,2,0,0" Orientation="Horizontal">
                                                 <TextBlock
-                                                    FontSize="10"
+                                                    FontSize="11"
                                                     Foreground="{DynamicResource {x:Static SystemColors.GrayTextBrushKey}}"
                                                     Text="Path: " />
                                                 <TextBlock
-                                                    FontSize="10"
+                                                    FontSize="11"
                                                     FontWeight="Bold"
                                                     Foreground="{DynamicResource {x:Static SystemColors.GrayTextBrushKey}}"
                                                     Text="{Binding Subfolder}"
@@ -4454,31 +4459,8 @@
                         Background="{DynamicResource {x:Static SystemColors.ControlBrushKey}}"
                         BorderBrush="{DynamicResource {x:Static SystemColors.ActiveBorderBrushKey}}"
                         BorderThickness="0"
-                        CornerRadius="6"
+                        CornerRadius="0"
                         Visibility="Visible">
-                        <Border.Style>
-                            <Style TargetType="Border">
-                                <Style.Triggers>
-                                    <Trigger Property="Visibility" Value="Visible">
-                                        <Trigger.EnterActions>
-                                            <BeginStoryboard>
-                                                <Storyboard>
-                                                    <DoubleAnimation
-                                                        Storyboard.TargetProperty="Opacity"
-                                                        From="0.0"
-                                                        To="1.0"
-                                                        Duration="0:0:0.15">
-                                                        <DoubleAnimation.EasingFunction>
-                                                            <QuadraticEase EasingMode="EaseOut" />
-                                                        </DoubleAnimation.EasingFunction>
-                                                    </DoubleAnimation>
-                                                </Storyboard>
-                                            </BeginStoryboard>
-                                        </Trigger.EnterActions>
-                                    </Trigger>
-                                </Style.Triggers>
-                            </Style>
-                        </Border.Style>
                         <Grid
                             x:Name="ButtonLayoutGrid"
                             Margin="0"
@@ -4491,7 +4473,7 @@
                             <UniformGrid
                                 x:Name="PackageButtonGrid"
                                 Grid.Column="0"
-                                Margin="0,6,0,0"
+                                Margin="-2,3,0,-2"
                                 HorizontalAlignment="Stretch"
                                 VerticalAlignment="Top"
                                 Columns="2"
@@ -4500,11 +4482,11 @@
                                 <Button
                                     x:Name="LoadPackagesButton"
                                     Height="36"
-                                    Margin="0,0,3,0"
-                                    Padding="0,0"
+                                    Margin="3,3,3,3"
+                                    Padding="15,0"
                                     Click="LoadPackages_Click"
                                     Content="📥 Load"
-                                    FontSize="12"
+                                    FontSize="14"
                                     FontWeight="SemiBold"
                                     ToolTip="Load selected packages"
                                     Visibility="Collapsed">
@@ -4518,7 +4500,7 @@
                                                             Background="{TemplateBinding Background}"
                                                             BorderBrush="{TemplateBinding BorderBrush}"
                                                             BorderThickness="{TemplateBinding BorderThickness}"
-                                                            CornerRadius="6">
+                                                            CornerRadius="3">
                                                             <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
                                                         </Border>
                                                     </ControlTemplate>
@@ -4549,11 +4531,11 @@
                                 <Button
                                     x:Name="UnloadPackagesButton"
                                     Height="36"
-                                    Margin="3,0,0,0"
-                                    Padding="0"
+                                    Margin="3,3,3,3"
+                                    Padding="15,0"
                                     Click="UnloadPackages_Click"
                                     Content="📤 Unload"
-                                    FontSize="12"
+                                    FontSize="14"
                                     FontWeight="SemiBold"
                                     ToolTip="Unload selected packages"
                                     Visibility="Collapsed">
@@ -4569,7 +4551,7 @@
                                                             Background="{TemplateBinding Background}"
                                                             BorderBrush="{TemplateBinding BorderBrush}"
                                                             BorderThickness="{TemplateBinding BorderThickness}"
-                                                            CornerRadius="6">
+                                                            CornerRadius="3">
                                                             <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
                                                         </Border>
                                                     </ControlTemplate>
@@ -4604,11 +4586,11 @@
                                 <Button
                                     x:Name="LoadPackagesWithDepsButton"
                                     Height="36"
-                                    Margin="0,0,3,0"
-                                    Padding="0"
+                                    Margin="3,3,3,3"
+                                    Padding="15,0"
                                     Click="LoadPackagesWithDeps_Click"
                                     Content="📂 Load +Deps"
-                                    FontSize="12"
+                                    FontSize="14"
                                     FontWeight="SemiBold"
                                     ToolTip="Load selected packages and their dependencies"
                                     Visibility="Collapsed">
@@ -4624,7 +4606,7 @@
                                                             Background="{TemplateBinding Background}"
                                                             BorderBrush="{TemplateBinding BorderBrush}"
                                                             BorderThickness="{TemplateBinding BorderThickness}"
-                                                            CornerRadius="6">
+                                                            CornerRadius="3">
                                                             <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
                                                         </Border>
                                                     </ControlTemplate>
@@ -4660,10 +4642,10 @@
                                     x:Name="ArchiveOldButton"
                                     Height="36"
                                     Margin="3,0,0,0"
-                                    Padding="0,0,0,0"
+                                    Padding="15,0"
                                     Click="ArchiveOldButton_Click"
                                     Content="📦 Archive"
-                                    FontSize="12"
+                                    FontSize="14"
                                     FontWeight="SemiBold"
                                     ToolTip="Archive selected old version packages"
                                     Visibility="Collapsed">
@@ -4680,7 +4662,7 @@
                                                             Background="{TemplateBinding Background}"
                                                             BorderBrush="{TemplateBinding BorderBrush}"
                                                             BorderThickness="{TemplateBinding BorderThickness}"
-                                                            CornerRadius="6">
+                                                            CornerRadius="3">
                                                             <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
                                                         </Border>
                                                     </ControlTemplate>
@@ -4703,11 +4685,11 @@
                                 Grid.Column="0"
                                 Height="36"
                                 Margin="0,6,0,0"
-                                Padding="0"
+                                Padding="15,0"
                                 HorizontalAlignment="Stretch"
                                 Click="FixSelectedDuplicates_Click"
                                 Content="🔧 Fix Duplicates"
-                                FontSize="12"
+                                FontSize="14"
                                 FontWeight="SemiBold"
                                 Foreground="#212121"
                                 ToolTip="Fix selected duplicate packages"
@@ -4725,7 +4707,7 @@
                                                         Background="{TemplateBinding Background}"
                                                         BorderBrush="{TemplateBinding BorderBrush}"
                                                         BorderThickness="{TemplateBinding BorderThickness}"
-                                                        CornerRadius="6">
+                                                        CornerRadius="3">
                                                         <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
                                                     </Border>
                                                 </ControlTemplate>
@@ -4764,11 +4746,11 @@
                                 Grid.Column="0"
                                 Height="36"
                                 Margin="0,6,0,0"
-                                Padding="0"
+                                Padding="15,0"
                                 HorizontalAlignment="Stretch"
                                 Click="LoadAllDependencies_Click"
                                 Content="📥 Load All Dependencies"
-                                FontSize="12"
+                                FontSize="14"
                                 FontWeight="SemiBold"
                                 ToolTip="Load all dependencies for selected scenes/presets"
                                 Visibility="Collapsed">
@@ -4782,7 +4764,7 @@
                                                         Background="{TemplateBinding Background}"
                                                         BorderBrush="{TemplateBinding BorderBrush}"
                                                         BorderThickness="{TemplateBinding BorderThickness}"
-                                                        CornerRadius="6">
+                                                        CornerRadius="3">
                                                         <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
                                                     </Border>
                                                 </ControlTemplate>
@@ -4818,7 +4800,7 @@
             <!--  Splitter  -->
             <GridSplitter
                 Grid.Column="3"
-                Width="2"
+                Width="1"
                 HorizontalAlignment="Stretch"
                 Background="{DynamicResource {x:Static SystemColors.ControlBrushKey}}" />
 
@@ -4828,7 +4810,7 @@
                 Background="{DynamicResource {x:Static SystemColors.ControlBrushKey}}"
                 BorderBrush="{DynamicResource {x:Static SystemColors.ActiveBorderBrushKey}}"
                 BorderThickness="1"
-                CornerRadius="{StaticResource CornerRadiusValue}">
+                CornerRadius="3">
                 <Grid Margin="6">
                     <Grid.RowDefinitions>
                         <!--  Dependencies Search  -->
@@ -4886,7 +4868,7 @@
                             <Button
                                 x:Name="DependenciesTab"
                                 Grid.Column="0"
-                                Margin="0,0,1,0"
+                                Margin="0,0,3,0"
                                 Padding="10,6"
                                 VerticalAlignment="Stretch"
                                 HorizontalContentAlignment="Center"
@@ -4921,7 +4903,7 @@
                             <Button
                                 x:Name="DependentsTab"
                                 Grid.Column="1"
-                                Margin="1,0,0,0"
+                                Margin="3,0,0,0"
                                 Padding="10,6"
                                 VerticalAlignment="Stretch"
                                 HorizontalContentAlignment="Center"
@@ -4966,7 +4948,9 @@
                             <TextBox
                                 x:Name="DepsSearchBox"
                                 Grid.Column="0"
-                                Padding="6"
+                                Margin="0,0,0,0"
+                                Padding="3"
+                                FontSize="16"
                                 Foreground="{DynamicResource {x:Static SystemColors.GrayTextBrushKey}}"
                                 GotFocus="FilterTextBox_GotFocus"
                                 LostFocus="FilterTextBox_LostFocus"
@@ -4976,7 +4960,7 @@
                                 x:Name="DepsSearchClearButton"
                                 Grid.Column="1"
                                 MinWidth="30"
-                                Margin="3,0,0,0"
+                                Margin="6,0,0,0"
                                 Padding="3,0"
                                 VerticalAlignment="Center"
                                 Click="ClearFilterButton_Click"
@@ -5016,6 +5000,7 @@
                                 <Button
                                     x:Name="DownloadMissingButton"
                                     MinWidth="30"
+                                    Margin="3,0,3,0"
                                     Padding="0"
                                     Background="#FF4CAF50"
                                     Click="DownloadMissingButton_Click"
@@ -5068,77 +5053,86 @@
                         </Grid.RowDefinitions>
 
                         <!--  Dependencies List  -->
-                        <DataGrid
-                            x:Name="DependenciesDataGrid"
+                        <Border
                             Grid.Row="0"
-                            Padding="0,1,0,0"
-                            AutoGenerateColumns="False"
-                            Background="Transparent"
+                            Margin="0,-2,0,0"
+                            Background="{DynamicResource {x:Static SystemColors.WindowBrushKey}}"
                             BorderBrush="{DynamicResource {x:Static SystemColors.ActiveBorderBrushKey}}"
                             BorderThickness="1"
-                            CanUserAddRows="False"
-                            CanUserDeleteRows="False"
-                            CanUserReorderColumns="False"
-                            CanUserResizeColumns="True"
-                            CanUserSortColumns="True"
-                            EnableColumnVirtualization="False"
-                            EnableRowVirtualization="True"
-                            FontSize="11"
-                            Foreground="{DynamicResource {x:Static SystemColors.ControlTextBrushKey}}"
-                            GridLinesVisibility="Horizontal"
-                            HeadersVisibility="None"
-                            IsReadOnly="True"
-                            RowHeaderWidth="0"
-                            RowHeight="24"
-                            RowStyle="{StaticResource DependencyDataGridRowStyle}"
-                            ScrollViewer.CanContentScroll="True"
-                            ScrollViewer.HorizontalScrollBarVisibility="Disabled"
-                            ScrollViewer.IsDeferredScrollingEnabled="False"
-                            SelectionMode="Extended"
-                            TextOptions.TextFormattingMode="Display"
-                            VirtualizingPanel.CacheLength="10,10"
-                            VirtualizingPanel.CacheLengthUnit="Item"
-                            VirtualizingPanel.IsContainerVirtualizable="True"
-                            VirtualizingPanel.IsVirtualizing="True"
-                            VirtualizingPanel.ScrollUnit="Item"
-                            VirtualizingPanel.VirtualizationMode="Recycling">
-                            <DataGrid.Resources>
-                                <Style BasedOn="{StaticResource DataGridScrollBarStyle}" TargetType="{x:Type ScrollBar}" />
-                            </DataGrid.Resources>
-                            <DataGrid.ColumnHeaderStyle>
-                                <Style TargetType="DataGridColumnHeader">
-                                    <Setter Property="Background" Value="{DynamicResource {x:Static SystemColors.ControlBrushKey}}" />
-                                    <Setter Property="Foreground" Value="{DynamicResource {x:Static SystemColors.ControlTextBrushKey}}" />
-                                    <Setter Property="BorderBrush" Value="{DynamicResource {x:Static SystemColors.ActiveBorderBrushKey}}" />
-                                    <Setter Property="BorderThickness" Value="0,0,1,1" />
-                                    <Setter Property="Padding" Value="8,6" />
-                                    <Setter Property="FontSize" Value="12" />
-                                    <Setter Property="FontWeight" Value="SemiBold" />
-                                    <Setter Property="HorizontalContentAlignment" Value="Left" />
-                                    <Setter Property="VerticalContentAlignment" Value="Center" />
-                                </Style>
-                            </DataGrid.ColumnHeaderStyle>
-                            <DataGrid.Columns>
+                            ClipToBounds="True"
+                            CornerRadius="3">
+                            <DataGrid
+                                x:Name="DependenciesDataGrid"
+                                Margin="0,0,0,0"
+                                Padding="0,0,0,0"
+                                AutoGenerateColumns="False"
+                                Background="Transparent"
+                                BorderBrush="{DynamicResource {x:Static SystemColors.ActiveBorderBrushKey}}"
+                                BorderThickness="0"
+                                CanUserAddRows="False"
+                                CanUserDeleteRows="False"
+                                CanUserReorderColumns="False"
+                                CanUserResizeColumns="True"
+                                CanUserSortColumns="True"
+                                EnableColumnVirtualization="False"
+                                EnableRowVirtualization="True"
+                                FontSize="11"
+                                Foreground="{DynamicResource {x:Static SystemColors.ControlTextBrushKey}}"
+                                GridLinesVisibility="Horizontal"
+                                HeadersVisibility="None"
+                                IsReadOnly="True"
+                                RowHeaderWidth="0"
+                                RowHeight="24"
+                                RowStyle="{StaticResource DependencyDataGridRowStyle}"
+                                ScrollViewer.CanContentScroll="True"
+                                ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                                ScrollViewer.IsDeferredScrollingEnabled="False"
+                                SelectionMode="Extended"
+                                TextOptions.TextFormattingMode="Display"
+                                VirtualizingPanel.CacheLength="10,10"
+                                VirtualizingPanel.CacheLengthUnit="Item"
+                                VirtualizingPanel.IsContainerVirtualizable="True"
+                                VirtualizingPanel.IsVirtualizing="True"
+                                VirtualizingPanel.ScrollUnit="Item"
+                                VirtualizingPanel.VirtualizationMode="Recycling">
+                                <DataGrid.Resources>
+                                    <Style BasedOn="{StaticResource DataGridScrollBarStyle}" TargetType="{x:Type ScrollBar}" />
+                                </DataGrid.Resources>
+                                <DataGrid.ColumnHeaderStyle>
+                                    <Style TargetType="DataGridColumnHeader">
+                                        <Setter Property="Background" Value="{DynamicResource {x:Static SystemColors.ControlBrushKey}}" />
+                                        <Setter Property="Foreground" Value="{DynamicResource {x:Static SystemColors.ControlTextBrushKey}}" />
+                                        <Setter Property="BorderBrush" Value="{DynamicResource {x:Static SystemColors.ActiveBorderBrushKey}}" />
+                                        <Setter Property="BorderThickness" Value="0,0,1,1" />
+                                        <Setter Property="Padding" Value="8,6" />
+                                        <Setter Property="FontSize" Value="12" />
+                                        <Setter Property="FontWeight" Value="SemiBold" />
+                                        <Setter Property="HorizontalContentAlignment" Value="Left" />
+                                        <Setter Property="VerticalContentAlignment" Value="Center" />
+                                    </Style>
+                                </DataGrid.ColumnHeaderStyle>
+                                <DataGrid.Columns>
 
-                                <!--  Dependency Name Column  -->
-                                <DataGridTemplateColumn
-                                    Width="*"
-                                    CanUserSort="True"
-                                    Header="Dependency Name"
-                                    SortMemberPath="DisplayName">
-                                    <DataGridTemplateColumn.CellTemplate>
-                                        <DataTemplate>
-                                            <TextBlock
-                                                Margin="6,0,0,0"
-                                                Padding="0"
-                                                VerticalAlignment="Center"
-                                                Text="{Binding DisplayName}"
-                                                TextTrimming="CharacterEllipsis" />
-                                        </DataTemplate>
-                                    </DataGridTemplateColumn.CellTemplate>
-                                </DataGridTemplateColumn>
-                            </DataGrid.Columns>
-                        </DataGrid>
+                                    <!--  Dependency Name Column  -->
+                                    <DataGridTemplateColumn
+                                        Width="*"
+                                        CanUserSort="True"
+                                        Header="Dependency Name"
+                                        SortMemberPath="DisplayName">
+                                        <DataGridTemplateColumn.CellTemplate>
+                                            <DataTemplate>
+                                                <TextBlock
+                                                    Margin="3,0,0,0"
+                                                    Padding="0"
+                                                    VerticalAlignment="Center"
+                                                    Text="{Binding DisplayName}"
+                                                    TextTrimming="CharacterEllipsis" />
+                                            </DataTemplate>
+                                        </DataGridTemplateColumn.CellTemplate>
+                                    </DataGridTemplateColumn>
+                                </DataGrid.Columns>
+                            </DataGrid>
+                        </Border>
 
                         <!--  Dependencies Action Button Bar  -->
                         <Border
@@ -5149,7 +5143,7 @@
                             Background="{DynamicResource {x:Static SystemColors.ControlBrushKey}}"
                             BorderBrush="{DynamicResource {x:Static SystemColors.ActiveBorderBrushKey}}"
                             BorderThickness="0"
-                            CornerRadius="{StaticResource CornerRadiusValue}"
+                            CornerRadius="3"
                             Visibility="Collapsed">
                             <Border.Style>
                                 <Style TargetType="Border">
@@ -5213,7 +5207,7 @@
                                                             Background="{TemplateBinding Background}"
                                                             BorderBrush="{TemplateBinding BorderBrush}"
                                                             BorderThickness="{TemplateBinding BorderThickness}"
-                                                            CornerRadius="{StaticResource CornerRadiusValue}">
+                                                            CornerRadius="3">
                                                             <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
                                                         </Border>
                                                     </ControlTemplate>
@@ -5270,7 +5264,7 @@
                                                             Background="{TemplateBinding Background}"
                                                             BorderBrush="{TemplateBinding BorderBrush}"
                                                             BorderThickness="{TemplateBinding BorderThickness}"
-                                                            CornerRadius="{StaticResource CornerRadiusValue}">
+                                                            CornerRadius="3">
                                                             <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
                                                         </Border>
                                                     </ControlTemplate>
@@ -5327,7 +5321,7 @@
                                                             Background="{TemplateBinding Background}"
                                                             BorderBrush="{TemplateBinding BorderBrush}"
                                                             BorderThickness="{TemplateBinding BorderThickness}"
-                                                            CornerRadius="{StaticResource CornerRadiusValue}">
+                                                            CornerRadius="3">
                                                             <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
                                                         </Border>
                                                     </ControlTemplate>
@@ -5489,7 +5483,7 @@
             <!--  Splitter  -->
             <GridSplitter
                 Grid.Column="5"
-                Width="5"
+                Width="1"
                 HorizontalAlignment="Stretch"
                 VerticalAlignment="Stretch"
                 Background="{DynamicResource {x:Static SystemColors.ControlBrushKey}}"
@@ -5503,7 +5497,7 @@
                 Background="{DynamicResource {x:Static SystemColors.ControlBrushKey}}"
                 BorderBrush="{DynamicResource {x:Static SystemColors.ActiveBorderBrushKey}}"
                 BorderThickness="1"
-                CornerRadius="{StaticResource CornerRadiusValue}">
+                CornerRadius="3">
                 <Grid Margin="6">
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto" />
@@ -5519,13 +5513,13 @@
                     <Border
                         x:Name="ImagesToolbarButtonBar"
                         Grid.Row="0"
-                        Margin="0,0,0,6"
+                        Margin="0,0,0,0"
                         Padding="0"
                         VerticalAlignment="Top"
                         Background="{DynamicResource {x:Static SystemColors.ControlBrushKey}}"
                         BorderBrush="{DynamicResource {x:Static SystemColors.ActiveBorderBrushKey}}"
                         BorderThickness="0"
-                        CornerRadius="6">
+                        CornerRadius="3">
                         <Border.Style>
                             <Style TargetType="Border">
                                 <Style.Triggers>
@@ -5559,9 +5553,9 @@
                             <!--  Normal buttons  -->
                             <Button
                                 x:Name="PackageDownloadsImageButton"
-                                Height="36"
+                                Height="34"
                                 Margin="0,0,3,0"
-                                Padding="8,0"
+                                Padding="6,0"
                                 Click="PackageDownloadsToolbar_Click"
                                 Content="📥 Package Downloads"
                                 FontSize="12"
@@ -5578,7 +5572,7 @@
                                                         Background="{TemplateBinding Background}"
                                                         BorderBrush="{TemplateBinding BorderBrush}"
                                                         BorderThickness="{TemplateBinding BorderThickness}"
-                                                        CornerRadius="6">
+                                                        CornerRadius="3">
                                                         <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
                                                     </Border>
                                                 </ControlTemplate>
@@ -5609,7 +5603,7 @@
 
                             <Button
                                 x:Name="CheckUpdatesImageButton"
-                                Height="36"
+                                Height="34"
                                 Margin="3,0,3,0"
                                 Padding="8,0"
                                 Click="CheckUpdatesToolbar_Click"
@@ -5628,7 +5622,7 @@
                                                         Background="{TemplateBinding Background}"
                                                         BorderBrush="{TemplateBinding BorderBrush}"
                                                         BorderThickness="{TemplateBinding BorderThickness}"
-                                                        CornerRadius="6">
+                                                        CornerRadius="3">
                                                         <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
                                                     </Border>
                                                 </ControlTemplate>
@@ -5659,7 +5653,7 @@
 
                             <Button
                                 x:Name="PlayVAMImageButton"
-                                Height="36"
+                                Height="34"
                                 Margin="3,0,0,0"
                                 Padding="8,0"
                                 Click="PlayVaM_Click"
@@ -5678,7 +5672,7 @@
                                                         Background="{TemplateBinding Background}"
                                                         BorderBrush="{TemplateBinding BorderBrush}"
                                                         BorderThickness="{TemplateBinding BorderThickness}"
-                                                        CornerRadius="6">
+                                                        CornerRadius="3">
                                                         <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
                                                     </Border>
                                                 </ControlTemplate>
@@ -5729,7 +5723,7 @@
                                                         Background="{TemplateBinding Background}"
                                                         BorderBrush="{TemplateBinding BorderBrush}"
                                                         BorderThickness="{TemplateBinding BorderThickness}"
-                                                        CornerRadius="6">
+                                                        CornerRadius="3">
                                                         <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
                                                     </Border>
                                                 </ControlTemplate>
@@ -5779,7 +5773,7 @@
                                                         Background="{TemplateBinding Background}"
                                                         BorderBrush="{TemplateBinding BorderBrush}"
                                                         BorderThickness="{TemplateBinding BorderThickness}"
-                                                        CornerRadius="6">
+                                                        CornerRadius="3">
                                                         <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
                                                     </Border>
                                                 </ControlTemplate>
@@ -5829,7 +5823,7 @@
                                                         Background="{TemplateBinding Background}"
                                                         BorderBrush="{TemplateBinding BorderBrush}"
                                                         BorderThickness="{TemplateBinding BorderThickness}"
-                                                        CornerRadius="6">
+                                                        CornerRadius="3">
                                                         <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
                                                     </Border>
                                                 </ControlTemplate>
@@ -5879,7 +5873,7 @@
                                                         Background="{TemplateBinding Background}"
                                                         BorderBrush="{TemplateBinding BorderBrush}"
                                                         BorderThickness="{TemplateBinding BorderThickness}"
-                                                        CornerRadius="6">
+                                                        CornerRadius="3">
                                                         <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
                                                     </Border>
                                                 </ControlTemplate>
@@ -5914,6 +5908,7 @@
                     <Grid Grid.Row="1">
                         <windows:ImageListView
                             x:Name="ImagesListView"
+                            Margin="0,0,0,0"
                             Background="Transparent"
                             BorderThickness="0"
                             ItemsSource="{Binding Source={StaticResource PreviewImagesView}}"
@@ -5933,18 +5928,13 @@
                                 </Style>
                             </windows:ImageListView.ItemContainerStyle>
 
-                            <windows:ImageListView.ItemsPanel>
-                                <ItemsPanelTemplate>
-                                    <WrapPanel
-                                        Width="{Binding ActualWidth, RelativeSource={RelativeSource AncestorType=windows:ImageListView}}"
-                                        Margin="0"
-                                        VerticalAlignment="Top"
-                                        Orientation="Horizontal" />
-                                </ItemsPanelTemplate>
-                            </windows:ImageListView.ItemsPanel>
-
                             <windows:ImageListView.GroupStyle>
                                 <GroupStyle>
+                                    <GroupStyle.Panel>
+                                        <ItemsPanelTemplate>
+                                            <WrapPanel Orientation="Horizontal" />
+                                        </ItemsPanelTemplate>
+                                    </GroupStyle.Panel>
                                     <GroupStyle.ContainerStyle>
                                         <Style TargetType="{x:Type GroupItem}">
                                             <Setter Property="Template">
@@ -5953,9 +5943,9 @@
                                                         <StackPanel Orientation="Vertical">
                                                             <!--  Package header spanning full width  -->
                                                             <Border
-                                                                Height="48"
-                                                                Margin="0,8,0,0"
-                                                                Padding="6,4"
+                                                                Height="36"
+                                                                Margin="0,6,24,3"
+                                                                Padding="4,4"
                                                                 HorizontalAlignment="Stretch"
                                                                 Background="#2A2A2A"
                                                                 BorderBrush="#444444"
@@ -5965,7 +5955,7 @@
                                                                     <Grid.ColumnDefinitions>
                                                                         <ColumnDefinition Width="Auto" />
                                                                         <ColumnDefinition Width="Auto" />
-                                                                        <ColumnDefinition Width="*" MinWidth="100" />
+                                                                        <ColumnDefinition Width="*" MinWidth="10" />
                                                                         <ColumnDefinition Width="Auto" />
                                                                     </Grid.ColumnDefinitions>
 
@@ -5973,15 +5963,16 @@
                                                                     <Button
                                                                         x:Name="PackageHeaderLoadUnloadButton"
                                                                         Grid.Column="0"
-                                                                        Width="Auto"
-                                                                        Margin="0,0,8,0"
-                                                                        Padding="12,6"
+                                                                        Width="96"
+                                                                        Height="26"
+                                                                        Margin="0,0,3,0"
+                                                                        Padding="0,0"
                                                                         Background="#20FFFFFF"
                                                                         BorderBrush="#40FFFFFF"
                                                                         BorderThickness="1"
                                                                         Click="PackageHeaderLoadUnload_Click"
                                                                         Content="{Binding Items[0].PackageItem.Status, Converter={StaticResource PackageStatusToLoadButtonConverter}}"
-                                                                        FontSize="12"
+                                                                        FontSize="11"
                                                                         FontWeight="SemiBold"
                                                                         Foreground="White"
                                                                         ToolTip="Load/Unload package">
@@ -6012,9 +6003,9 @@
                                                                     <!--  Status line  -->
                                                                     <Border
                                                                         Grid.Column="1"
-                                                                        Width="4"
-                                                                        Height="20"
-                                                                        Margin="4,0,12,0"
+                                                                        Width="6"
+                                                                        Height="24"
+                                                                        Margin="3,0,6,0"
                                                                         VerticalAlignment="Center"
                                                                         Background="{Binding Items[0].StatusBrush}"
                                                                         CornerRadius="2" />
@@ -6025,8 +6016,8 @@
                                                                         VerticalAlignment="Center"
                                                                         Orientation="Horizontal">
                                                                         <TextBlock
-                                                                            Margin="0,0,8,0"
-                                                                            FontSize="13"
+                                                                            Margin="0,0,0,0"
+                                                                            FontSize="15"
                                                                             FontWeight="SemiBold"
                                                                             Foreground="White"
                                                                             Text="{Binding Items[0].PackageName}"
@@ -6036,9 +6027,9 @@
                                                                     <!--  Package size (always visible)  -->
                                                                     <TextBlock
                                                                         Grid.Column="3"
-                                                                        Margin="8,0,16,0"
+                                                                        Margin="8,0,20,0"
                                                                         VerticalAlignment="Center"
-                                                                        FontSize="13"
+                                                                        FontSize="16"
                                                                         Foreground="#AAAAAA"
                                                                         Text="{Binding Items[0].PackageItem.FileSizeFormatted}" />
                                                                 </Grid>
@@ -6060,12 +6051,12 @@
                                     <Grid Margin="3">
                                         <windows:LazyLoadImage
                                             HorizontalAlignment="Center"
-                                            LoadImageCallback="{Binding LoadImageCallback}"
-                                            PackageKey="{Binding PackageName}"
-                                            InternalImagePath="{Binding InternalPath}"
-                                            ImageWidth="{Binding ImageWidth}"
                                             ImageHeight="{Binding ImageHeight}"
+                                            ImageWidth="{Binding ImageWidth}"
+                                            InternalImagePath="{Binding InternalPath}"
+                                            LoadImageCallback="{Binding LoadImageCallback}"
                                             Loaded="LazyLoadImage_Loaded"
+                                            PackageKey="{Binding PackageName}"
                                             Unloaded="LazyLoadImage_Unloaded">
                                             <windows:LazyLoadImage.Width>
                                                 <MultiBinding Converter="{StaticResource ImageWidthConverter}" ConverterParameter="3,1">
@@ -6081,32 +6072,36 @@
                                             </windows:LazyLoadImage.Height>
                                             <windows:LazyLoadImage.CornerRadius>6</windows:LazyLoadImage.CornerRadius>
                                         </windows:LazyLoadImage>
-                                        
-                                        <!-- Delete button (only visible when extracted) -->
+
+                                        <!--  Delete button (only visible when extracted)  -->
                                         <Button
-                                            HorizontalAlignment="Left"
-                                            VerticalAlignment="Bottom"
+                                            Height="28"
                                             Margin="6,0,0,6"
                                             Padding="18,5"
-                                            Height="28"
+                                            HorizontalAlignment="Left"
+                                            VerticalAlignment="Bottom"
                                             Background="#CC803030"
-                                            Foreground="White"
-                                            BorderThickness="1"
                                             BorderBrush="Transparent"
+                                            BorderThickness="1"
                                             Click="DeleteExtractedContent_Click"
-                                            ToolTip="Delete extracted files"
                                             Cursor="Hand"
+                                            Foreground="White"
+                                            ToolTip="Delete extracted files"
                                             Visibility="{Binding IsExtracted, Converter={StaticResource BoolToVis}}">
-                                            <TextBlock Text="✕" FontWeight="Bold" FontSize="12" />
+                                            <TextBlock
+                                                FontSize="12"
+                                                FontWeight="Bold"
+                                                Text="✕" />
                                             <Button.Style>
                                                 <Style TargetType="Button">
                                                     <Setter Property="Template">
                                                         <Setter.Value>
                                                             <ControlTemplate TargetType="Button">
-                                                                <Border Background="{TemplateBinding Background}" 
-                                                                        BorderBrush="{TemplateBinding BorderBrush}" 
-                                                                        BorderThickness="{TemplateBinding BorderThickness}" 
-                                                                        CornerRadius="3">
+                                                                <Border
+                                                                    Background="{TemplateBinding Background}"
+                                                                    BorderBrush="{TemplateBinding BorderBrush}"
+                                                                    BorderThickness="{TemplateBinding BorderThickness}"
+                                                                    CornerRadius="3">
                                                                     <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
                                                                 </Border>
                                                                 <ControlTemplate.Triggers>
@@ -6121,43 +6116,45 @@
                                             </Button.Style>
                                         </Button>
 
-                                        <!-- Extract button -->
+                                        <!--  Extract button  -->
                                         <Button
+                                            Height="28"
+                                            Margin="0,0,6,6"
+                                            Padding="18,6"
                                             HorizontalAlignment="Right"
                                             VerticalAlignment="Bottom"
-                                            Margin="0,0,6,6"
-                                            Padding="18,5"
-                                            Height="28"
                                             Background="{Binding ExtractionButtonBackground}"
-                                            Foreground="White"
-                                            BorderThickness="1"
                                             BorderBrush="Transparent"
+                                            BorderThickness="1"
                                             Click="ExtractContent_Click"
-                                            ToolTip="Extract files from archive"
-                                            Cursor="Hand">
-                                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                                                <TextBlock 
-                                                    Margin="0,0,6,0"
-                                                    FontWeight="Bold"
+                                            Cursor="Hand"
+                                            Foreground="White"
+                                            ToolTip="Extract files from archive">
+                                            <StackPanel VerticalAlignment="Center" Orientation="Horizontal">
+                                                <TextBlock
+                                                    Margin="6,0,6,0"
                                                     VerticalAlignment="Center"
                                                     FontFamily="Segoe UI Emoji, Segoe UI Symbol"
                                                     FontSize="12"
+                                                    FontWeight="Bold"
                                                     Text="{Binding ExtractionStatusIcon}" />
-                                                <TextBlock 
-                                                    Text="{Binding ExtractionStatusText}"
+                                                <TextBlock
+                                                    Padding="0,0,6,0"
                                                     VerticalAlignment="Center"
+                                                    FontSize="12"
                                                     FontWeight="SemiBold"
-                                                    FontSize="12" />
+                                                    Text="{Binding ExtractionStatusText}" />
                                             </StackPanel>
                                             <Button.Style>
                                                 <Style TargetType="Button">
                                                     <Setter Property="Template">
                                                         <Setter.Value>
                                                             <ControlTemplate TargetType="Button">
-                                                                <Border Background="{TemplateBinding Background}" 
-                                                                        BorderBrush="{TemplateBinding BorderBrush}" 
-                                                                        BorderThickness="{TemplateBinding BorderThickness}" 
-                                                                        CornerRadius="3">
+                                                                <Border
+                                                                    Background="{TemplateBinding Background}"
+                                                                    BorderBrush="{TemplateBinding BorderBrush}"
+                                                                    BorderThickness="{TemplateBinding BorderThickness}"
+                                                                    CornerRadius="3">
                                                                     <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
                                                                 </Border>
                                                                 <ControlTemplate.Triggers>
@@ -6185,7 +6182,7 @@
                             VerticalAlignment="Bottom"
                             Panel.ZIndex="10"
                             Background="#CC000000"
-                            CornerRadius="6"
+                            CornerRadius="9"
                             Opacity="0.4">
                             <Border.Style>
                                 <Style TargetType="Border">
@@ -6209,7 +6206,7 @@
                                     <Button
                                         Width="26"
                                         Height="26"
-                                        Margin="0,0,3,0"
+                                        Margin="0,0,6,0"
                                         Padding="0,0"
                                         Click="DecreaseImageColumns_Click"
                                         Content="−"
@@ -6229,7 +6226,7 @@
                                                                 Background="{TemplateBinding Background}"
                                                                 BorderBrush="{TemplateBinding BorderBrush}"
                                                                 BorderThickness="{TemplateBinding BorderThickness}"
-                                                                CornerRadius="{StaticResource CornerRadiusValue}">
+                                                                CornerRadius="3">
                                                                 <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
                                                             </Border>
                                                             <ControlTemplate.Triggers>
@@ -6270,7 +6267,7 @@
                                                                 Background="{TemplateBinding Background}"
                                                                 BorderBrush="{TemplateBinding BorderBrush}"
                                                                 BorderThickness="{TemplateBinding BorderThickness}"
-                                                                CornerRadius="{StaticResource CornerRadiusValue}">
+                                                                CornerRadius="3">
                                                                 <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
                                                             </Border>
                                                             <ControlTemplate.Triggers>
