@@ -101,7 +101,7 @@
                                                 Opacity="0" />
                                         </Track.DecreaseRepeatButton>
                                         <Track.Thumb>
-                                            <Thumb MinHeight="0">
+                                            <Thumb MinHeight="60">
                                                 <Thumb.Style>
                                                     <Style TargetType="Thumb">
                                                         <Setter Property="Background" Value="#40808080" />
@@ -4461,6 +4461,29 @@
                         BorderThickness="0"
                         CornerRadius="0"
                         Visibility="Visible">
+                        <Border.Style>
+                            <Style TargetType="Border">
+                                <Style.Triggers>
+                                    <Trigger Property="Visibility" Value="Visible">
+                                        <Trigger.EnterActions>
+                                            <BeginStoryboard>
+                                                <Storyboard>
+                                                    <DoubleAnimation
+                                                        Storyboard.TargetProperty="Opacity"
+                                                        From="0.0"
+                                                        To="1.0"
+                                                        Duration="0:0:0.15">
+                                                        <DoubleAnimation.EasingFunction>
+                                                            <QuadraticEase EasingMode="EaseOut" />
+                                                        </DoubleAnimation.EasingFunction>
+                                                    </DoubleAnimation>
+                                                </Storyboard>
+                                            </BeginStoryboard>
+                                        </Trigger.EnterActions>
+                                    </Trigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Border.Style>
                         <Grid
                             x:Name="ButtonLayoutGrid"
                             Margin="0"
@@ -5928,13 +5951,18 @@
                                 </Style>
                             </windows:ImageListView.ItemContainerStyle>
 
+                            <windows:ImageListView.ItemsPanel>
+                                <ItemsPanelTemplate>
+                                    <WrapPanel
+                                        Width="{Binding ActualWidth, RelativeSource={RelativeSource AncestorType=windows:ImageListView}}"
+                                        Margin="0"
+                                        VerticalAlignment="Top"
+                                        Orientation="Horizontal" />
+                                </ItemsPanelTemplate>
+                            </windows:ImageListView.ItemsPanel>
+
                             <windows:ImageListView.GroupStyle>
                                 <GroupStyle>
-                                    <GroupStyle.Panel>
-                                        <ItemsPanelTemplate>
-                                            <WrapPanel Orientation="Horizontal" />
-                                        </ItemsPanelTemplate>
-                                    </GroupStyle.Panel>
                                     <GroupStyle.ContainerStyle>
                                         <Style TargetType="{x:Type GroupItem}">
                                             <Setter Property="Template">
@@ -6027,7 +6055,7 @@
                                                                     <!--  Package size (always visible)  -->
                                                                     <TextBlock
                                                                         Grid.Column="3"
-                                                                        Margin="8,0,20,0"
+                                                                        Margin="8,0,16,0"
                                                                         VerticalAlignment="Center"
                                                                         FontSize="16"
                                                                         Foreground="#AAAAAA"
@@ -6051,12 +6079,12 @@
                                     <Grid Margin="3">
                                         <windows:LazyLoadImage
                                             HorizontalAlignment="Center"
-                                            ImageHeight="{Binding ImageHeight}"
-                                            ImageWidth="{Binding ImageWidth}"
-                                            InternalImagePath="{Binding InternalPath}"
                                             LoadImageCallback="{Binding LoadImageCallback}"
-                                            Loaded="LazyLoadImage_Loaded"
                                             PackageKey="{Binding PackageName}"
+                                            InternalImagePath="{Binding InternalPath}"
+                                            ImageWidth="{Binding ImageWidth}"
+                                            ImageHeight="{Binding ImageHeight}"
+                                            Loaded="LazyLoadImage_Loaded"
                                             Unloaded="LazyLoadImage_Unloaded">
                                             <windows:LazyLoadImage.Width>
                                                 <MultiBinding Converter="{StaticResource ImageWidthConverter}" ConverterParameter="3,1">
@@ -6075,30 +6103,26 @@
 
                                         <!--  Delete button (only visible when extracted)  -->
                                         <Button
-                                            Height="28"
-                                            Margin="6,0,0,6"
-                                            Padding="18,5"
                                             HorizontalAlignment="Left"
                                             VerticalAlignment="Bottom"
+                                            Margin="6,0,0,6"
+                                            Padding="18,5"
+                                            Height="28"
                                             Background="#CC803030"
-                                            BorderBrush="Transparent"
-                                            BorderThickness="1"
-                                            Click="DeleteExtractedContent_Click"
-                                            Cursor="Hand"
                                             Foreground="White"
+                                            BorderThickness="1"
+                                            BorderBrush="Transparent"
+                                            Click="DeleteExtractedContent_Click"
                                             ToolTip="Delete extracted files"
+                                            Cursor="Hand"
                                             Visibility="{Binding IsExtracted, Converter={StaticResource BoolToVis}}">
-                                            <TextBlock
-                                                FontSize="12"
-                                                FontWeight="Bold"
-                                                Text="✕" />
+                                            <TextBlock Text="✕" FontWeight="Bold" FontSize="12" />
                                             <Button.Style>
                                                 <Style TargetType="Button">
                                                     <Setter Property="Template">
                                                         <Setter.Value>
                                                             <ControlTemplate TargetType="Button">
-                                                                <Border
-                                                                    Background="{TemplateBinding Background}"
+                                                                <Border Background="{TemplateBinding Background}" 
                                                                     BorderBrush="{TemplateBinding BorderBrush}"
                                                                     BorderThickness="{TemplateBinding BorderThickness}"
                                                                     CornerRadius="3">
@@ -6116,42 +6140,40 @@
                                             </Button.Style>
                                         </Button>
 
-                                        <!--  Extract button  -->
+                                        <!-- Extract button -->
                                         <Button
-                                            Height="28"
-                                            Margin="0,0,6,6"
-                                            Padding="18,6"
                                             HorizontalAlignment="Right"
                                             VerticalAlignment="Bottom"
+                                            Margin="0,0,6,6"
+                                            Padding="18,5"
+                                            Height="28"
                                             Background="{Binding ExtractionButtonBackground}"
-                                            BorderBrush="Transparent"
-                                            BorderThickness="1"
-                                            Click="ExtractContent_Click"
-                                            Cursor="Hand"
                                             Foreground="White"
-                                            ToolTip="Extract files from archive">
-                                            <StackPanel VerticalAlignment="Center" Orientation="Horizontal">
+                                            BorderThickness="1"
+                                            BorderBrush="Transparent"
+                                            Click="ExtractContent_Click"
+                                            ToolTip="Extract files from archive"
+                                            Cursor="Hand">
+                                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                                                 <TextBlock
-                                                    Margin="6,0,6,0"
+                                                    Margin="0,0,6,0"
+                                                    FontWeight="Bold"
                                                     VerticalAlignment="Center"
                                                     FontFamily="Segoe UI Emoji, Segoe UI Symbol"
                                                     FontSize="12"
-                                                    FontWeight="Bold"
                                                     Text="{Binding ExtractionStatusIcon}" />
                                                 <TextBlock
-                                                    Padding="0,0,6,0"
+                                                    Text="{Binding ExtractionStatusText}"
                                                     VerticalAlignment="Center"
-                                                    FontSize="12"
                                                     FontWeight="SemiBold"
-                                                    Text="{Binding ExtractionStatusText}" />
+                                                    FontSize="12" />
                                             </StackPanel>
                                             <Button.Style>
                                                 <Style TargetType="Button">
                                                     <Setter Property="Template">
                                                         <Setter.Value>
                                                             <ControlTemplate TargetType="Button">
-                                                                <Border
-                                                                    Background="{TemplateBinding Background}"
+                                                                <Border Background="{TemplateBinding Background}" 
                                                                     BorderBrush="{TemplateBinding BorderBrush}"
                                                                     BorderThickness="{TemplateBinding BorderThickness}"
                                                                     CornerRadius="3">

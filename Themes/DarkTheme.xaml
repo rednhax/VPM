@@ -8,8 +8,8 @@
 
     <!--  Windows 11 Inspired Dark Theme - Neutral Grays  -->
     <!--  UI Constants  -->
-    <CornerRadius x:Key="CornerRadiusValue">6</CornerRadius>
-    <CornerRadius x:Key="OffsetCornerRadiusValue">9</CornerRadius>
+    <CornerRadius x:Key="CornerRadiusValue">3</CornerRadius>
+    <CornerRadius x:Key="OffsetCornerRadiusValue">6</CornerRadius>
 
     <SolidColorBrush x:Key="WindowBackgroundBrush" Color="#FF202020" />
     <SolidColorBrush x:Key="ControlBackgroundBrush" Color="#FF2B2B2B" />
@@ -91,10 +91,12 @@
                         BorderBrush="{TemplateBinding BorderBrush}"
                         BorderThickness="{TemplateBinding BorderThickness}"
                         CornerRadius="{StaticResource CornerRadiusValue}">
-                        <ScrollViewer Padding="{TemplateBinding Padding}" Focusable="False"
-                                      HorizontalScrollBarVisibility="{TemplateBinding ScrollViewer.HorizontalScrollBarVisibility}"
-                                      VerticalScrollBarVisibility="{TemplateBinding ScrollViewer.VerticalScrollBarVisibility}"
-                                      CanContentScroll="{TemplateBinding ScrollViewer.CanContentScroll}">
+                        <ScrollViewer
+                            Padding="{TemplateBinding Padding}"
+                            CanContentScroll="{TemplateBinding ScrollViewer.CanContentScroll}"
+                            Focusable="False"
+                            HorizontalScrollBarVisibility="{TemplateBinding ScrollViewer.HorizontalScrollBarVisibility}"
+                            VerticalScrollBarVisibility="{TemplateBinding ScrollViewer.VerticalScrollBarVisibility}">
                             <ItemsPresenter />
                         </ScrollViewer>
                     </Border>
@@ -151,7 +153,7 @@
                         Background="{TemplateBinding Background}"
                         BorderBrush="{TemplateBinding BorderBrush}"
                         BorderThickness="{TemplateBinding BorderThickness}"
-                        CornerRadius="{StaticResource CornerRadiusValue}">
+                        CornerRadius="3">
                         <ScrollViewer
                             x:Name="PART_ContentHost"
                             Margin="0"
@@ -414,10 +416,12 @@
                         BorderBrush="{TemplateBinding BorderBrush}"
                         BorderThickness="{TemplateBinding BorderThickness}"
                         CornerRadius="{StaticResource CornerRadiusValue}">
-                        <ScrollViewer Padding="{TemplateBinding Padding}" Focusable="False"
-                                      HorizontalScrollBarVisibility="{TemplateBinding ScrollViewer.HorizontalScrollBarVisibility}"
-                                      VerticalScrollBarVisibility="{TemplateBinding ScrollViewer.VerticalScrollBarVisibility}"
-                                      CanContentScroll="{TemplateBinding ScrollViewer.CanContentScroll}">
+                        <ScrollViewer
+                            Padding="{TemplateBinding Padding}"
+                            CanContentScroll="{TemplateBinding ScrollViewer.CanContentScroll}"
+                            Focusable="False"
+                            HorizontalScrollBarVisibility="{TemplateBinding ScrollViewer.HorizontalScrollBarVisibility}"
+                            VerticalScrollBarVisibility="{TemplateBinding ScrollViewer.VerticalScrollBarVisibility}">
                             <ItemsPresenter />
                         </ScrollViewer>
                     </Border>
