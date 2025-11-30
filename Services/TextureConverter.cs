@@ -57,7 +57,11 @@ namespace VPM.Services
                 }
                 else if (extension == ".png")
                 {
-                    convertedData = resized.PngsaveBuffer();
+                    // Use maximum compression (9) for PNG to minimize file size
+                    // compression: 9 = maximum compression (slowest but best compression ratio)
+                    // interlace: false = no interlacing for smaller file size
+                    // palette: false = don't convert to palette mode
+                    convertedData = resized.PngsaveBuffer(compression: 9, interlace: false);
                 }
                 else if (extension == ".webp")
                 {

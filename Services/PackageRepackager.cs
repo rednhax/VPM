@@ -224,17 +224,25 @@ namespace VPM.Services
                 else if (File.Exists(archiveFilePath) && config.TextureConversions.Count > 0)
                 {
                     // SCENARIO 2: Re-optimizing already optimized package in loaded folder WITH TEXTURE CHANGES
-                    // Read from archive (original) to allow re-optimization with different settings
-                    // This provides BETTER QUALITY when downscaling (e.g., 8K→2K is better than 4K→2K)
-                    progressCallback?.Invoke("Re-optimizing textures from original archive (better quality)...", 0, totalOperations);
+                    // Read from CURRENT package to preserve previous optimizations
+                    // Only textures in TextureConversions will be re-converted from archive for better quality
+                    // Non-converted textures stay at their current resolution (preserving previous work)
+                    progressCallback?.Invoke("Re-optimizing selected textures...", 0, totalOperations);
                     
                     if (_imageManager != null) await _imageManager.CloseFileHandlesAsync(sourceVarPath);
                     if (_imageManager != null) await _imageManager.CloseFileHandlesAsync(archiveFilePath);
                     await ReleaseFileHandlesAsync(100);
                     
-                    sourcePathForProcessing = archiveFilePath; // Read from archive (original)
-                    finalOutputPath = sourceVarPath; // Write back to loaded folder
-                    isSourceInArchive = true; // Treat as reading from archive for file handling
+                    // CRITICAL: Copy source to temp file to avoid file lock when we need to delete/replace
+                    // This ensures we don't hold a lock on the file we're trying to overwrite
+                    string tempSourcePath = Path.Combine(Path.GetTempPath(), $"vpm_source_{Guid.NewGuid()}.var");
+                    File.Copy(sourceVarPath, tempSourcePath, true);
+                    sourcePathForProcessing = tempSourcePath; // Read from temp copy
+                    finalOutputPath = sourceVarPath; // Write back to original location
+                    // isSourceInArchive remains false - we're modifying current package
+                    // Note: Textures being converted will be read from archive in the conversion loop for better quality
+                    
+                    System.Diagnostics.Debug.WriteLine($"SCENARIO 2: Copied source to temp: {tempSourcePath}");
                 }
                 else if (!createBackup && File.Exists(archiveFilePath) && (config.MinifyJson || config.ForceLatestDependencies || config.DisabledDependencies.Count > 0 || config.DisableMorphPreload))
                 {
@@ -246,9 +254,14 @@ namespace VPM.Services
                     if (_imageManager != null) await _imageManager.CloseFileHandlesAsync(sourceVarPath);
                     await ReleaseFileHandlesAsync(100);
                     
-                    sourcePathForProcessing = sourceVarPath; // Modify current file
-                    finalOutputPath = sourceVarPath; // Same file (in-place modification)
+                    // CRITICAL: Copy source to temp file to avoid file lock when we need to delete/replace
+                    string tempSourcePath = Path.Combine(Path.GetTempPath(), $"vpm_source_{Guid.NewGuid()}.var");
+                    File.Copy(sourceVarPath, tempSourcePath, true);
+                    sourcePathForProcessing = tempSourcePath; // Read from temp copy
+                    finalOutputPath = sourceVarPath; // Write back to original location
                     // isSourceInArchive remains false for in-place modification
+                    
+                    System.Diagnostics.Debug.WriteLine($"SCENARIO 2B: Copied source to temp: {tempSourcePath}");
                 }
                 else if (createBackup && !File.Exists(archiveFilePath))
                 {
@@ -481,10 +494,14 @@ namespace VPM.Services
                     _performanceTimer.Start("Package Analysis");
                     
                     // Open source VAR (from archive or original location)
-                    using (var sourceArchive = SharpCompressHelper.OpenForRead(sourcePathForProcessing))
+                    // Use forceGcOnDispose to ensure file handles are released before we try to delete/replace
+                    using (var sourceArchive = SharpCompressHelper.OpenForRead(sourcePathForProcessing, null, forceGcOnDispose: true))
                     using (var outputMemoryStream = new MemoryStream())
                     using (var outputArchive = ZipArchive.Create())
                     {
+                        // Set maximum compression level for smaller output files
+                        outputArchive.DeflateCompressionLevel = SharpCompress.Compressors.Deflate.CompressionLevel.BestCompression;
+                        
                         string originalMetaJson = null;
                         DateTime? originalMetaJsonDate = null;
                         object archiveLock = new object();
@@ -544,6 +561,28 @@ namespace VPM.Services
                         var textureEntries = entriesToProcess.Where(e => e.needsTextureConversion).ToList();
                         var unsupportedCompressionTextures = new List<string>();
                         
+                        // DEBUG: Log texture conversion configuration
+                        System.Diagnostics.Debug.WriteLine($"\n=== TEXTURE CONVERSION IN REPACKAGER ===");
+                        System.Diagnostics.Debug.WriteLine($"Textures in config.TextureConversions: {config.TextureConversions.Count}");
+                        foreach (var texPath in config.TextureConversions.Keys)
+                        {
+                            System.Diagnostics.Debug.WriteLine($"  - {texPath}");
+                        }
+                        System.Diagnostics.Debug.WriteLine($"Total entries in archive: {entriesToProcess.Count}");
+                        System.Diagnostics.Debug.WriteLine($"Entries needing texture conversion: {textureEntries.Count}");
+                        
+                        // Show which archive entries are image files
+                        var imageEntries = entriesToProcess.Where(e => 
+                            e.entry.Key.EndsWith(".png", StringComparison.OrdinalIgnoreCase) ||
+                            e.entry.Key.EndsWith(".jpg", StringComparison.OrdinalIgnoreCase) ||
+                            e.entry.Key.EndsWith(".jpeg", StringComparison.OrdinalIgnoreCase)).ToList();
+                        System.Diagnostics.Debug.WriteLine($"Image files in archive: {imageEntries.Count}");
+                        foreach (var img in imageEntries)
+                        {
+                            bool isInConfig = config.TextureConversions.ContainsKey(img.entry.Key);
+                            System.Diagnostics.Debug.WriteLine($"  - {img.entry.Key} | IN_CONFIG: {isInConfig}");
+                        }
+                        
                         if (textureEntries.Count > 0)
                         {
                             progressCallback?.Invoke($"⚡ Starting texture conversion...", 0, totalOperations);
@@ -556,7 +595,12 @@ namespace VPM.Services
                         // Texture resizing is CPU-intensive, not I/O-bound, so we can use all cores
                         int maxConcurrentTextures = Math.Max(2, Environment.ProcessorCount); // Full parallelism for CPU-bound work
                         _performanceTimer.Start("Texture Conversion (All)");
-                        using (var archivePool = new ArchiveHandlePool(sourcePathForProcessing, maxConcurrentTextures))
+                        
+                        // For texture conversion, prefer reading from archive (original) for better quality
+                        // This allows 8K→2K conversion even if current package has 4K textures
+                        string textureSourcePath = File.Exists(archiveFilePath) ? archiveFilePath : sourcePathForProcessing;
+                        
+                        using (var archivePool = new ArchiveHandlePool(textureSourcePath, maxConcurrentTextures))
                         using (var semaphore = new System.Threading.SemaphoreSlim(maxConcurrentTextures))
                         {
                             var tasks = textureEntries.Select(async item =>
@@ -638,6 +682,7 @@ namespace VPM.Services
                                         else
                                         {
                                             Interlocked.Add(ref newTotalSize, sourceData.Length);
+                                            System.Diagnostics.Debug.WriteLine($"  SKIPPED (no conversion): {Path.GetFileName(entry.Key)} | {sourceData.Length} bytes (converted data was null or larger)");
                                             progressCallback?.Invoke($"⚡ [{currentProcessed}/{totalOperations}] ⊘ Skipped: {Path.GetFileName(entry.Key)}", currentProcessed, totalOperations);
                                         }
                                         
@@ -826,6 +871,17 @@ namespace VPM.Services
                         int writeIndex = 0;
                         int totalWrites = entriesToProcess.Count;
                         
+                        // DEBUG: Log archive writing details
+                        System.Diagnostics.Debug.WriteLine($"\n=== ARCHIVE WRITING DEBUG ===");
+                        System.Diagnostics.Debug.WriteLine($"Total entries to write: {totalWrites}");
+                        System.Diagnostics.Debug.WriteLine($"Converted textures: {convertedTextures.Count}");
+                        System.Diagnostics.Debug.WriteLine($"Modified scenes: {modifiedScenes.Count}");
+                        System.Diagnostics.Debug.WriteLine($"Failed textures: {failedTextures.Count}");
+                        
+                        long totalBytesWritten = 0;
+                        long totalBytesOriginal = 0;
+                        var convertedTexturesList = new List<(string name, long original, long written)>();
+                        
                         foreach (var item in entriesToProcess)
                         {
                             var (entry, needsTextureConversion, needsHairModification, needsSceneModification) = item;
@@ -904,19 +960,34 @@ namespace VPM.Services
                             // Only buffer if data was modified (texture conversion, JSON minification)
                             try
                             {
+                                long originalSize = entry.Size;
+                                long writtenSize = 0;
+                                
                                 if (dataToWrite != null)
                                 {
                                     // Modified data: use MemoryStream (already in memory)
+                                    writtenSize = dataToWrite.Length;
                                     var ms = new MemoryStream(dataToWrite);
                                     outputArchive.AddEntry(entry.Key, ms, closeStream: true);
+                                    
+                                    // DEBUG: Log texture conversions
+                                    if (needsTextureConversion && convertedTextures.ContainsKey(entry.Key))
+                                    {
+                                        convertedTexturesList.Add((Path.GetFileName(entry.Key), originalSize, writtenSize));
+                                        System.Diagnostics.Debug.WriteLine($"  CONVERTED: {Path.GetFileName(entry.Key)} | {originalSize} -> {writtenSize} bytes ({(writtenSize - originalSize > 0 ? "+" : "")}{writtenSize - originalSize})");
+                                    }
                                 }
                                 else
                                 {
                                     // Unmodified data: stream directly from source to destination
                                     // This avoids loading large files into memory
                                     // CRITICAL: Always copy, even if it's a failed texture (never skip)
+                                    writtenSize = originalSize;
                                     SharpCompressHelper.CopyEntryDirect(sourceArchive.Archive, entry, outputArchive);
                                 }
+                                
+                                totalBytesOriginal += originalSize;
+                                totalBytesWritten += writtenSize;
 
                                 // Note: SharpCompress handles compression type during archive writing, not per-entry
                                 
@@ -1012,6 +1083,13 @@ namespace VPM.Services
                                 }
                             }
                         }
+                        
+                        // DEBUG: Log archive writing summary
+                        System.Diagnostics.Debug.WriteLine($"\n=== ARCHIVE WRITING SUMMARY ===");
+                        System.Diagnostics.Debug.WriteLine($"Total bytes original (in archive): {totalBytesOriginal}");
+                        System.Diagnostics.Debug.WriteLine($"Total bytes written: {totalBytesWritten}");
+                        System.Diagnostics.Debug.WriteLine($"Difference: {(totalBytesWritten - totalBytesOriginal > 0 ? "+" : "")}{totalBytesWritten - totalBytesOriginal} bytes");
+                        System.Diagnostics.Debug.WriteLine($"Entries written: {writeIndex}");
 
                         // Update meta.json with conversion details
                         if (!string.IsNullOrEmpty(originalMetaJson))
@@ -1098,6 +1176,18 @@ namespace VPM.Services
                     progressCallback?.Invoke("✅ Finalizing package...", totalOperations, totalOperations);
                     
                     // STEP 3: Move the converted temp file to the final output location
+                    // Force garbage collection to ensure all file handles are released
+                    // This is critical because we just closed sourceArchive and need to delete/replace the file
+                    GC.Collect();
+                    GC.WaitForPendingFinalizers();
+                    GC.Collect(); // Second pass to clean up any newly freed objects
+                    
+                    // Release any file handles before attempting to delete/move
+                    if (_imageManager != null) await _imageManager.CloseFileHandlesAsync(finalOutputPath);
+                    if (_imageManager != null) await _imageManager.CloseFileHandlesAsync(sourceVarPath);
+                    if (_imageManager != null) await _imageManager.CloseFileHandlesAsync(sourcePathForProcessing);
+                    await ReleaseFileHandlesAsync(200);
+                    
                     if (File.Exists(finalOutputPath))
                     {
                         // Check if we're writing to a different location than the source
@@ -1115,11 +1205,49 @@ namespace VPM.Services
                         }
                         else
                         {
-                            // Overwriting in the same location - delete the old file
-                            File.Delete(finalOutputPath);
+                            // Overwriting in the same location - delete the old file with retry
+                            System.Diagnostics.Debug.WriteLine($"\n=== FILE DELETE DEBUG ===");
+                            System.Diagnostics.Debug.WriteLine($"Attempting to delete: {finalOutputPath}");
+                            System.Diagnostics.Debug.WriteLine($"sourcePathForProcessing: {sourcePathForProcessing}");
+                            System.Diagnostics.Debug.WriteLine($"sourceVarPath: {sourceVarPath}");
+                            System.Diagnostics.Debug.WriteLine($"Are they same? finalOutputPath==sourcePathForProcessing: {finalOutputPath.Equals(sourcePathForProcessing, StringComparison.OrdinalIgnoreCase)}");
+                            System.Diagnostics.Debug.WriteLine($"Are they same? finalOutputPath==sourceVarPath: {finalOutputPath.Equals(sourceVarPath, StringComparison.OrdinalIgnoreCase)}");
+                            
+                            for (int attempt = 1; attempt <= 5; attempt++)
+                            {
+                                try
+                                {
+                                    System.Diagnostics.Debug.WriteLine($"Delete attempt {attempt}/5...");
+                                    File.Delete(finalOutputPath);
+                                    System.Diagnostics.Debug.WriteLine($"Delete SUCCESS on attempt {attempt}");
+                                    break;
+                                }
+                                catch (IOException ex) when (attempt < 5)
+                                {
+                                    System.Diagnostics.Debug.WriteLine($"Delete FAILED attempt {attempt}: {ex.Message}");
+                                    // Force GC and wait for file handles to be released
+                                    GC.Collect();
+                                    GC.WaitForPendingFinalizers();
+                                    await ReleaseFileHandlesAsync(500 * attempt);
+                                    if (_imageManager != null) await _imageManager.CloseFileHandlesAsync(finalOutputPath);
+                                    if (_imageManager != null) await _imageManager.CloseFileHandlesAsync(sourcePathForProcessing);
+                                }
+                            }
                         }
                     }
                     File.Move(tempOutputPath, finalOutputPath);
+                    
+                    // Clean up temp source file if we created one (SCENARIO 2/2B)
+                    if (sourcePathForProcessing != sourceVarPath && sourcePathForProcessing != archiveFilePath && 
+                        sourcePathForProcessing.StartsWith(Path.GetTempPath(), StringComparison.OrdinalIgnoreCase))
+                    {
+                        try
+                        {
+                            File.Delete(sourcePathForProcessing);
+                            System.Diagnostics.Debug.WriteLine($"Cleaned up temp source: {sourcePathForProcessing}");
+                        }
+                        catch { /* Ignore cleanup errors */ }
+                    }
                     
                     // Force timestamp update to ensure cache invalidation
                     File.SetLastWriteTimeUtc(finalOutputPath, DateTime.UtcNow);
@@ -1133,6 +1261,13 @@ namespace VPM.Services
                     string perfReport = _performanceTimer.GetReport();
                     System.Diagnostics.Debug.WriteLine(perfReport);
                     Console.WriteLine(perfReport);
+                    
+                    // DEBUG: Final size comparison
+                    System.Diagnostics.Debug.WriteLine($"\n=== FINAL SIZE COMPARISON ===");
+                    System.Diagnostics.Debug.WriteLine($"Original file size: {originalFileSize} bytes");
+                    System.Diagnostics.Debug.WriteLine($"Converted file size: {convertedSize} bytes");
+                    System.Diagnostics.Debug.WriteLine($"Difference: {(convertedSize - originalFileSize > 0 ? "+" : "")}{convertedSize - originalFileSize} bytes");
+                    System.Diagnostics.Debug.WriteLine($"Percentage: {((double)(convertedSize - originalFileSize) / originalFileSize * 100):F1}%");
                     
                     // Use the original file size we captured at the start
                     // This ensures we compare the input size to output size correctly
@@ -1156,6 +1291,13 @@ namespace VPM.Services
                     {
                         if (File.Exists(tempOutputPath))
                             File.Delete(tempOutputPath);
+                        
+                        // Clean up temp source file if we created one (SCENARIO 2/2B)
+                        if (sourcePathForProcessing != sourceVarPath && sourcePathForProcessing != archiveFilePath && 
+                            sourcePathForProcessing.StartsWith(Path.GetTempPath(), StringComparison.OrdinalIgnoreCase))
+                        {
+                            try { File.Delete(sourcePathForProcessing); } catch { }
+                        }
                         
                         // Only restore if we moved the file to archive (createBackup was true)
                         if (createBackup && File.Exists(archivedPath) && !File.Exists(sourceVarPath))

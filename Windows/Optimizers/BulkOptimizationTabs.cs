@@ -71,7 +71,7 @@ namespace VPM
                 
                 var archiveText = new TextBlock
                 {
-                    Text = " 📦 {archiveCount} with original backup",
+                    Text = $"📦 {archiveCount} with original backup",
                     FontSize = 14,
                     FontWeight = FontWeights.Bold,
                     Foreground = new SolidColorBrush(Color.FromRgb(100, 180, 255)),

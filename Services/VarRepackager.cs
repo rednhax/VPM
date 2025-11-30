@@ -205,6 +205,9 @@ namespace VPM.Services
                     using (var sourceArchive = SharpCompressHelper.OpenForRead(sourcePathForProcessing))
                     using (var outputArchive = ZipArchive.Create())
                     {
+                        // Set maximum compression level for smaller output files
+                        outputArchive.DeflateCompressionLevel = SharpCompress.Compressors.Deflate.CompressionLevel.BestCompression;
+                        
                         string originalMetaJson = null;
 
                         var allEntries = sourceArchive.Entries.ToList();

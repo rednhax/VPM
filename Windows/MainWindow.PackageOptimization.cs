@@ -213,13 +213,18 @@ namespace VPM
 
                 try
                 {
-                    // Build conversion dictionary with texture details
+                    // Build conversion dictionary with texture details (only where target differs from current)
                     var conversions = new Dictionary<string, (string targetResolution, int originalWidth, int originalHeight, long originalSize)>();
                     foreach (var texture in selectedTextures)
                     {
                         string targetResolution = texture.ConvertTo8K ? "8K" :
                                                 texture.ConvertTo4K ? "4K" :
                                                 texture.ConvertTo2K ? "2K" : "2K";
+                        
+                        // Skip textures where target resolution equals current resolution
+                        if (targetResolution == texture.Resolution)
+                            continue;
+                        
                         conversions[texture.ReferencedPath] = (targetResolution, texture.Width, texture.Height, texture.FileSize);
                     }
 
@@ -1160,12 +1165,17 @@ namespace VPM
                 // Build optimization config
                 var config = new PackageRepackager.OptimizationConfig();
                 
-                // Add texture conversions
+                // Add texture conversions (only where target differs from current)
                 foreach (var texture in selectedTextures)
                 {
                     string targetResolution = texture.ConvertTo8K ? "8K" :
                                             texture.ConvertTo4K ? "4K" :
                                             texture.ConvertTo2K ? "2K" : "2K";
+                    
+                    // Skip textures where target resolution equals current resolution
+                    if (targetResolution == texture.Resolution)
+                        continue;
+                    
                     config.TextureConversions[texture.ReferencedPath] = 
                         (targetResolution, texture.Width, texture.Height, texture.FileSize);
                 }
@@ -2679,7 +2689,29 @@ namespace VPM
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"Error during bulk optimization: {ex.Message}", "Bulk Optimization Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                // Log detailed error information
+                string detailedError = $"Error during bulk optimization:\n\n" +
+                    $"Message: {ex.Message}\n" +
+                    $"Type: {ex.GetType().Name}\n" +
+                    $"Method: {ex.TargetSite?.Name}\n" +
+                    $"Stack Trace:\n{ex.StackTrace}";
+                
+                if (ex.InnerException != null)
+                {
+                    detailedError += $"\n\nInner Exception:\n{ex.InnerException.Message}";
+                }
+                
+                // Log to file
+                try
+                {
+                    string logPath = "C:\\vpm_bulk_optimization_errors.log";
+                    string timestamp = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss.fff");
+                    string logEntry = $"[{timestamp}] {detailedError}\n---\n";
+                    System.IO.File.AppendAllText(logPath, logEntry);
+                }
+                catch { }
+                
+                MessageBox.Show($"Error during bulk optimization: {ex.Message}\n\nCheck C:\\vpm_bulk_optimization_errors.log for details.", "Bulk Optimization Error", MessageBoxButton.OK, MessageBoxImage.Error);
                 
                 // Restore the optimize button even if error occurred
                 if (bottomGrid != null)
@@ -2790,11 +2822,33 @@ namespace VPM
             var config = new PackageRepackager.OptimizationConfig();
 
             // Add texture conversions
+            System.Diagnostics.Debug.WriteLine($"\n=== TEXTURE CONVERSION DEBUG FOR {packageName} ===");
+            System.Diagnostics.Debug.WriteLine($"Total textures in result: {textureResult.Textures.Count}");
+            System.Diagnostics.Debug.WriteLine($"Selected textures (HasConversionSelected): {selectedTextures.Count}");
+            
+            // Show all textures with their status
+            foreach (var texture in textureResult.Textures)
+            {
+                System.Diagnostics.Debug.WriteLine($"\n{Path.GetFileName(texture.ReferencedPath)}:");
+                System.Diagnostics.Debug.WriteLine($"  {texture.GetDebugInfo()}");
+                System.Diagnostics.Debug.WriteLine($"  SELECTED: {selectedTextures.Contains(texture)}");
+            }
+            
+            System.Diagnostics.Debug.WriteLine($"\n--- Adding {selectedTextures.Count} textures to conversion config ---");
             foreach (var texture in selectedTextures)
             {
                 string targetResolution = texture.ConvertTo8K ? "8K" :
                                         texture.ConvertTo4K ? "4K" :
                                         texture.ConvertTo2K ? "2K" : "2K";
+                
+                // Skip textures where target resolution equals current resolution (no actual conversion)
+                if (targetResolution == texture.Resolution)
+                {
+                    System.Diagnostics.Debug.WriteLine($"  SKIPPING {Path.GetFileName(texture.ReferencedPath)}: already at {targetResolution}");
+                    continue;
+                }
+                
+                System.Diagnostics.Debug.WriteLine($"  {Path.GetFileName(texture.ReferencedPath)}: {texture.Resolution} -> {targetResolution}");
                 config.TextureConversions[texture.ReferencedPath] =
                     (targetResolution, texture.Width, texture.Height, texture.FileSize);
             }

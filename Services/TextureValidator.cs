@@ -17,11 +17,15 @@ namespace VPM.Services
     public class TextureValidator
     {
         // Static cache for texture info (persists until app closes)
-        private static Dictionary<string, (string resolution, long fileSize, int width, int height)> _textureCache = 
-            new Dictionary<string, (string resolution, long fileSize, int width, int height)>();
+        // Key is normalized (lowercase) to ensure consistency
+        private static ConcurrentDictionary<string, (string resolution, long fileSize, int width, int height)> _textureCache = 
+            new ConcurrentDictionary<string, (string resolution, long fileSize, int width, int height)>();
         
         // Track conversion flags for each package to invalidate cache when needed
-        private static Dictionary<string, string> _packageConversionFlags = new Dictionary<string, string>();
+        private static ConcurrentDictionary<string, string> _packageConversionFlags = new ConcurrentDictionary<string, string>();
+        
+        // Track file modification times to invalidate cache when package changes
+        private static ConcurrentDictionary<string, DateTime> _packageModificationTimes = new ConcurrentDictionary<string, DateTime>();
         /// <summary>
         /// Information about a texture file
         /// </summary>
@@ -33,6 +37,8 @@ namespace VPM.Services
             private long _fileSize;
             private int _width;
             private int _height;
+            private int _originalWidth;  // Track original dimensions for conversion capability checks
+            private int _originalHeight;
 
             public string PackageName { get; set; }
             public string TextureType { get; set; }
@@ -43,6 +49,21 @@ namespace VPM.Services
             // Original texture info (before conversion)
             public string OriginalResolution { get; set; }
             public long OriginalFileSize { get; set; }
+            
+            /// <summary>
+            /// Original dimensions (set once, never changes) - used for conversion capability checks
+            /// </summary>
+            public int OriginalWidth 
+            { 
+                get => _originalWidth;
+                set => _originalWidth = value;
+            }
+            
+            public int OriginalHeight 
+            { 
+                get => _originalHeight;
+                set => _originalHeight = value;
+            }
             
             public string OriginalFileSizeFormatted
             {
@@ -207,18 +228,19 @@ namespace VPM.Services
             public int ArchiveMaxDimension { get; set; }
             
             // Enabled states for conversion options
-            // Allow selecting current resolution (for confirmation) or converting to available resolutions
+            // Use ORIGINAL dimensions to determine conversion capabilities
+            // This ensures that after conversion, the texture can still be converted again
             // If archive source exists: allow upscaling IF archive has it
-            // Otherwise: only allow downscaling to resolutions SMALLER than current
+            // Otherwise: use original dimensions to determine available options
             public bool CanConvertTo8K => HasArchiveSource 
                 ? (ArchiveMaxDimension >= 7680) 
-                : GetMaxDimension() >= 7680;
+                : GetOriginalMaxDimension() >= 7680;
             public bool CanConvertTo4K => HasArchiveSource 
                 ? (ArchiveMaxDimension >= 4096) 
-                : GetMaxDimension() >= 4096;
+                : GetOriginalMaxDimension() >= 4096;
             public bool CanConvertTo2K => HasArchiveSource 
                 ? (ArchiveMaxDimension >= 2048) 
-                : GetMaxDimension() >= 2048;
+                : GetOriginalMaxDimension() >= 2048;
 
             public string FileSizeFormatted
             {
@@ -232,6 +254,14 @@ namespace VPM.Services
             private int GetMaxDimension()
             {
                 return Math.Max(Width, Height);
+            }
+            
+            private int GetOriginalMaxDimension()
+            {
+                // Use original dimensions if set, otherwise fall back to current dimensions
+                if (OriginalWidth > 0 && OriginalHeight > 0)
+                    return Math.Max(OriginalWidth, OriginalHeight);
+                return GetMaxDimension();
             }
 
             public bool HasConversionSelected => ConvertTo8K || ConvertTo4K || ConvertTo2K;
@@ -253,13 +283,36 @@ namespace VPM.Services
                     return false;
                 }
             }
+            
+            /// <summary>
+            /// Debug information for troubleshooting texture conversion issues
+            /// </summary>
+            public string GetDebugInfo()
+            {
+                return $"Path: {ReferencedPath} | " +
+                       $"Resolution: {Resolution} | " +
+                       $"Dims: {Width}x{Height} | " +
+                       $"OrigDims: {OriginalWidth}x{OriginalHeight} | " +
+                       $"HasConversionSelected: {HasConversionSelected} | " +
+                       $"HasActualConversion: {HasActualConversion} | " +
+                       $"ConvertTo8K: {ConvertTo8K} | " +
+                       $"ConvertTo4K: {ConvertTo4K} | " +
+                       $"ConvertTo2K: {ConvertTo2K} | " +
+                       $"CanConvertTo8K: {CanConvertTo8K} | " +
+                       $"CanConvertTo4K: {CanConvertTo4K} | " +
+                       $"CanConvertTo2K: {CanConvertTo2K} | " +
+                       $"HasArchiveSource: {HasArchiveSource} | " +
+                       $"ArchiveMaxDim: {ArchiveMaxDimension}";
+            }
 
             /// <summary>
             /// Sets the default conversion target based on current texture resolution
+            /// The bubble selection should match what's actually in the package
             /// </summary>
             public void SetDefaultConversionTarget()
             {
-                // Auto-select the resolution that matches the texture's current resolution
+                // Select the bubble that matches the texture's CURRENT resolution
+                // This shows the user what resolution the texture actually is
                 if (Resolution == "8K")
                 {
                     _convertTo8K = true;
@@ -271,6 +324,11 @@ namespace VPM.Services
                 else if (Resolution == "2K")
                 {
                     _convertTo2K = true;
+                }
+                else if (Resolution == "1K")
+                {
+                    // 1K textures - keep unchanged (no upscaling)
+                    _keepUnchanged = true;
                 }
                 else
                 {
@@ -318,102 +376,26 @@ namespace VPM.Services
             {
                 bool isVarFile = packagePath.EndsWith(".var", StringComparison.OrdinalIgnoreCase);
 
-                // Read meta.json to get contentList
-                List<string> contentList = new List<string>();
+                // Use fast TextureDetector to find orphaned images (textures)
+                List<string> detectedTexturePaths = new List<string>();
+                
+                // Enable debug for packages with texture conversions to diagnose detection issues
+                bool enableTextureDebug = false;
                 
                 if (isVarFile)
                 {
-                    using (var zipFile = ZipArchive.Open(packagePath))
-                    {
-                        var metaEntry = SharpCompressHelper.FindEntryByPath(zipFile, "meta.json");
-                        if (metaEntry == null)
-                        {
-                            result.ErrorMessage = "meta.json not found in package";
-                            result.IsValid = false;
-                            return result;
-                        }
-
-                        string metaJson = SharpCompressHelper.ReadEntryAsString(zipFile, metaEntry);
-                        var metaDoc = JsonDocument.Parse(metaJson);
-                        
-                        if (metaDoc.RootElement.TryGetProperty("contentList", out var contentListElement))
-                        {
-                            foreach (var item in contentListElement.EnumerateArray())
-                            {
-                                contentList.Add(item.GetString());
-                            }
-                        }
-                    }
+                    detectedTexturePaths = TextureDetector.DetectTexturesInVarFile(packagePath, enableTextureDebug);
                 }
                 else
                 {
-                    string metaPath = System.IO.Path.Combine(packagePath, "meta.json");
-                    if (!File.Exists(metaPath))
-                    {
-                        result.ErrorMessage = "meta.json not found in package";
-                        result.IsValid = false;
-                        return result;
-                    }
-
-                    string metaJson = File.ReadAllText(metaPath);
-                    var metaDoc = JsonDocument.Parse(metaJson);
-                    
-                    if (metaDoc.RootElement.TryGetProperty("contentList", out var contentListElement))
-                    {
-                        foreach (var item in contentListElement.EnumerateArray())
-                        {
-                            contentList.Add(item.GetString());
-                        }
-                    }
+                    // For unarchived packages, scan Custom folder for orphaned images
+                    detectedTexturePaths = DetectTexturesInUnarchived(packagePath);
                 }
 
-                // Filter for image files (.png, .jpg, .jpeg) from meta.json
-                var imageFilesFromMeta = contentList
-                    .Where(path => 
-                    {
-                        string ext = System.IO.Path.GetExtension(path).ToLowerInvariant();
-                        return ext == ".png" || ext == ".jpg" || ext == ".jpeg";
-                    })
-                    .ToHashSet(StringComparer.OrdinalIgnoreCase);
-
-                // Also scan actual package contents for textures not in meta.json
-                var allImageFiles = new HashSet<string>(imageFilesFromMeta, StringComparer.OrdinalIgnoreCase);
-                
-                if (isVarFile)
+                if (detectedTexturePaths.Count == 0)
                 {
-                    using (var zipFile = ZipArchive.Open(packagePath))
-                    {
-                        var allEntries = SharpCompressHelper.GetAllEntries(zipFile);
-                        foreach (var entry in allEntries)
-                        {
-                            if (entry.IsDirectory) continue;
-                            string ext = System.IO.Path.GetExtension(entry.Key).ToLowerInvariant();
-                            if (ext == ".png" || ext == ".jpg" || ext == ".jpeg")
-                            {
-                                allImageFiles.Add(entry.Key);
-                            }
-                        }
-                    }
-                }
-                else
-                {
-                    // Scan Custom folder for all images
-                    string customPath = System.IO.Path.Combine(packagePath, "Custom");
-                    if (Directory.Exists(customPath))
-                    {
-                        var foundImages = Directory.GetFiles(customPath, "*.*", SearchOption.AllDirectories)
-                            .Where(f => 
-                            {
-                                string ext = System.IO.Path.GetExtension(f).ToLowerInvariant();
-                                return ext == ".png" || ext == ".jpg" || ext == ".jpeg";
-                            });
-                        
-                        foreach (var imgPath in foundImages)
-                        {
-                            string relativePath = System.IO.Path.GetRelativePath(packagePath, imgPath).Replace("\\", "/");
-                            allImageFiles.Add(relativePath);
-                        }
-                    }
+                    result.IsValid = true;
+                    return result;
                 }
 
                 // Get archive texture dimensions and file sizes if archive exists
@@ -425,27 +407,49 @@ namespace VPM.Services
                     archiveFileSizes = GetArchiveFileSizes(archivePackagePath);
                 }
 
-                // Process each image file in parallel for better performance
+                // Process each detected texture in parallel for better performance
                 // Use thread-safe collection to gather results
                 var textureInfos = new ConcurrentBag<TextureInfo>();
-                var parallelOptions = new ParallelOptions
-                {
-                    MaxDegreeOfParallelism = ParallelArchiveProcessor.GetOptimalParallelism("io")
-                };
 
-                Parallel.ForEach(allImageFiles, parallelOptions, imagePath =>
+                // For VAR files, use SEQUENTIAL processing to avoid ZIP archive contention
+                // Multiple threads opening the same ZIP file causes random failures
+                if (isVarFile)
                 {
-                    try
+                    foreach (var texturePath in detectedTexturePaths)
                     {
-                        ProcessTextureFileParallel(packagePath, imagePath, isVarFile, hasArchiveSource, 
-                            archiveTextureDimensions, archiveFileSizes, textureInfos);
+                        try
+                        {
+                            ProcessTextureFileParallel(packagePath, texturePath, isVarFile, hasArchiveSource, 
+                                archiveTextureDimensions, archiveFileSizes, textureInfos, enableTextureDebug);
+                        }
+                        catch
+                        {
+                            // Silently skip files that fail to process
+                        }
                     }
-                    catch
+                }
+                else
+                {
+                    // For unarchived packages, parallel processing is safe
+                    var parallelOptions = new ParallelOptions
                     {
-                        // Silently skip files that fail to process
-                    }
-                });
-
+                        MaxDegreeOfParallelism = ParallelArchiveProcessor.GetOptimalParallelism("io")
+                    };
+                    
+                    Parallel.ForEach(detectedTexturePaths, parallelOptions, texturePath =>
+                    {
+                        try
+                        {
+                            ProcessTextureFileParallel(packagePath, texturePath, isVarFile, hasArchiveSource, 
+                                archiveTextureDimensions, archiveFileSizes, textureInfos, enableTextureDebug);
+                        }
+                        catch
+                        {
+                            // Silently skip files that fail to process
+                        }
+                    });
+                }
+                
                 // Add all collected texture infos to result
                 foreach (var textureInfo in textureInfos)
                 {
@@ -458,6 +462,99 @@ namespace VPM.Services
             }
 
             return result;
+        }
+
+        /// <summary>
+        /// Detects textures in an unarchived package folder using orphaned image logic.
+        /// Uses FULL PATHS to handle cases where same filename exists in different directories.
+        /// </summary>
+        private List<string> DetectTexturesInUnarchived(string packagePath)
+        {
+            var textures = new List<string>();
+
+            try
+            {
+                string customPath = System.IO.Path.Combine(packagePath, "Custom");
+                if (!Directory.Exists(customPath))
+                    return textures;
+
+                // Get all files in Custom folder (using full paths)
+                var allFilePaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                var allImageFiles = new List<(string relativePath, string fullPath)>();
+
+                foreach (var file in Directory.GetFiles(customPath, "*.*", SearchOption.AllDirectories))
+                {
+                    var relativePath = System.IO.Path.GetRelativePath(packagePath, file).Replace("\\", "/").ToLower();
+                    allFilePaths.Add(relativePath);
+
+                    var ext = System.IO.Path.GetExtension(file).ToLower();
+                    if (ext == ".png" || ext == ".jpg" || ext == ".jpeg")
+                    {
+                        allImageFiles.Add((relativePath, file));
+                    }
+                }
+
+                // Check each image for orphaned status (using full paths)
+                foreach (var (relativePath, fullPath) in allImageFiles)
+                {
+                    if (IsOrphanedImageFile(relativePath, allFilePaths))
+                    {
+                        textures.Add(relativePath);
+                    }
+                }
+            }
+            catch
+            {
+                // Silently fail
+            }
+
+            return textures;
+        }
+
+        /// <summary>
+        /// Checks if an image file is orphaned (no companion files in same directory).
+        /// Uses FULL PATHS to handle cases where same filename exists in different directories.
+        /// Only checks for NON-IMAGE companion files - multiple texture variants (D, N, S, G, A) are all textures.
+        /// </summary>
+        private bool IsOrphanedImageFile(string imagePath, IEnumerable<string> allFilePaths)
+        {
+            var ext = System.IO.Path.GetExtension(imagePath).ToLower();
+            var filename = System.IO.Path.GetFileName(imagePath);
+            var stem = System.IO.Path.GetFileNameWithoutExtension(filename).ToLower();
+            var directory = System.IO.Path.GetDirectoryName(imagePath);
+
+            if (string.IsNullOrEmpty(stem))
+                return false;
+
+            // Check if there are companion files with same stem but different extension IN SAME DIRECTORY
+            // IMPORTANT: Only check for NON-IMAGE companion files (e.g., .json, .vap, .vam)
+            // Multiple image variants (D, N, S, G, A) in same directory are all textures, not previews
+            foreach (var filePath in allFilePaths)
+            {
+                if (filePath.Equals(imagePath, StringComparison.OrdinalIgnoreCase))
+                    continue;
+
+                var fileDirectory = System.IO.Path.GetDirectoryName(filePath);
+                
+                // Only check files in the SAME directory
+                if (!fileDirectory.Equals(directory, StringComparison.OrdinalIgnoreCase))
+                    continue;
+
+                var fileFilename = System.IO.Path.GetFileName(filePath);
+                var fileStem = System.IO.Path.GetFileNameWithoutExtension(fileFilename).ToLower();
+                var fileExt = System.IO.Path.GetExtension(fileFilename).ToLower();
+
+                // If found a companion file (same stem, different ext, NOT an image)
+                // then this image is paired (preview), not orphaned (texture)
+                // Skip checking other image files - multiple texture variants are all textures
+                if (fileStem == stem && fileExt != ext && 
+                    fileExt != ".jpg" && fileExt != ".jpeg" && fileExt != ".png")
+                {
+                    return false; // NOT orphaned
+                }
+            }
+
+            return true; // Orphaned (texture)
         }
 
         /// <summary>
@@ -535,6 +632,8 @@ namespace VPM.Services
                     FileSize = fileSize,
                     Width = width,
                     Height = height,
+                    OriginalWidth = width,  // Store original dimensions for conversion capability checks
+                    OriginalHeight = height,
                     HasArchiveSource = hasArchiveSource,
                     ArchiveMaxDimension = archiveMaxDim
                 };
@@ -557,6 +656,10 @@ namespace VPM.Services
                     {
                         textureInfo.OriginalFileSize = archiveSize;
                     }
+                    
+                    // DO NOT overwrite OriginalWidth/Height with archive dimensions!
+                    // OriginalWidth/Height should reflect CURRENT texture dimensions for accurate conversion
+                    // ArchiveMaxDimension is used separately to enable upscaling capability
                 }
 
                 // Set default conversion target to current resolution
@@ -573,8 +676,10 @@ namespace VPM.Services
         /// </summary>
         private void ProcessTextureFileParallel(string packagePath, string texturePath, bool isVarFile, 
             bool hasArchiveSource, Dictionary<string, (int width, int height)> archiveTextureDimensions, 
-            Dictionary<string, long> archiveFileSizes, ConcurrentBag<TextureInfo> textureInfos)
+            Dictionary<string, long> archiveFileSizes, ConcurrentBag<TextureInfo> textureInfos, bool enableDebug = false)
         {
+            string fileName = System.IO.Path.GetFileName(texturePath);
+            
             try
             {
                 // Check if file exists
@@ -594,35 +699,44 @@ namespace VPM.Services
                 }
 
                 if (!exists)
+                {
+                    if (enableDebug) System.Diagnostics.Debug.WriteLine($"  SKIP (not found): {fileName}");
                     return; // Skip non-existent files
+                }
 
                 // Get resolution and file size (always use thorough scan for accuracy)
                 var (resolution, fileSize, width, height) = GetTextureInfo(packagePath, texturePath, isVarFile);
                 
                 // Skip if we couldn't read dimensions
                 if (width == 0 || height == 0)
+                {
+                    if (enableDebug) System.Diagnostics.Debug.WriteLine($"  SKIP (no dims): {fileName} -> {width}x{height}");
                     return;
+                }
 
                 // Filter: Only include if max dimension > 512px (textures, not previews)
                 int maxDim = Math.Max(width, height);
                 if (maxDim <= 512)
+                {
+                    if (enableDebug) System.Diagnostics.Debug.WriteLine($"  SKIP (too small): {fileName} -> {maxDim}px");
                     return; // Skip preview images
+                }
 
                 // Determine texture type based on suffix
-                string fileName = System.IO.Path.GetFileNameWithoutExtension(texturePath);
+                string fileNameWithoutExt = System.IO.Path.GetFileNameWithoutExtension(texturePath);
                 string textureType = "Texture";
                 
-                if (fileName.EndsWith("_D", StringComparison.OrdinalIgnoreCase))
+                if (fileNameWithoutExt.EndsWith("_D", StringComparison.OrdinalIgnoreCase))
                     textureType = "Diffuse";
-                else if (fileName.EndsWith("_S", StringComparison.OrdinalIgnoreCase))
+                else if (fileNameWithoutExt.EndsWith("_S", StringComparison.OrdinalIgnoreCase))
                     textureType = "Specular";
-                else if (fileName.EndsWith("_G", StringComparison.OrdinalIgnoreCase))
+                else if (fileNameWithoutExt.EndsWith("_G", StringComparison.OrdinalIgnoreCase))
                     textureType = "Gloss";
-                else if (fileName.EndsWith("_N", StringComparison.OrdinalIgnoreCase))
+                else if (fileNameWithoutExt.EndsWith("_N", StringComparison.OrdinalIgnoreCase))
                     textureType = "Normal";
-                else if (fileName.EndsWith("_A", StringComparison.OrdinalIgnoreCase))
+                else if (fileNameWithoutExt.EndsWith("_A", StringComparison.OrdinalIgnoreCase))
                     textureType = "Alpha";
-
+                
                 // Get archive dimensions if available
                 int archiveMaxDim = 0;
                 int archiveWidth = 0;
@@ -634,6 +748,18 @@ namespace VPM.Services
                     archiveWidth = archiveDims.width;
                     archiveHeight = archiveDims.height;
                 }
+                
+                if (enableDebug) 
+                {
+                    System.Diagnostics.Debug.WriteLine($"  ADDED: {fileName} (current={maxDim}px [{width}x{height}], archive={archiveMaxDim}px, {textureType})");
+                    System.Diagnostics.Debug.WriteLine($"    Disk path: {packagePath}");
+                    System.Diagnostics.Debug.WriteLine($"    Archive path: {texturePath}");
+                    if (hasArchiveSource && archiveMaxDim == 0)
+                    {
+                        System.Diagnostics.Debug.WriteLine($"    WARNING: No archive dims found!");
+                        System.Diagnostics.Debug.WriteLine($"    Archive keys count: {archiveTextureDimensions?.Count ?? 0}");
+                    }
+                }
 
                 var textureInfo = new TextureInfo
                 {
@@ -644,6 +770,8 @@ namespace VPM.Services
                     FileSize = fileSize,
                     Width = width,
                     Height = height,
+                    OriginalWidth = width,  // Store original dimensions for conversion capability checks
+                    OriginalHeight = height,
                     HasArchiveSource = hasArchiveSource,
                     ArchiveMaxDimension = archiveMaxDim
                 };
@@ -666,6 +794,10 @@ namespace VPM.Services
                     {
                         textureInfo.OriginalFileSize = archiveSize;
                     }
+                    
+                    // DO NOT overwrite OriginalWidth/Height with archive dimensions!
+                    // OriginalWidth/Height should reflect CURRENT texture dimensions for accurate conversion
+                    // ArchiveMaxDimension is used separately to enable upscaling capability
                 }
 
                 // Set default conversion target to current resolution
@@ -711,39 +843,70 @@ namespace VPM.Services
         }
         
         /// <summary>
-        /// Checks if cache should be invalidated for a package based on conversion flags
+        /// Checks if cache should be invalidated for a package based on conversion flags or file modification
         /// </summary>
         private bool ShouldInvalidateCache(string packagePath, bool isVarFile)
         {
             if (string.IsNullOrEmpty(packagePath))
                 return false;
             
+            string normalizedPath = packagePath.ToLowerInvariant();
+            bool shouldInvalidate = false;
+            
+            // Check file modification time
+            try
+            {
+                if (File.Exists(packagePath))
+                {
+                    DateTime currentModTime = File.GetLastWriteTimeUtc(packagePath);
+                    if (_packageModificationTimes.TryGetValue(normalizedPath, out DateTime cachedModTime))
+                    {
+                        if (currentModTime != cachedModTime)
+                        {
+                            // File was modified, invalidate cache
+                            shouldInvalidate = true;
+                            _packageModificationTimes[normalizedPath] = currentModTime;
+                        }
+                    }
+                    else
+                    {
+                        // First time seeing this file
+                        _packageModificationTimes[normalizedPath] = currentModTime;
+                    }
+                }
+            }
+            catch { }
+            
+            // Also check conversion flags
             string currentFlags = GetConversionFlags(packagePath, isVarFile);
             
-            if (_packageConversionFlags.TryGetValue(packagePath, out string cachedFlags))
+            if (_packageConversionFlags.TryGetValue(normalizedPath, out string cachedFlags))
             {
                 // If flags changed (or one was added/removed), invalidate cache
                 if (cachedFlags != currentFlags)
                 {
-                    // Clear all cache entries for this package
-                    var keysToRemove = _textureCache.Keys.Where(k => !string.IsNullOrEmpty(k) && k.StartsWith(packagePath + "|")).ToList();
-                    foreach (var key in keysToRemove)
-                    {
-                        _textureCache.Remove(key);
-                    }
-                    
-                    // Update stored flags
-                    _packageConversionFlags[packagePath] = currentFlags;
-                    return true;
+                    shouldInvalidate = true;
+                    _packageConversionFlags[normalizedPath] = currentFlags;
                 }
-                return false;
             }
             else
             {
                 // First time seeing this package, store flags
-                _packageConversionFlags[packagePath] = currentFlags;
-                return false;
+                _packageConversionFlags[normalizedPath] = currentFlags;
             }
+            
+            if (shouldInvalidate)
+            {
+                // Clear all cache entries for this package
+                var prefix = normalizedPath + "|";
+                var keysToRemove = _textureCache.Keys.Where(k => k.StartsWith(prefix)).ToList();
+                foreach (var key in keysToRemove)
+                {
+                    _textureCache.TryRemove(key, out _);
+                }
+            }
+            
+            return shouldInvalidate;
         }
 
         /// <summary>
@@ -752,9 +915,9 @@ namespace VPM.Services
         private (string resolution, long fileSize, int width, int height) GetTextureInfo(string packagePath, string texturePath, bool isVarFile)
         {
             // Check if cache should be invalidated due to conversion
-            ShouldInvalidateCache(packagePath, isVarFile);
+            bool cacheInvalidated = ShouldInvalidateCache(packagePath, isVarFile);
             
-            string cacheKey = $"{packagePath}|{texturePath}";
+            string cacheKey = $"{packagePath.ToLowerInvariant()}|{texturePath.ToLowerInvariant()}";
             
             // Check cache first
             if (_textureCache.TryGetValue(cacheKey, out var cachedResult))

@@ -122,6 +122,9 @@ namespace VPM.Models
                 return;
             }
 
+            // Ensure count is non-negative (defensive check)
+            if (count < 0) count = 50;
+
             var currentCount = Items.Count;
             var itemsToLoad = _allItems.Skip(currentCount).Take(count).ToList();
             if (itemsToLoad.Count == 0)
@@ -154,6 +157,9 @@ namespace VPM.Models
         public async Task LoadAllItemsAsync(int chunkSize = 500, int delayMs = 10)
         {
             if (IsFullyLoaded) return;
+
+            // Ensure chunkSize is non-negative
+            if (chunkSize < 1) chunkSize = 500;
 
             var currentCount = Items.Count;
             var remainingItems = _allItems.Skip(currentCount).ToList();

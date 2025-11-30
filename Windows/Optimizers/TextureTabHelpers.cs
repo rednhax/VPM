@@ -352,15 +352,12 @@ namespace VPM
                     }
                     else
                     {
-                        int maxAvailableDim = texture.HasArchiveSource && texture.ArchiveMaxDimension > 0 
-                            ? texture.ArchiveMaxDimension 
-                            : Math.Max(texture.Width, texture.Height);
-                        
-                        if (targetResolution == 7680 && maxAvailableDim >= 7680 && texture.CanConvertTo8K)
+                        // Use CanConvertTo* properties which already handle original dimension logic
+                        if (targetResolution == 7680 && texture.CanConvertTo8K)
                             texture.ConvertTo8K = true;
-                        else if (targetResolution == 4096 && maxAvailableDim >= 4096 && texture.CanConvertTo4K)
+                        else if (targetResolution == 4096 && texture.CanConvertTo4K)
                             texture.ConvertTo4K = true;
-                        else if (targetResolution == 2048 && maxAvailableDim >= 2048 && texture.CanConvertTo2K)
+                        else if (targetResolution == 2048 && texture.CanConvertTo2K)
                             texture.ConvertTo2K = true;
                     }
                 }

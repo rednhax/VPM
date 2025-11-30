@@ -172,6 +172,9 @@ namespace VPM.Services
                 var sb = new StringBuilder();
                 sb.AppendLine("\nTOP PERFORMANCE BOTTLENECKS:\n");
 
+                // Ensure topCount is non-negative
+                if (topCount < 0) topCount = 5;
+
                 var topOperations = _timings
                     .OrderByDescending(kvp => kvp.Value.TotalMilliseconds)
                     .Take(topCount)

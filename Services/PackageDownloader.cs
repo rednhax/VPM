@@ -575,13 +575,15 @@ namespace VPM.Services
             if (string.IsNullOrWhiteSpace(baseName) || _packageUrlCache == null)
                 return new List<string>();
 
-            // Find all versions
-            var versions = _packageUrlCache.Keys
-                .Where(k => k.StartsWith(baseName + ".", StringComparison.OrdinalIgnoreCase))
+            // Ensure maxVersions is non-negative
+            if (maxVersions < 0) maxVersions = 4;
+
+            var versions = _packageUrlCache
+                .Where(k => k.Key.StartsWith(baseName + ".", StringComparison.OrdinalIgnoreCase))
                 .Select(v => new
                 {
-                    Name = v,
-                    Version = ExtractVersion(v)
+                    Name = v.Key,
+                    Version = ExtractVersion(v.Key)
                 })
                 .Where(v => v.Version >= 0)
                 .OrderByDescending(v => v.Version)

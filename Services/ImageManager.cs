@@ -1310,36 +1310,13 @@ namespace VPM.Services
         {
             await Task.Yield(); // Ensure method is actually async
 
-
-            // Lazy build image index for this package if missing
-            if (!ImageIndex.ContainsKey(packageName))
+            if (string.IsNullOrWhiteSpace(packageName))
             {
-                var meta = _metadataProvider.GetCachedPackageMetadata(packageName);
-                if (meta != null)
-                {
-                    // Try to get cached image paths first (avoids opening VAR)
-                    var fileInfo = new FileInfo(meta.FilePath);
-                    var cachedPaths = _diskCache.GetCachedImagePaths(meta.FilePath, fileInfo.Length, fileInfo.LastWriteTimeUtc.Ticks);
-                    
-                    if (cachedPaths != null && cachedPaths.Count > 0)
-                    {
-                        // Use cached paths - no need to open VAR!
-                        var imageLocations = cachedPaths.Select(path => new ImageLocation
-                        {
-                            VarFilePath = meta.FilePath,
-                            InternalPath = path,
-                            FileSize = 0 // Not needed for cached images
-                        }).ToList();
-                        
-                        ImageIndex[packageName] = imageLocations;
-                    }
-                    else
-                    {
-                        // Cache miss - need to scan VAR
-                        await Task.Run(() => IndexImagesInVar(meta.FilePath));
-                    }
-                }
+                return new List<BitmapImage>();
             }
+
+            // Ensure maxImages is non-negative
+            if (maxImages < 0) maxImages = 50;
 
             // Check memory pressure before loading new images
             CheckMemoryPressure();
@@ -2382,6 +2359,22 @@ namespace VPM.Services
                 // This prevents new file handles from being opened while we try to close existing ones
                 // Console.WriteLine($"[ImageManager.CloseFileHandlesAsync] Cancelling pending operations for package");
                 _asyncPool.CancelPendingForPackage(varPath);
+
+                // CRITICAL: Dispose shared archive pools that hold FileStream handles to this package
+                // These pools keep handles open for 30 seconds for performance, but must be disposed before file operations
+                // Check both the full path and variations (different folder paths may reference same package)
+                var poolKeysToRemove = _sharedArchivePools.Keys
+                    .Where(k => k.Equals(varPath, StringComparison.OrdinalIgnoreCase) ||
+                               Path.GetFileName(k).Equals(Path.GetFileName(varPath), StringComparison.OrdinalIgnoreCase))
+                    .ToList();
+                
+                foreach (var poolKey in poolKeysToRemove)
+                {
+                    if (_sharedArchivePools.TryRemove(poolKey, out var pool))
+                    {
+                        pool.Dispose();
+                    }
+                }
 
                 // Wait for active file operations to complete
                 // Console.WriteLine($"[ImageManager.CloseFileHandlesAsync] Releasing file locks from async pool");

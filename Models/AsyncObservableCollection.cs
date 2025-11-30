@@ -38,6 +38,9 @@ namespace VPM.Models
             var itemsList = items.ToList();
             if (itemsList.Count == 0) return;
 
+            // Ensure chunkSize is non-negative
+            if (chunkSize < 1) chunkSize = 100;
+
             // Process in chunks to keep UI responsive
             for (int i = 0; i < itemsList.Count; i += chunkSize)
             {
@@ -78,6 +81,9 @@ namespace VPM.Models
             if (items == null) return;
 
             var itemsList = items.ToList();
+
+            // Ensure chunkSize is non-negative
+            if (chunkSize < 1) chunkSize = 500;
 
             // Clear existing items
             _suppressNotification = true;
