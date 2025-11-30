@@ -26,9 +26,9 @@ namespace VPM
                 "✓ Textures at target size are NOT re-encoded (preserves quality)\n" +
                 "✓ Smaller textures remain unchanged\n\n" +
                 "Example: If you select 4K:\n" +
-                "  • 8K textures †’ Downscaled to 4K\n" +
-                "  • 4K textures †’ Kept as-is (no quality loss)\n" +
-                "  • 2K textures †’ Kept as-is\n\n" +
+                "  • 8K textures → Downscaled to 4K\n" +
+                "  • 4K textures → Kept as-is (no quality loss)\n" +
+                "  • 2K textures → Kept as-is\n\n" +
                 "Quality: Uses 90% JPEG quality and optimized bilinear interpolation for fast processing.";
             
             headerPanel.Children.Add(CreateTooltipInfoIcon(tooltipText));
@@ -71,7 +71,7 @@ namespace VPM
                 
                 var archiveText = new TextBlock
                 {
-                    Text = $"📦 {archiveCount} with original backup",
+                    Text = " 📦 {archiveCount} with original backup",
                     FontSize = 14,
                     FontWeight = FontWeights.Bold,
                     Foreground = new SolidColorBrush(Color.FromRgb(100, 180, 255)),
@@ -115,13 +115,13 @@ namespace VPM
             headerPanel.Children.Add(new TextBlock { Text = $"Hair ({hairCount})", VerticalAlignment = VerticalAlignment.Center });
             
             string tooltipText = "HAIR DENSITY OPTIMIZATION:\n\n" +
-                " Only reduces density (never increases)\n" +
-                " Hair at or below target density remains unchanged\n" +
-                " Modifies curveDensity and hairMultiplier values\n\n" +
+                "✓ Only reduces density (never increases)\n" +
+                "✓ Hair at or below target density remains unchanged\n" +
+                "✓ Modifies curveDensity and hairMultiplier values\n\n" +
                 "Example: If you select density 16:\n" +
-                "  Hair with density 32 †’ Reduced to 16\n" +
-                "  Hair with density 16 †’ Kept as-is\n" +
-                "  Hair with density 8 †’ Kept as-is\n\n" +
+                "  Hair with density 32 → Reduced to 16\n" +
+                "  Hair with density 16 → Kept as-is\n" +
+                "  Hair with density 8 → Kept as-is\n\n" +
                 "Performance: Lower density = better FPS in VaM.";
             
             headerPanel.Children.Add(CreateTooltipInfoIcon(tooltipText));
@@ -273,9 +273,9 @@ namespace VPM
             headerPanel.Children.Add(new TextBlock { Text = $"Mirrors ({mirrorCount})", VerticalAlignment = VerticalAlignment.Center });
             
             string tooltipText = "MIRROR OPTIMIZATION:\n\n" +
-                " Disables ReflectiveSlate objects in scenes\n" +
-                " Mirrors are expensive for performance\n" +
-                " Can toggle individual mirrors on/off\n\n" +
+                "✓ Disables ReflectiveSlate objects in scenes\n" +
+                "✓ Mirrors are expensive for performance\n" +
+                "✓ Can toggle individual mirrors on/off\n\n" +
                 "What happens:\n" +
                 "  Sets the 'on' property to 'false' in scene JSON\n" +
                 "  Mirrors remain in scene but are disabled\n" +
@@ -415,9 +415,9 @@ namespace VPM
             headerPanel.Children.Add(new TextBlock { Text = $"Shadows ({lightCount})", VerticalAlignment = VerticalAlignment.Center });
             
             string tooltipText = "SHADOW OPTIMIZATION:\n\n" +
-                " Adjusts shadow quality for lights\n" +
-                " Can disable shadows completely\n" +
-                " Affects InvisibleLight and SpotLight objects\n\n" +
+                "✓ Adjusts shadow quality for lights\n" +
+                "✓ Can disable shadows completely\n" +
+                "✓ Affects InvisibleLight and SpotLight objects\n\n" +
                 "Shadow Resolutions:\n" +
                 "  2048 (VeryHigh) - Best quality, lowest FPS\n" +
                 "  1024 (High) - Good balance\n" +

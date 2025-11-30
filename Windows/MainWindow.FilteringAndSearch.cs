@@ -10,6 +10,7 @@ using System.Windows.Controls;
 using System.Windows.Data;
 using System.Windows.Media;
 using VPM.Models;
+using VPM.Services;
 using static VPM.Models.PackageItem;
 
 namespace VPM
@@ -834,7 +835,7 @@ namespace VPM
                     "📝 Filter creators...",
                     "😣 Filter creators...",
                     "📝 Filter content types...",
-                    "–ï¸ Filter license types..."
+                    "📄 Filter license types..."
                 };
                 
                 // Check if the text is a placeholder
@@ -1948,7 +1949,7 @@ namespace VPM
                 
                 if (damagedCount > 0)
                 {
-                    DamagedFilterList.Items.Add($"–ï¸ Damaged ({damagedCount})");
+                    DamagedFilterList.Items.Add($"⚠️ Damaged ({damagedCount})");
                 }
                 
                 if (validCount > 0)
@@ -2300,7 +2301,7 @@ namespace VPM
         {
             if (value is long bytes)
             {
-                return FormatFileSize(bytes);
+                return FormatHelper.FormatFileSize(bytes);
             }
             return "0 B";
         }

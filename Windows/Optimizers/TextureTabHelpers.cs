@@ -541,7 +541,7 @@ namespace VPM
                     if (string.IsNullOrWhiteSpace(trimmedLine)) continue;
                     
                     var match = System.Text.RegularExpressions.Regex.Match(trimmedLine,
-                        @"[•\*\-]\s*(.+?):\s*(\d+K)\s*(?:†’|-+>)\s*(\d+K)\s*\(([0-9.]+\s*[KMG]B)\s*(?:†’|-+>)\s*([0-9.]+\s*[KMG]B)\)",
+                        @"[•\*\-]\s*(.+?):\s*(\d+K)\s*(?:→|-+>)\s*(\d+K)\s*\(([0-9.]+\s*[KMG]B)\s*(?:→|-+>)\s*([0-9.]+\s*[KMG]B)\)",
                         System.Text.RegularExpressions.RegexOptions.IgnoreCase);
                     
                     if (match.Success)

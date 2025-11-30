@@ -629,7 +629,7 @@ namespace VPM.Services
                                             
                                             string textureName = Path.GetFileName(entry.Key);
                                             string originalRes = GetResolutionString(conversionInfo.originalWidth, conversionInfo.originalHeight);
-                                            string detail = $"  • {textureName}: {originalRes} -> {conversionInfo.targetResolution} ({FormatBytes(sourceData.Length)} -> {FormatBytes(convertedData.Length)})";
+                                            string detail = $"  • {textureName}: {originalRes} -> {conversionInfo.targetResolution} ({FormatHelper.FormatBytes(sourceData.Length)} -> {FormatHelper.FormatBytes(convertedData.Length)})";
                                             textureConversionDetails.Add(detail);
                                             
                                             convertedTextures[entry.Key] = (convertedData, entry.LastModifiedTime ?? DateTimeOffset.Now);
@@ -2171,7 +2171,7 @@ namespace VPM.Services
                     
                     // Build new description
                     var descriptionBuilder = new StringBuilder();
-                    descriptionBuilder.AppendLine("–ï¸ VPM-OPTIMIZED PACKAGE");
+                    descriptionBuilder.AppendLine("⚡ VPM-OPTIMIZED PACKAGE");
                     descriptionBuilder.AppendLine();
                     
                     // Merge flags: preserve existing + add new
@@ -2209,7 +2209,7 @@ namespace VPM.Services
                     if (textureDetails.Count > 0)
                     {
                         descriptionBuilder.AppendLine($"✓ Textures Optimized: {textureDetails.Count}");
-                        descriptionBuilder.AppendLine($"✓ Space Saved: {FormatBytes(originalSize - newSize)} ({(originalSize > 0 ? (100.0 * (originalSize - newSize) / originalSize).ToString("F1") : "0")}%)");
+                        descriptionBuilder.AppendLine($"✓ Space Saved: {FormatHelper.FormatBytes(originalSize - newSize)} ({(originalSize > 0 ? (100.0 * (originalSize - newSize) / originalSize).ToString("F1") : "0")}%)");
                     }
 
                     if (hairDetailList.Count > 0)
@@ -2503,14 +2503,6 @@ namespace VPM.Services
             if (maxDim >= 2048) return "2K";
             if (maxDim >= 1024) return "1K";
             return $"{width}x{height}";
-        }
-
-        private string FormatBytes(long bytes)
-        {
-            if (bytes < 1024) return $"{bytes} B";
-            if (bytes < 1024 * 1024) return $"{bytes / 1024.0:F2} KB";
-            if (bytes < 1024 * 1024 * 1024) return $"{bytes / (1024.0 * 1024.0):F2} MB";
-            return $"{bytes / (1024.0 * 1024.0 * 1024.0):F2} GB";
         }
 
         private sealed class VamJsonWriter : IDisposable

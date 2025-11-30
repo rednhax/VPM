@@ -1,4 +1,5 @@
 ﻿using System;
+using VPM.Services;
 
 namespace VPM.Models
 {
@@ -48,7 +49,7 @@ namespace VPM.Models
                 
                 // Pre-compute all display values
                 DisplayName = name,
-                FileSizeFormatted = PackageItem.FormatFileSize(fileSize),
+                FileSizeFormatted = FormatHelper.FormatFileSize(fileSize),
                 DateFormatted = modifiedDate?.ToString("MMM dd, yyyy") ?? "Unknown",
                 StatusIcon = GetStatusIcon(status),
                 StatusColorHex = GetStatusColorHex(status)

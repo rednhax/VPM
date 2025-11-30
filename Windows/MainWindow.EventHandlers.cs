@@ -1510,7 +1510,7 @@ namespace VPM
                         "DepsSearchBox" => _showingDependents ? "📝 Filter dependents..." : "📝 Filter dependencies...",
                         "ContentTypesFilterBox" => "📝 Filter content types...",
                         "CreatorsFilterBox" => "😣 Filter creators...",
-                        "LicenseTypeFilterBox" => "–ï¸ Filter license types...",
+                        "LicenseTypeFilterBox" => "📄 Filter license types...",
                         "SubfoldersFilterBox" => "✗ Filter subfolders...",
                         "SceneSearchBox" => "📝 Filter scenes by name, creator, type...",
                         _ => "Search..."

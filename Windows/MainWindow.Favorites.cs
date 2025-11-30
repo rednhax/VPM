@@ -13,8 +13,8 @@ namespace VPM
     public partial class MainWindow
     {
         private FavoritesManager _favoritesManager;
-        private SceneFavoritesManager _sceneFavoritesManager;
-        private SceneHideManager _sceneHideManager;
+        private FileMarkerManager _sceneFavoritesManager;
+        private FileMarkerManager _sceneHideManager;
 
         private void InitializeFavoritesManager()
         {
@@ -31,14 +31,13 @@ namespace VPM
                     _filterManager.FavoritesManager = _favoritesManager;
                 }
 
-                // Initialize scene favorites manager
+                // Initialize scene favorites and hide managers using FileMarkerManager directly
                 string savesPath = Path.Combine(_settingsManager.Settings.SelectedFolder, "Saves");
-                _sceneFavoritesManager = new SceneFavoritesManager(savesPath);
-                _sceneFavoritesManager.LoadFavorites();
+                _sceneFavoritesManager = new FileMarkerManager(savesPath, ".fav");
+                _sceneFavoritesManager.LoadMarkers();
 
-                // Initialize scene hide manager
-                _sceneHideManager = new SceneHideManager(savesPath);
-                _sceneHideManager.LoadHidden();
+                _sceneHideManager = new FileMarkerManager(savesPath, ".hide");
+                _sceneHideManager.LoadMarkers();
 
                 UpdateFavoritesInPackages();
             }
@@ -109,7 +108,7 @@ namespace VPM
                     return;
                 }
 
-                _sceneFavoritesManager.AddFavoriteBatch(selectedScenes.Select(s => s.FilePath));
+                _sceneFavoritesManager.AddMarkerBatch(selectedScenes.Select(s => s.FilePath));
 
                 foreach (var scene in selectedScenes)
                 {
@@ -204,7 +203,7 @@ namespace VPM
                 if (selectedScenes.Count == 0)
                     return;
 
-                _sceneFavoritesManager.RemoveFavoriteBatch(selectedScenes.Select(s => s.FilePath));
+                _sceneFavoritesManager.RemoveMarkerBatch(selectedScenes.Select(s => s.FilePath));
 
                 foreach (var scene in selectedScenes)
                 {
@@ -295,7 +294,7 @@ namespace VPM
                 if (selectedScenes.Count == 0)
                     return;
 
-                _sceneHideManager.AddHiddenBatch(selectedScenes.Select(s => s.FilePath));
+                _sceneHideManager.AddMarkerBatch(selectedScenes.Select(s => s.FilePath));
 
                 foreach (var scene in selectedScenes)
                 {
@@ -347,7 +346,7 @@ namespace VPM
                 if (selectedScenes.Count == 0)
                     return;
 
-                _sceneHideManager.RemoveHiddenBatch(selectedScenes.Select(s => s.FilePath));
+                _sceneHideManager.RemoveMarkerBatch(selectedScenes.Select(s => s.FilePath));
 
                 foreach (var scene in selectedScenes)
                 {

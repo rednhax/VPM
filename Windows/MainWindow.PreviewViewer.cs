@@ -245,7 +245,7 @@ namespace VPM
                     var imageInfo = new TextBlock
                     {
                         Text = $"Dimensions: {bitmap.PixelWidth} Ã— {bitmap.PixelHeight}\n" +
-                               $"Size: {FormatFileSize(imageBytes.Length)}\n" +
+                               $"Size: {FormatHelper.FormatFileSize(imageBytes.Length)}\n" +
                                $"Format: {Path.GetExtension(filePath).ToUpperInvariant()}",
                         FontSize = 11,
                         Foreground = Brushes.Gray,
@@ -281,7 +281,7 @@ namespace VPM
                 var audioInfo = new TextBlock
                 {
                     Text = $"Audio File: {Path.GetFileName(filePath)}\n" +
-                           $"Size: {FormatFileSize(audioBytes.Length)}\n" +
+                           $"Size: {FormatHelper.FormatFileSize(audioBytes.Length)}\n" +
                            $"Format: {Path.GetExtension(filePath).ToUpperInvariant()}",
                     FontSize = 12,
                     Margin = new Thickness(0, 0, 0, 16),
@@ -376,7 +376,7 @@ namespace VPM
                 // Apply context menu styling for dark theme
                 ApplyRichTextBoxContextMenuStyling(richTextBox);
 
-                PreviewHeaderText.Text = $"JSON Preview - {Path.GetFileName(filePath)} ({FormatFileSize(jsonBytes.Length)})";
+                PreviewHeaderText.Text = $"JSON Preview - {Path.GetFileName(filePath)} ({FormatHelper.FormatFileSize(jsonBytes.Length)})";
                 PreviewContentPresenter.Content = richTextBox;
                 
                 // Initialize search panel with searchable content
@@ -439,7 +439,7 @@ namespace VPM
                 // Apply context menu styling for dark theme
                 ApplyRichTextBoxContextMenuStyling(richTextBox);
 
-                PreviewHeaderText.Text = $"Text Preview - {Path.GetFileName(filePath)} ({FormatFileSize(textBytes.Length)})";
+                PreviewHeaderText.Text = $"Text Preview - {Path.GetFileName(filePath)} ({FormatHelper.FormatFileSize(textBytes.Length)})";
                 PreviewContentPresenter.Content = richTextBox;
                 
                 // Initialize search panel with searchable content
@@ -764,7 +764,7 @@ namespace VPM
                 {
                     Text = $"File: {Path.GetFileName(filePath)}\n" +
                            $"Type: {Path.GetExtension(filePath).ToUpperInvariant()}\n" +
-                           $"Size: {FormatFileSize(fileSize)}\n\n" +
+                           $"Size: {FormatHelper.FormatFileSize(fileSize)}\n\n" +
                            "Preview not available for this file type",
                     FontSize = 12,
                     TextAlignment = TextAlignment.Center,
@@ -802,7 +802,7 @@ namespace VPM
 
             var icon = new TextBlock
             {
-                Text = "–ï¸",
+                Text = "⚠️",
                 FontSize = 32,
                 HorizontalAlignment = HorizontalAlignment.Center,
                 Margin = new Thickness(0, 0, 0, 8)
@@ -913,17 +913,6 @@ namespace VPM
             {
                 ShowErrorPreview($"Error playing audio: {ex.Message}");
             }
-        }
-
-        /// <summary>
-        /// Formats file size for display
-        /// </summary>
-        private string FormatFileSize(long bytes)
-        {
-            if (bytes < 1024) return $"{bytes} B";
-            if (bytes < 1024 * 1024) return $"{bytes / 1024.0:F1} KB";
-            if (bytes < 1024 * 1024 * 1024) return $"{bytes / (1024.0 * 1024.0):F1} MB";
-            return $"{bytes / (1024.0 * 1024.0 * 1024.0):F1} GB";
         }
 
         /// <summary>

@@ -769,7 +769,7 @@ namespace VPM
             // Important Notes Section
             var notesHeader = new TextBlock
             {
-                Text = "ÃƒÂ¢Ã…Â¡Ã‚Â ÃƒÂ¯Ã‚Â¸Ã‚Â Important Notes",
+                Text = "⚠️ Important Notes",
                 FontSize = 16,
                 FontWeight = FontWeights.Bold,
                 Foreground = new SolidColorBrush(Color.FromRgb(255, 152, 0)),
@@ -1264,13 +1264,13 @@ namespace VPM
                 SetStatus($"Refreshing optimization data...");
                 await RefreshOptimizationTabsData(allPackages, textureResult, hairResult, tabControl);
                 
-                SetStatus($"✓ Optimization complete! Saved {PackageItem.FormatFileSize(spaceSaved)} ({percentSaved:F1}%)");
+                SetStatus($"✓ Optimization complete! Saved {FormatHelper.FormatFileSize(spaceSaved)} ({percentSaved:F1}%)");
         }
         catch (Exception ex)
         {
             CustomMessageBox.Show($"Error during optimization:\n\n{ex.Message}", "Optimization Error",
                                   MessageBoxButton.OK, MessageBoxImage.Error);
-            SetStatus($"ÃƒÂ¢Ã‚ÂÃ…â€™ Package optimization failed: {ex.Message}");
+            SetStatus($"❌ Package optimization failed: {ex.Message}");
         }
     }
 
@@ -4055,9 +4055,9 @@ namespace VPM
             var contentPanel = new StackPanel { Margin = new Thickness(5) };
 
             var summary = new System.Text.StringBuilder();
-            summary.AppendLine($"•••••••••••••••••••••••••••••••••••••••••••••••••••••••••••");
+            summary.AppendLine($"─────────────────────────────────────────────────────────────");
             summary.AppendLine($"SCENES TO OPTIMIZE: {scenes.Count}");
-            summary.AppendLine($"•••••••••••••••••••••••••••••••••••••••••••••••••••••••••••");
+            summary.AppendLine($"─────────────────────────────────────────────────────────────");
             summary.AppendLine();
             
             foreach (var scene in scenes)
@@ -4070,9 +4070,9 @@ namespace VPM
                 summary.AppendLine();
             }
             
-            summary.AppendLine($"─”€─”€─”€─”€─”€─”€─”€─”€─”€─”€─”€─”€─”€─”€─”€─”€─”€─”€─”€─”€─”€─”€─”€─”€─”€─”€─”€─”€─”€─");
+            summary.AppendLine($"─────────────────────────────────────────────────────────────");
             summary.AppendLine($"OPTIMIZATIONS TO BE APPLIED:");
-            summary.AppendLine($"─”€─”€─”€─”€─”€─”€─”€─”€─”€─”€─”€─”€─”€─”€─”€─”€─”€─”€─”€─”€─”€─”€─”€─”€─”€─”€─”€─”€─”€─");
+            summary.AppendLine($"─────────────────────────────────────────────────────────────");
             summary.AppendLine();
             summary.AppendLine("✓ Hair density reduction (max 16)");
             summary.AppendLine("✓ Shadow disabling (castShadows: false)");
@@ -4080,12 +4080,12 @@ namespace VPM
             summary.AppendLine("✓ Dependency management (remove/force .latest as configured)");
             summary.AppendLine("✓ JSON minification (optional, see Misc tab)");
             summary.AppendLine();
-            summary.AppendLine($"─”€─”€─”€─”€─”€─”€─”€─”€─”€─”€─”€─”€─”€─”€─”€─”€─”€─”€─”€─”€─”€─”€─”€─”€─”€─”€─”€─”€─”€─");
+            summary.AppendLine($"─────────────────────────────────────────────────────────────");
             summary.AppendLine($"BACKUP & SAFETY:");
-            summary.AppendLine($"─”€─”€─”€─”€─”€─”€─”€─”€─”€─”€─”€─”€─”€─”€─”€─”€─”€─”€─”€─”€─”€─”€─”€─”€─”€─”€─”€─”€─”€─");
+            summary.AppendLine($"─────────────────────────────────────────────────────────────");
             summary.AppendLine();
             summary.AppendLine($"📦 Original scenes backed up to: ArchivedPackages/Scenes/");
-            summary.AppendLine($"– Optimized scenes marked with lightning symbol");
+            summary.AppendLine($"⚡ Optimized scenes marked with lightning symbol");
             summary.AppendLine($"📝 Can re-optimize anytime (reads from backup)");
             summary.AppendLine();
             summary.AppendLine("Click 'Optimize' button to proceed with optimization.");

@@ -33,11 +33,11 @@ namespace VPM
                         scene.IsOptimized = IsSceneOptimized(scene.FilePath);
                         if (_sceneFavoritesManager != null)
                         {
-                            scene.IsFavorite = _sceneFavoritesManager.IsFavorite(scene.FilePath);
+                            scene.IsFavorite = _sceneFavoritesManager.IsMarked(scene.FilePath);
                         }
                         if (_sceneHideManager != null)
                         {
-                            scene.IsHidden = _sceneHideManager.IsHidden(scene.FilePath);
+                            scene.IsHidden = _sceneHideManager.IsMarked(scene.FilePath);
                         }
                     }
                     

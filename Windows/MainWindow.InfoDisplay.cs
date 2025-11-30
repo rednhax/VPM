@@ -537,7 +537,7 @@ namespace VPM
 
             // Totals
             info += $"\n📊 Totals:\n";
-            info += $"  • Total Size: {FormatFileSize(totalSize)}\n";
+            info += $"  • Total Size: {FormatHelper.FormatFileSize(totalSize)}\n";
             info += $"  • Total Files: {totalFileCount:N0}\n";
             info += $"  • Total Dependencies: {totalDependencies}\n";
             info += $"  • Unique Dependencies: {Dependencies.Count}\n";

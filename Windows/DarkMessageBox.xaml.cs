@@ -1,38 +1,17 @@
-﻿using System;
-using System.Runtime.InteropServices;
-using System.Windows;
+﻿using System.Windows;
 using System.Windows.Input;
+using VPM.Services;
 
 namespace VPM
 {
     public partial class DarkMessageBox : Window
     {
-        [DllImport("dwmapi.dll")]
-        private static extern int DwmSetWindowAttribute(IntPtr hwnd, int attr, ref int attrValue, int attrSize);
-
-        private const int DWMWA_USE_IMMERSIVE_DARK_MODE_BEFORE_20H1 = 19;
-        private const int DWMWA_USE_IMMERSIVE_DARK_MODE = 20;
-
         public MessageBoxResult Result { get; private set; } = MessageBoxResult.Cancel;
 
         private DarkMessageBox()
         {
             InitializeComponent();
-            
-            // Enable dark mode for title bar
-            Loaded += (s, e) =>
-            {
-                var handle = new System.Windows.Interop.WindowInteropHelper(this).Handle;
-                if (handle != IntPtr.Zero)
-                {
-                    int darkMode = 1;
-                    // Try Windows 11/10 20H1+ attribute first, then fall back to older Windows 10 attribute
-                    if (DwmSetWindowAttribute(handle, DWMWA_USE_IMMERSIVE_DARK_MODE, ref darkMode, sizeof(int)) != 0)
-                    {
-                        DwmSetWindowAttribute(handle, DWMWA_USE_IMMERSIVE_DARK_MODE_BEFORE_20H1, ref darkMode, sizeof(int));
-                    }
-                }
-            };
+            Loaded += (s, e) => DarkTitleBarHelper.Apply(this);
         }
 
         public static MessageBoxResult Show(string message, string title = "Message", 
@@ -46,15 +25,15 @@ namespace VPM
             switch (icon)
             {
                 case MessageBoxImage.Information:
-                    messageBox.IconText.Text = "„¹";
+                    messageBox.IconText.Text = "ℹ️";
                     messageBox.IconText.Foreground = System.Windows.Media.Brushes.CornflowerBlue;
                     break;
                 case MessageBoxImage.Warning:
-                    messageBox.IconText.Text = "–";
+                    messageBox.IconText.Text = "⚠️";
                     messageBox.IconText.Foreground = System.Windows.Media.Brushes.Orange;
                     break;
                 case MessageBoxImage.Error:
-                    messageBox.IconText.Text = "✓";
+                    messageBox.IconText.Text = "❌";
                     messageBox.IconText.Foreground = System.Windows.Media.Brushes.Red;
                     break;
                 case MessageBoxImage.Question:

@@ -1,18 +1,13 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Runtime.InteropServices;
 using System.Windows;
+using VPM.Services;
 
 namespace VPM
 {
     public partial class ConfirmDeletionWindow : Window
     {
-        [DllImport("dwmapi.dll")]
-        private static extern int DwmSetWindowAttribute(IntPtr hwnd, int attr, ref int attrValue, int attrSize);
-
-        private const int DWMWA_USE_IMMERSIVE_DARK_MODE_BEFORE_20H1 = 19;
-        private const int DWMWA_USE_IMMERSIVE_DARK_MODE = 20;
 
         public ConfirmDeletionWindow(string title, string message, IEnumerable<string> details, string warningMessage)
         {
@@ -41,20 +36,7 @@ namespace VPM
                 WarningTextBlock.Visibility = Visibility.Visible;
             }
 
-            try
-            {
-                var hwnd = new System.Windows.Interop.WindowInteropHelper(this).EnsureHandle();
-                int useImmersiveDarkMode = 1;
-                // Try Windows 11/10 20H1+ attribute first, then fall back to older Windows 10 attribute
-                if (DwmSetWindowAttribute(hwnd, DWMWA_USE_IMMERSIVE_DARK_MODE, ref useImmersiveDarkMode, sizeof(int)) != 0)
-                {
-                    DwmSetWindowAttribute(hwnd, DWMWA_USE_IMMERSIVE_DARK_MODE_BEFORE_20H1, ref useImmersiveDarkMode, sizeof(int));
-                }
-            }
-            catch
-            {
-                // Dark mode not available on this system
-            }
+            DarkTitleBarHelper.Apply(this);
         }
 
         private void ConfirmButton_Click(object sender, RoutedEventArgs e)

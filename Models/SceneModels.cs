@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
+using VPM.Services;
 
 namespace VPM.Models
 {
@@ -287,7 +288,7 @@ namespace VPM.Models
         }
 
         // Display properties
-        public string FileSizeFormatted => FormatFileSize(FileSize);
+        public string FileSizeFormatted => FormatHelper.FormatFileSize(FileSize);
         public string DateFormatted => ModifiedDate?.ToString("MMM dd, yyyy") ?? "Unknown";
         public int DependencyCount => Dependencies?.Count ?? 0;
         
@@ -301,20 +302,6 @@ namespace VPM.Models
         public string OptimizationIcon => IsOptimized ? "⚡" : "";
 
         public string AtomCountDisplay => AtomCount > 0 ? $"{AtomCount} atoms" : "Unknown";
-
-        public static string FormatFileSize(long bytes)
-        {
-            if (bytes == 0) return "0 B";
-            string[] sizes = { "B", "KB", "MB", "GB" };
-            int order = 0;
-            double size = bytes;
-            while (size >= 1024 && order < sizes.Length - 1)
-            {
-                order++;
-                size /= 1024;
-            }
-            return $"{size:0.#} {sizes[order]}";
-        }
 
         protected virtual bool SetProperty<T>(ref T backingStore, T value, [CallerMemberName] string propertyName = "")
         {
@@ -581,7 +568,7 @@ namespace VPM.Models
 
         // Display properties
         public int DependencyCount => Dependencies?.Count ?? 0;
-        public string FileSizeFormatted => SceneItem.FormatFileSize(FileSize);
+        public string FileSizeFormatted => FormatHelper.FormatFileSize(FileSize);
         public string DateFormatted => ModifiedDate?.ToString("MMM dd, yyyy") ?? "Unknown";
         public string OptimizationIcon => IsOptimized ? "⚡" : "";
 

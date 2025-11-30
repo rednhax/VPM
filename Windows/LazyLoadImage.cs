@@ -24,7 +24,6 @@ namespace VPM.Windows
         private Grid _overlayGrid;
         private Button _extractButton;
         private Button _removeButton;
-        private bool _isCurrentlyExtracted = false;
         
         #region Dependency Properties
 
@@ -90,7 +89,6 @@ namespace VPM.Windows
                 _extractButton.Content = null;
                 _extractButton.Visibility = Visibility.Collapsed; // Start hidden, will be shown by SetExtractionState
                 _extractButton.Background = new SolidColorBrush(Color.FromArgb(140, 51, 51, 51));
-                _isCurrentlyExtracted = false;
             }
             if (_removeButton != null)
             {
@@ -470,7 +468,6 @@ namespace VPM.Windows
                         _extractButton.Content = null;
                         _extractButton.Visibility = Visibility.Collapsed;
                         _extractButton.Background = new SolidColorBrush(Color.FromArgb(140, 51, 51, 51));
-                        _isCurrentlyExtracted = false;
                     }
                     if (_removeButton != null)
                     {
@@ -609,8 +606,6 @@ namespace VPM.Windows
 
                     if (isExtracted)
                     {
-                        _isCurrentlyExtracted = true;
-                        
                         // Show checkmark with label
                         iconBlock.Text = "✓";
                         _extractButton.Content = stackPanel;
@@ -624,8 +619,6 @@ namespace VPM.Windows
                     }
                     else
                     {
-                        _isCurrentlyExtracted = false;
-                        
                         // Determine icon based on category
                         string iconText = "📥"; // Default
                         if (string.Equals(category, "Hair", StringComparison.OrdinalIgnoreCase)) iconText = "✂️";
@@ -725,51 +718,6 @@ namespace VPM.Windows
             template.Triggers.Add(pressedTrigger);
             
             return template;
-        }
-        
-        /// <summary>
-        /// Opens the extracted files location in Windows Explorer
-        /// </summary>
-        private void OpenExtractedFilesInExplorer()
-        {
-            try
-            {
-                if (string.IsNullOrWhiteSpace(InternalImagePath) || string.IsNullOrWhiteSpace(GameFolder))
-                {
-                    MessageBox.Show("Cannot determine extracted files location.", "Error", MessageBoxButton.OK, MessageBoxImage.Warning);
-                    return;
-                }
-
-                // Get the directory path from the internal image path
-                var directoryPath = Path.GetDirectoryName(InternalImagePath);
-                if (string.IsNullOrWhiteSpace(directoryPath))
-                {
-                    MessageBox.Show("Cannot determine extracted files location.", "Error", MessageBoxButton.OK, MessageBoxImage.Warning);
-                    return;
-                }
-
-                // Construct the full path in the game folder
-                var fullPath = Path.Combine(GameFolder, directoryPath.Replace('/', Path.DirectorySeparatorChar));
-
-                // Check if the directory exists
-                if (!Directory.Exists(fullPath))
-                {
-                    MessageBox.Show($"Extracted files directory not found:\n{fullPath}", "Error", MessageBoxButton.OK, MessageBoxImage.Warning);
-                    return;
-                }
-
-                // Open the directory in Explorer
-                Process.Start(new ProcessStartInfo
-                {
-                    FileName = "explorer.exe",
-                    Arguments = fullPath,
-                    UseShellExecute = true
-                });
-            }
-            catch (Exception ex)
-            {
-                MessageBox.Show($"Failed to open Explorer: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
-            }
         }
         
         /// <summary>

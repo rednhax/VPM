@@ -29,9 +29,9 @@ namespace VPM
                 "✓ Quality is reduced even if texture is already at target size\n" +
                 "✓ Use 'Keep' to leave textures unchanged\n\n" +
                 "Example: If you select 4K:\n" +
-                "  • 8K textures †’ Downscaled to 4K\n" +
-                "  • 4K textures †’ Re-encoded to 4K (quality reduced)\n" +
-                "  • 2K textures †’ Upscaled to 4K (not recommended)\n\n" +
+                "  • 8K textures → Downscaled to 4K\n" +
+                "  • 4K textures → Re-encoded to 4K (quality reduced)\n" +
+                "  • 2K textures → Upscaled to 4K (not recommended)\n\n" +
                 "Quality: Uses 90% JPEG quality and optimized bilinear interpolation for fast processing.";
             
             headerPanel.Children.Add(CreateTooltipInfoIcon(tooltipText));
@@ -59,7 +59,7 @@ namespace VPM
             {
                 var errorText = new TextBlock
                 {
-                    Text = $"–ï¸ Warning: {result.ErrorMessage}",
+                    Text = $"⚠️ Warning: {result.ErrorMessage}",
                     FontSize = 12,
                     FontWeight = FontWeights.Normal,
                     Foreground = new SolidColorBrush(Color.FromRgb(255, 152, 0)),
@@ -109,24 +109,24 @@ namespace VPM
             
             if (result.IsValid)
             {
-                statusBuilder.Append($"âœ… All pass ({result.FoundCount})");
+                statusBuilder.Append($"✅ All pass ({result.FoundCount})");
                 statusText.Foreground = new SolidColorBrush(Color.FromRgb(76, 175, 80));
             }
             else if (result.TotalTextureReferences == 0)
             {
-                statusBuilder.Append("–ï¸ No Texture References Found");
+                statusBuilder.Append("⚠️ No Texture References Found");
                 statusText.Foreground = new SolidColorBrush(Color.FromRgb(255, 152, 0));
             }
             else
             {
                 statusBuilder.Append("┌ Missing Textures Detected");
                 statusText.Foreground = new SolidColorBrush(Color.FromRgb(244, 67, 54));
-                statusBuilder.Append($"  |  âœ… Found: {result.FoundCount}  |  ┌ Missing: {result.MissingCount}");
+                statusBuilder.Append($"  |  ✅ Found: {result.FoundCount}  |  ❌ Missing: {result.MissingCount}");
             }
 
             if (hasCompressedTextures)
             {
-                statusBuilder.Append("  |  „¹ï¸ This package has compressed textures");
+                statusBuilder.Append("  |  ⚠️ This package has compressed textures");
             }
             
             statusText.Text = statusBuilder.ToString();

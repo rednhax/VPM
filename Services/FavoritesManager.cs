@@ -1,387 +1,64 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.IO;
-using System.Linq;
 using System.Text.Json;
-using System.Threading.Tasks;
 using VPM.Models;
 
 namespace VPM.Services
 {
-    public class FavoritesManager
+    /// <summary>
+    /// Manages package favorites with file persistence and shadow file support.
+    /// Inherits common functionality from NameSetManager.
+    /// </summary>
+    public class FavoritesManager : NameSetManager
     {
-        private readonly string _favoritesFilePath;
-        private readonly string _shadowFilePath;
-        private HashSet<string> _favoriteNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        private HashSet<string> _shadowChanges = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        private HashSet<string> _shadowRemovals = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        private bool _isLoaded = false;
-        private DateTime _lastMainFileWriteTime = DateTime.MinValue;
-        private FileSystemWatcher _fileWatcher;
-
-        public event EventHandler FavoritesChanged;
+        public event EventHandler FavoritesChanged
+        {
+            add => Changed += value;
+            remove => Changed -= value;
+        }
 
         public FavoritesManager(string vamFolderPath)
+            : base(
+                Path.Combine(vamFolderPath, "Custom", "PluginData", "sfishere", "Favorites.txt"),
+                Path.Combine(vamFolderPath, "Custom", "PluginData", "sfishere", "Favorites.shadow.txt"))
         {
-            _favoritesFilePath = Path.Combine(vamFolderPath, "Custom", "PluginData", "sfishere", "Favorites.txt");
-            _shadowFilePath = Path.Combine(vamFolderPath, "Custom", "PluginData", "sfishere", "Favorites.shadow.txt");
-            
-            SetupFileWatcher();
         }
 
-        private void SetupFileWatcher()
+        // Compatibility methods that delegate to base class
+        public bool IsFavorite(string packageName) => Contains(packageName);
+        public void AddFavorite(string packageName) => Add(packageName);
+        public void RemoveFavorite(string packageName) => Remove(packageName);
+        public void AddFavoriteBatch(IEnumerable<string> packageNames) => AddBatch(packageNames);
+        public void RemoveFavoriteBatch(IEnumerable<string> packageNames) => RemoveBatch(packageNames);
+        public void ToggleFavorite(string packageName) => Toggle(packageName);
+        public HashSet<string> GetAllFavorites() => GetAll();
+        public void LoadFavorites() => Load();
+        public void SaveFavorites() => Save();
+        public void ReloadFavorites() => Reload();
+
+        protected override List<string> DeserializeMainFile(string json)
         {
-            try
-            {
-                string directory = Path.GetDirectoryName(_favoritesFilePath);
-                if (!Directory.Exists(directory))
-                {
-                    Directory.CreateDirectory(directory);
-                }
-
-                _fileWatcher = new FileSystemWatcher(directory)
-                {
-                    Filter = Path.GetFileName(_favoritesFilePath),
-                    NotifyFilter = NotifyFilters.LastWrite | NotifyFilters.Size,
-                    EnableRaisingEvents = true
-                };
-
-                _fileWatcher.Changed += OnFavoritesFileChanged;
-            }
-            catch (Exception)
-            {
-            }
+            var data = JsonSerializer.Deserialize(json, JsonSourceGenerationContext.Default.FavoritesData);
+            return data?.FavoriteNames;
         }
 
-        private void OnFavoritesFileChanged(object sender, FileSystemEventArgs e)
+        protected override (List<string> additions, List<string> removals) DeserializeShadowFile(string json)
         {
-            // Fire and forget async operation to avoid blocking file watcher
-            _ = OnFavoritesFileChangedAsync();
+            var data = JsonSerializer.Deserialize(json, JsonSourceGenerationContext.Default.ShadowFavoritesData);
+            return (data?.Additions, data?.Removals);
         }
 
-        private async Task OnFavoritesFileChangedAsync()
+        protected override string SerializeMainFile(List<string> names)
         {
-            try
-            {
-                // Debounce multiple events
-                var currentWriteTime = File.GetLastWriteTime(_favoritesFilePath);
-                if (currentWriteTime <= _lastMainFileWriteTime)
-                    return;
-
-                _lastMainFileWriteTime = currentWriteTime;
-
-                // Small delay to ensure file is fully written
-                await Task.Delay(100).ConfigureAwait(false);
-
-                // Reload favorites
-                ReloadFavorites();
-
-                // Notify listeners
-                FavoritesChanged?.Invoke(this, EventArgs.Empty);
-            }
-            catch (Exception)
-            {
-            }
+            var data = new FavoritesData { FavoriteNames = names };
+            return JsonSerializer.Serialize(data, JsonSourceGenerationContext.Default.FavoritesData);
         }
 
-        public void Dispose()
+        protected override string SerializeShadowFile(List<string> additions, List<string> removals)
         {
-            _fileWatcher?.Dispose();
-        }
-
-        public bool IsFavorite(string packageName)
-        {
-            if (!_isLoaded)
-                LoadFavorites();
-
-            return _favoriteNames.Contains(packageName);
-        }
-
-        public void AddFavorite(string packageName)
-        {
-            if (!_isLoaded)
-                LoadFavorites();
-
-            if (_favoriteNames.Add(packageName))
-            {
-                SaveFavorites();
-            }
-        }
-
-        public void RemoveFavorite(string packageName)
-        {
-            if (!_isLoaded)
-                LoadFavorites();
-
-            if (_favoriteNames.Remove(packageName))
-            {
-                SaveFavorites();
-            }
-        }
-
-        public void AddFavoriteBatch(IEnumerable<string> packageNames)
-        {
-            if (!_isLoaded)
-                LoadFavorites();
-
-            bool changed = false;
-            foreach (var packageName in packageNames)
-            {
-                if (_favoriteNames.Add(packageName))
-                {
-                    changed = true;
-                }
-            }
-
-            if (changed)
-            {
-                SaveFavorites();
-            }
-        }
-
-        public void RemoveFavoriteBatch(IEnumerable<string> packageNames)
-        {
-            if (!_isLoaded)
-                LoadFavorites();
-
-            bool changed = false;
-            foreach (var packageName in packageNames)
-            {
-                if (_favoriteNames.Remove(packageName))
-                {
-                    changed = true;
-                }
-            }
-
-            if (changed)
-            {
-                SaveFavorites();
-            }
-        }
-
-        public void ToggleFavorite(string packageName)
-        {
-            if (IsFavorite(packageName))
-                RemoveFavorite(packageName);
-            else
-                AddFavorite(packageName);
-        }
-
-        public HashSet<string> GetAllFavorites()
-        {
-            if (!_isLoaded)
-                LoadFavorites();
-
-            return new HashSet<string>(_favoriteNames, StringComparer.OrdinalIgnoreCase);
-        }
-
-        public void LoadFavorites()
-        {
-            _favoriteNames.Clear();
-            _shadowChanges.Clear();
-            _shadowRemovals.Clear();
-
-            try
-            {
-                // Load main favorites file
-                if (File.Exists(_favoritesFilePath))
-                {
-                    try
-                    {
-                        string json = File.ReadAllText(_favoritesFilePath);
-                        var data = JsonSerializer.Deserialize(json, JsonSourceGenerationContext.Default.FavoritesData);
-
-                        if (data?.FavoriteNames != null)
-                        {
-                            foreach (var name in data.FavoriteNames)
-                            {
-                                _favoriteNames.Add(name);
-                            }
-                        }
-                    }
-                    catch (Exception ex)
-                    {
-                        // Log deserialization error but continue - file might be corrupted
-                        System.Diagnostics.Debug.WriteLine($"Failed to deserialize favorites file: {ex.Message}");
-                    }
-                }
-
-                // Load and merge shadow file if it exists
-                if (File.Exists(_shadowFilePath))
-                {
-                    try
-                    {
-                        string shadowJson = File.ReadAllText(_shadowFilePath);
-                        var shadowData = JsonSerializer.Deserialize(shadowJson, JsonSourceGenerationContext.Default.ShadowFavoritesData);
-
-                        if (shadowData != null)
-                        {
-                            // Apply additions from shadow
-                            if (shadowData.Additions != null)
-                            {
-                                foreach (var name in shadowData.Additions)
-                                {
-                                    _favoriteNames.Add(name);
-                                    _shadowChanges.Add(name);
-                                }
-                            }
-
-                            // Apply removals from shadow
-                            if (shadowData.Removals != null)
-                            {
-                                foreach (var name in shadowData.Removals)
-                                {
-                                    _favoriteNames.Remove(name);
-                                    _shadowRemovals.Add(name);
-                                }
-                            }
-                        }
-                    }
-                    catch (Exception ex)
-                    {
-                        // Log deserialization error but continue
-                        System.Diagnostics.Debug.WriteLine($"Failed to deserialize shadow favorites file: {ex.Message}");
-                    }
-                }
-                
-                _isLoaded = true;
-            }
-            catch (Exception)
-            {
-                _isLoaded = true;
-            }
-        }
-
-        public void SaveFavorites()
-        {
-            try
-            {
-                string directory = Path.GetDirectoryName(_favoritesFilePath);
-                if (!Directory.Exists(directory))
-                {
-                    Directory.CreateDirectory(directory);
-                }
-
-                // Try to write to main file first
-                if (TryWriteToMainFile())
-                {
-                    // Success! Try to merge and delete shadow file if it exists
-                    TryMergeShadowFile();
-                }
-                else
-                {
-                    // Main file is locked, use shadow file
-                    WriteShadowFile();
-                }
-            }
-            catch (Exception)
-            {
-            }
-        }
-
-        private bool TryWriteToMainFile()
-        {
-            try
-            {
-                var data = new FavoritesData
-                {
-                    FavoriteNames = _favoriteNames.OrderBy(n => n, StringComparer.OrdinalIgnoreCase).ToList()
-                };
-
-                string json = JsonSerializer.Serialize(data, JsonSourceGenerationContext.Default.FavoritesData);
-                
-                // Try to open file with exclusive access
-                using (var fileStream = new FileStream(_favoritesFilePath, FileMode.Create, FileAccess.Write, FileShare.None))
-                using (var writer = new StreamWriter(fileStream))
-                {
-                    writer.Write(json);
-                }
-                
-                return true;
-            }
-            catch (IOException)
-            {
-                // File is locked by another process (game)
-                return false;
-            }
-            catch (Exception ex)
-            {
-                System.Diagnostics.Debug.WriteLine($"Failed to write favorites file: {ex.Message}");
-                return false;
-            }
-        }
-
-        private void WriteShadowFile()
-        {
-            try
-            {
-                // Load current main file to determine what changed
-                var mainFavorites = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-                if (File.Exists(_favoritesFilePath))
-                {
-                    try
-                    {
-                        string json = File.ReadAllText(_favoritesFilePath);
-                        var data = JsonSerializer.Deserialize(json, JsonSourceGenerationContext.Default.FavoritesData);
-                        if (data?.FavoriteNames != null)
-                        {
-                            foreach (var name in data.FavoriteNames)
-                            {
-                                mainFavorites.Add(name);
-                            }
-                        }
-                    }
-                    catch (Exception)
-                    {
-                    }
-                }
-
-                // Determine additions and removals
-                var additions = new HashSet<string>(_favoriteNames.Except(mainFavorites), StringComparer.OrdinalIgnoreCase);
-                var removals = new HashSet<string>(mainFavorites.Except(_favoriteNames), StringComparer.OrdinalIgnoreCase);
-
-                // Merge with existing shadow changes
-                additions.UnionWith(_shadowChanges);
-                removals.UnionWith(_shadowRemovals);
-
-                var shadowData = new ShadowFavoritesData
-                {
-                    Additions = additions.OrderBy(n => n, StringComparer.OrdinalIgnoreCase).ToList(),
-                    Removals = removals.OrderBy(n => n, StringComparer.OrdinalIgnoreCase).ToList()
-                };
-
-                string shadowJson = JsonSerializer.Serialize(shadowData, JsonSourceGenerationContext.Default.ShadowFavoritesData);
-                File.WriteAllText(_shadowFilePath, shadowJson);
-
-                _shadowChanges = additions;
-                _shadowRemovals = removals;
-            }
-            catch (Exception)
-            {
-            }
-        }
-
-        private void TryMergeShadowFile()
-        {
-            try
-            {
-                if (File.Exists(_shadowFilePath))
-                {
-                    // Shadow file exists and main file is now writable, delete shadow
-                    File.Delete(_shadowFilePath);
-                    _shadowChanges.Clear();
-                    _shadowRemovals.Clear();
-                }
-            }
-            catch (Exception)
-            {
-            }
-        }
-
-        public void ReloadFavorites()
-        {
-            _isLoaded = false;
-            LoadFavorites();
+            var data = new ShadowFavoritesData { Additions = additions, Removals = removals };
+            return JsonSerializer.Serialize(data, JsonSourceGenerationContext.Default.ShadowFavoritesData);
         }
     }
 }

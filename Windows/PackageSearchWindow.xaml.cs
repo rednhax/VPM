@@ -689,7 +689,7 @@ namespace VPM
                         result.IsLocal = true;
                         result.Location = foundFile.FullName;
                         result.Size = foundFile.Length;
-                        result.SizeFormatted = FormatFileSize(foundFile.Length);
+                        result.SizeFormatted = FormatHelper.FormatFileSize(foundFile.Length);
                         result.LocalPackageName = Path.GetFileNameWithoutExtension(foundFile.FullName);
                     }
                     else
@@ -706,7 +706,7 @@ namespace VPM
                             result.IsLocal = true;
                             result.Location = foundFile.FullName;
                             result.Size = foundFile.Length;
-                            result.SizeFormatted = FormatFileSize(foundFile.Length);
+                            result.SizeFormatted = FormatHelper.FormatFileSize(foundFile.Length);
                             result.LocalPackageName = Path.GetFileNameWithoutExtension(foundFile.FullName);
                         }
                         else
@@ -984,7 +984,7 @@ namespace VPM
                     {
                         var fileInfo = new FileInfo(e.FilePath);
                         result.Size = fileInfo.Length;
-                        result.SizeFormatted = FormatFileSize(fileInfo.Length);
+                        result.SizeFormatted = FormatHelper.FormatFileSize(fileInfo.Length);
                     }
                     
                     _completedDownloads++;
@@ -1362,19 +1362,6 @@ namespace VPM
         #endregion
 
         #region Utility Methods
-
-        private string FormatFileSize(long bytes)
-        {
-            string[] sizes = { "B", "KB", "MB", "GB", "TB" };
-            double len = bytes;
-            int order = 0;
-            while (len >= 1024 && order < sizes.Length - 1)
-            {
-                order++;
-                len = len / 1024;
-            }
-            return $"{len:0.##} {sizes[order]}";
-        }
 
         protected override void OnClosed(EventArgs e)
         {

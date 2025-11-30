@@ -53,7 +53,7 @@ namespace VPM
             {
                 var errorText = new TextBlock
                 {
-                    Text = $"–ï¸ Error: {result.ErrorMessage}",
+                    Text = $"⚠️ Error: {result.ErrorMessage}",
                     FontSize = 14,
                     FontWeight = FontWeights.Bold,
                     Foreground = new SolidColorBrush(Color.FromRgb(244, 67, 54)),
@@ -89,7 +89,7 @@ namespace VPM
             // Warning message
             var warningText = new TextBlock
             {
-                Text = "–ï¸ Warning: Removing dependencies can break scenes!",
+                Text = "⚠️ Warning: Removing dependencies can break scenes!",
                 FontSize = 11,
                 FontStyle = FontStyles.Italic,
                 Foreground = new SolidColorBrush(Color.FromRgb(255, 193, 7)),
@@ -124,7 +124,7 @@ namespace VPM
                 VerticalAlignment = VerticalAlignment.Center,
                 Margin = new Thickness(15, 0, 0, 0),
                 Cursor = System.Windows.Input.Cursors.Hand,
-                ToolTip = "Convert all dependency versions to .latest when optimizing.\n\nExample:\n  MacGruber.PostMagic.3 †’ MacGruber.PostMagic.latest\n\nChanges will be tracked in the description for easy reversion.",
+                ToolTip = "Convert all dependency versions to .latest when optimizing.\n\nExample:\n  MacGruber.PostMagic.3 → MacGruber.PostMagic.latest\n\nChanges will be tracked in the description for easy reversion.",
                 IsChecked = initialForceLatestState
             };
             

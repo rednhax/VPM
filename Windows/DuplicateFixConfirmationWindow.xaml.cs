@@ -2,43 +2,21 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Text;
 using System.Windows;
+using VPM.Services;
 
 namespace VPM
 {
     public partial class DuplicateFixConfirmationWindow : Window
     {
-        [DllImport("dwmapi.dll")]
-        private static extern int DwmSetWindowAttribute(IntPtr hwnd, int attr, ref int attrValue, int attrSize);
-
-        private const int DWMWA_USE_IMMERSIVE_DARK_MODE_BEFORE_20H1 = 19;
-        private const int DWMWA_USE_IMMERSIVE_DARK_MODE = 20;
-
         public bool Confirmed { get; private set; } = false;
 
         public DuplicateFixConfirmationWindow(Dictionary<string, string> packagesToMove, List<string> packagesToDelete)
         {
             InitializeComponent();
-            
-            // Apply dark theme to window chrome
-            try
-            {
-                var hwnd = new System.Windows.Interop.WindowInteropHelper(this).EnsureHandle();
-                int useImmersiveDarkMode = 1;
-                // Try Windows 11/10 20H1+ attribute first, then fall back to older Windows 10 attribute
-                if (DwmSetWindowAttribute(hwnd, DWMWA_USE_IMMERSIVE_DARK_MODE, ref useImmersiveDarkMode, sizeof(int)) != 0)
-                {
-                    DwmSetWindowAttribute(hwnd, DWMWA_USE_IMMERSIVE_DARK_MODE_BEFORE_20H1, ref useImmersiveDarkMode, sizeof(int));
-                }
-            }
-            catch
-            {
-                // Dark mode not available on this system
-            }
-            
+            DarkTitleBarHelper.Apply(this);
             BuildConfirmationMessage(packagesToMove, packagesToDelete);
         }
 
@@ -101,7 +79,7 @@ namespace VPM
             }
             
             // Update summary
-            SummaryText.Text = $"{totalPackages} package(s) affected | {totalFilesToDelete} file(s) to delete | {totalFilesToMove} file(s) to move | {FormatFileSize(totalSpaceFreed)} to be freed";
+            SummaryText.Text = $"{totalPackages} package(s) affected | {totalFilesToDelete} file(s) to delete | {totalFilesToMove} file(s) to move | {FormatHelper.FormatFileSize(totalSpaceFreed)} to be freed";
             
             // Build detailed content grouped by package
             int packageNum = 0;
@@ -183,7 +161,7 @@ namespace VPM
                             var sha = CalculateFileSHA256(file);
                             message.AppendLine($"    • {Path.GetFileName(file)}");
                             message.AppendLine($"      Path: {file}");
-                            message.AppendLine($"      Size: {FormatFileSize(fileInfo.Length),10} | SHA256: {sha}");
+                            message.AppendLine($"      Size: {FormatHelper.FormatFileSize(fileInfo.Length),10} | SHA256: {sha}");
                             message.AppendLine();
                         }
                         else
@@ -208,7 +186,7 @@ namespace VPM
                         message.AppendLine($"    • {Path.GetFileName(kvp.Key)}");
                         message.AppendLine($"      FROM: {kvp.Key}");
                         message.AppendLine($"      TO:   {kvp.Value}");
-                        message.AppendLine($"      Size: {FormatFileSize(fileInfo.Length),10} | SHA256: {sha}");
+                        message.AppendLine($"      Size: {FormatHelper.FormatFileSize(fileInfo.Length),10} | SHA256: {sha}");
                         message.AppendLine();
                     }
                 }
@@ -224,7 +202,7 @@ namespace VPM
                         var sha = CalculateFileSHA256(file);
                         message.AppendLine($"    • {Path.GetFileName(file)}");
                         message.AppendLine($"      Path: {file}");
-                        message.AppendLine($"      Size: {FormatFileSize(fileInfo.Length),10} | SHA256: {sha}");
+                        message.AppendLine($"      Size: {FormatHelper.FormatFileSize(fileInfo.Length),10} | SHA256: {sha}");
                         message.AppendLine();
                     }
                 }
@@ -233,7 +211,7 @@ namespace VPM
             }
             
             message.AppendLine("•••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••");
-            message.AppendLine($"TOTAL SPACE TO BE FREED: {FormatFileSize(totalSpaceFreed)}");
+            message.AppendLine($"TOTAL SPACE TO BE FREED: {FormatHelper.FormatFileSize(totalSpaceFreed)}");
             message.AppendLine("•••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••");
             
             ContentText.Text = message.ToString();
@@ -280,19 +258,6 @@ namespace VPM
             }
         }
         
-        private string FormatFileSize(long bytes)
-        {
-            string[] sizes = { "B", "KB", "MB", "GB" };
-            double len = bytes;
-            int order = 0;
-            while (len >= 1024 && order < sizes.Length - 1)
-            {
-                order++;
-                len = len / 1024;
-            }
-            return $"{len:0.##} {sizes[order]}";
-        }
-
         private void ConfirmButton_Click(object sender, RoutedEventArgs e)
         {
             Confirmed = true;
