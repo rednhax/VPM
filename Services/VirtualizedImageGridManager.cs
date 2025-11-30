@@ -1,6 +1,8 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Controls;
 using System.Windows.Threading;
@@ -21,10 +23,16 @@ namespace VPM.Services
         private DispatcherTimer _continuousProcessingTimer;
         private bool _isProcessing = false;
         private int _consecutiveNoVisibleUnloadedCycles = 0;
+        private double _lastProcessedOffset = -1;
+        private SemaphoreSlim _loadSemaphore;
+        private bool _isInitialLoad = true;
+        private Stopwatch _loadingStopwatch;
         
         // Configuration
-        public double LoadBufferSize { get; set; } = 300; // Pixels before/after viewport to start loading
-        public int MaxConcurrentLoads { get; set; } = 6; // Max images to load simultaneously (currently unused)
+        public double InitialLoadBuffer { get; set; } = 100; // Tight buffer for initial display
+        public double ScrollLoadBuffer { get; set; } = 300; // Loose buffer for smooth scrolling
+        public int MaxConcurrentLoads { get; set; } = 4; // Max images to load simultaneously
+        private const double MinScrollDelta = 100; // Only process if scrolled this many pixels
         
         // Statistics
         public int LoadedImageCount => _lazyImages.Count(img => img.IsImageLoaded);
@@ -33,10 +41,29 @@ namespace VPM.Services
         public VirtualizedImageGridManager(ScrollViewer scrollViewer)
         {
             _scrollViewer = scrollViewer ?? throw new ArgumentNullException(nameof(scrollViewer));
+            _loadSemaphore = new SemaphoreSlim(MaxConcurrentLoads, MaxConcurrentLoads);
+            _loadingStopwatch = new Stopwatch();
             
             // Set up scroll event handler with debouncing
             _scrollViewer.ScrollChanged += OnScrollChanged;
         }
+        
+        /// <summary>
+        /// Gets current loading metrics for performance monitoring
+        /// </summary>
+        public LoadingMetrics GetMetrics()
+        {
+            return new LoadingMetrics
+            {
+                TotalImagesLoaded = LoadedImageCount,
+                TotalImages = TotalImageCount,
+                InitialLoadTime = _loadingStopwatch.Elapsed,
+                IsInitialLoadComplete = !_isInitialLoad,
+                ProcessingCyclesCount = _processingCyclesCount
+            };
+        }
+        
+        private int _processingCyclesCount = 0;
         
         /// <summary>
         /// Registers a lazy load image for management
@@ -46,6 +73,46 @@ namespace VPM.Services
             if (image != null && !_lazyImages.Contains(image))
             {
                 _lazyImages.Add(image);
+            }
+        }
+        
+        /// <summary>
+        /// Batch registers multiple images and triggers initial load (more efficient than individual registration)
+        /// </summary>
+        public async Task BatchRegisterAsync(IEnumerable<LazyLoadImage> images)
+        {
+            if (images == null)
+                return;
+            
+            var imageList = images.ToList();
+            if (imageList.Count == 0)
+                return;
+            
+            // Start timing the initial load
+            if (_isInitialLoad)
+            {
+                _loadingStopwatch.Start();
+            }
+            
+            // Add all images at once
+            foreach (var image in imageList)
+            {
+                if (image != null && !_lazyImages.Contains(image))
+                {
+                    _lazyImages.Add(image);
+                }
+            }
+            
+            // Defer initial load to allow UI to render first
+            // Use Dispatcher to schedule on UI thread after current batch completes
+            if (_isInitialLoad)
+            {
+                _scrollViewer.Dispatcher.InvokeAsync(async () =>
+                {
+                    // Give UI time to render the controls
+                    await Task.Delay(50);
+                    await LoadInitialVisibleImagesAsync();
+                }, System.Windows.Threading.DispatcherPriority.Background);
             }
         }
 
@@ -87,17 +154,25 @@ namespace VPM.Services
             }
             
             _lazyImages.Clear();
+            
+            // Reset initial load flag so next batch will trigger deferred load
+            _isInitialLoad = true;
+            _loadingStopwatch.Reset();
+            _processingCyclesCount = 0;
+            _lastProcessedOffset = -1;
         }
         
         /// <summary>
         /// Processes all registered images and loads visible ones (one-way - never unloads)
         /// Uses binary search to efficiently find the visible range in the sorted list of images
+        /// Includes semaphore-based concurrency control to prevent memory spikes
         /// </summary>
         public async Task<int> ProcessImagesAsync()
         {
             if (_isProcessing || _lazyImages.Count == 0) return 0;
             
             _isProcessing = true;
+            _processingCyclesCount++;
             
             try
             {
@@ -105,50 +180,90 @@ namespace VPM.Services
                 var viewportHeight = _scrollViewer.ViewportHeight;
                 var viewportBottom = viewportTop + viewportHeight;
                 
-                var loadTop = viewportTop - LoadBufferSize;
-                var loadBottom = viewportBottom + LoadBufferSize;
+                // Use two-tier buffer: tight for initial, loose for scrolling
+                var currentBuffer = _isInitialLoad ? InitialLoadBuffer : ScrollLoadBuffer;
+                var loadTop = viewportTop - currentBuffer;
+                var loadBottom = viewportBottom + currentBuffer;
                 
-                // Optimization: Use binary search to find the start index
-                // This assumes images are roughly sorted by vertical position (which they are in a grid)
-                int startIndex = FindFirstVisibleIndex(loadTop);
-                if (startIndex < 0) startIndex = 0;
+                // Optimization: Skip redundant processing if scroll delta is small
+                if (!_isInitialLoad && Math.Abs(viewportTop - _lastProcessedOffset) < MinScrollDelta)
+                {
+                    return 0;
+                }
+                
+                _lastProcessedOffset = viewportTop;
                 
                 int loadedCount = 0;
+                var loadTasks = new List<Task>();
                 
-                // Iterate from start index until we go past the load bottom
-                for (int i = startIndex; i < _lazyImages.Count; i++)
+                // During initial load, load ALL images immediately (don't use binary search)
+                // After initial load, use binary search to optimize
+                if (_isInitialLoad)
                 {
-                    var image = _lazyImages[i];
                     
-                    // Skip if already loaded
-                    if (image.IsImageLoaded) continue;
-                    
-                    // Check position
-                    double top = GetVerticalPosition(image);
-                    
-                    // If not in visual tree yet, skip but continue (might be further down?)
-                    // Actually if it returns -1, it's not connected.
-                    if (top < 0) continue;
-                    
-                    // If we've gone past the bottom, stop processing
-                    // Add a small buffer (e.g. one row height ~300px) to handle grid irregularities
-                    if (top > loadBottom + 300) 
+                    // Load all images during initial phase
+                    for (int i = 0; i < _lazyImages.Count; i++)
                     {
-                        break;
-                    }
-                    
-                    // Check if in range (top is within load zone, or bottom is within load zone)
-                    double height = image.ActualHeight > 0 ? image.ActualHeight : (image.Height > 0 ? image.Height : 200);
-                    double bottom = top + height;
-                    
-                    if (bottom >= loadTop && top <= loadBottom)
-                    {
-                        // Start loading but don't wait for it to complete
-                        // This prevents blocking the processing loop and allows other images to start loading
-                        // The _isProcessing flag will be released quickly, allowing new scroll events to be handled
-                        _ = image.LoadImageAsync();
+                        var image = _lazyImages[i];
+                        
+                        // Skip if already loaded
+                        if (image.IsImageLoaded) continue;
+                        
+                        var loadTask = LoadImageWithSemaphoreAsync(image);
+                        loadTasks.Add(loadTask);
                         loadedCount++;
                     }
+                }
+                else
+                {
+                    // After initial load, use optimized viewport-based loading
+                    int startIndex = FindFirstVisibleIndex(loadTop);
+                    if (startIndex < 0) startIndex = 0;
+                    
+                    // Iterate from start index until we go past the load bottom
+                    for (int i = startIndex; i < _lazyImages.Count; i++)
+                    {
+                        var image = _lazyImages[i];
+                        
+                        // Skip if already loaded
+                        if (image.IsImageLoaded) continue;
+                        
+                        // Check position
+                        double top = GetVerticalPosition(image);
+                        
+                        // Only load images that are in the visual tree and in viewport
+                        if (top < 0) continue; // Not in visual tree yet
+                        
+                        // If we've gone past the bottom, stop processing
+                        if (top > loadBottom + 300) 
+                        {
+                            break;
+                        }
+                        
+                        // Check if in range
+                        double height = image.ActualHeight > 0 ? image.ActualHeight : (image.Height > 0 ? image.Height : 200);
+                        double bottom = top + height;
+                        
+                        if (bottom >= loadTop && top <= loadBottom)
+                        {
+                            // Load with semaphore to control concurrency
+                            var loadTask = LoadImageWithSemaphoreAsync(image);
+                            loadTasks.Add(loadTask);
+                            loadedCount++;
+                        }
+                    }
+                }
+                
+                // Wait for all pending loads to complete (with timeout to prevent hanging)
+                if (loadTasks.Count > 0)
+                {
+                    await Task.WhenAny(Task.WhenAll(loadTasks), Task.Delay(5000));
+                }
+                
+                // Mark initial load as complete after first processing
+                if (_isInitialLoad && loadedCount > 0)
+                {
+                    _isInitialLoad = false;
                 }
                 
                 return loadedCount;
@@ -156,6 +271,25 @@ namespace VPM.Services
             finally
             {
                 _isProcessing = false;
+            }
+        }
+        
+        /// <summary>
+        /// Loads an image with semaphore-based concurrency control
+        /// </summary>
+        private async Task LoadImageWithSemaphoreAsync(LazyLoadImage image)
+        {
+            await _loadSemaphore.WaitAsync();
+            try
+            {
+                await image.LoadImageAsync();
+            }
+            catch (Exception ex)
+            {
+            }
+            finally
+            {
+                _loadSemaphore.Release();
             }
         }
         
@@ -230,7 +364,9 @@ namespace VPM.Services
         /// Loads initially visible images when the grid is first displayed
         /// </summary>
         public async Task LoadInitialVisibleImagesAsync()
-        {            await ProcessImagesAsync();
+        {
+            await ProcessImagesAsync();
+            StartContinuousProcessing();
         }
         
         private void OnScrollChanged(object sender, ScrollChangedEventArgs e)
@@ -287,8 +423,8 @@ namespace VPM.Services
                     
                     var viewportTop = _scrollViewer.VerticalOffset;
                     var viewportBottom = viewportTop + _scrollViewer.ViewportHeight;
-                    var loadTop = viewportTop - LoadBufferSize;
-                    var loadBottom = viewportBottom + LoadBufferSize;
+                    var loadTop = viewportTop - ScrollLoadBuffer;
+                    var loadBottom = viewportBottom + ScrollLoadBuffer;
                     
                     var unloadedInLoadZone = _lazyImages
                         .Where(img => !img.IsImageLoaded && img.IsLoaded)
@@ -342,8 +478,23 @@ namespace VPM.Services
                 _scrollViewer.ScrollChanged -= OnScrollChanged;
             }
             
+            _loadingStopwatch?.Stop();
+            _loadSemaphore?.Dispose();
+            
             Clear();
         }
+    }
+    
+    /// <summary>
+    /// Metrics for monitoring image loading performance
+    /// </summary>
+    public class LoadingMetrics
+    {
+        public int TotalImagesLoaded { get; set; }
+        public int TotalImages { get; set; }
+        public TimeSpan InitialLoadTime { get; set; }
+        public bool IsInitialLoadComplete { get; set; }
+        public int ProcessingCyclesCount { get; set; }
     }
 }
 

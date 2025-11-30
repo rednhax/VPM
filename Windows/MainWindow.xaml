@@ -5729,6 +5729,152 @@
                                 </Button.Style>
                             </Button>
 
+                            <!--  Content Type Filter Dropdown  -->
+                            <StackPanel Margin="3,0,0,0" Orientation="Horizontal">
+                                <Button
+                                    x:Name="ContentTypeFilterButton"
+                                    Height="34"
+                                    Padding="8,0"
+                                    Click="ContentTypeFilterButton_Click"
+                                    Content="🔽 Filter"
+                                    FontSize="12"
+                                    FontWeight="SemiBold"
+                                    ToolTip="Filter by content type">
+                                    <Button.Style>
+                                        <Style BasedOn="{StaticResource BlueHoverButtonStyle}" TargetType="Button">
+                                            <Setter Property="Template">
+                                                <Setter.Value>
+                                                    <ControlTemplate TargetType="Button">
+                                                        <Border
+                                                            Padding="{TemplateBinding Padding}"
+                                                            Background="{TemplateBinding Background}"
+                                                            BorderBrush="{TemplateBinding BorderBrush}"
+                                                            BorderThickness="{TemplateBinding BorderThickness}"
+                                                            CornerRadius="3">
+                                                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                                        </Border>
+                                                    </ControlTemplate>
+                                                </Setter.Value>
+                                            </Setter>
+                                        </Style>
+                                    </Button.Style>
+                                </Button>
+                                <Button
+                                    x:Name="ClearFiltersButton"
+                                    Width="34"
+                                    Height="34"
+                                    Margin="3,0,0,0"
+                                    Padding="0,0"
+                                    Click="ClearFilters_Click"
+                                    Content="✕"
+                                    FontSize="16"
+                                    FontWeight="Bold"
+                                    ToolTip="Clear all filters"
+                                    Visibility="Collapsed">
+                                    <Button.Style>
+                                        <Style TargetType="Button">
+                                            <Setter Property="Background" Value="#FF6B6B" />
+                                            <Setter Property="Foreground" Value="White" />
+                                            <Setter Property="BorderThickness" Value="1" />
+                                            <Setter Property="BorderBrush" Value="#FF5252" />
+                                            <Setter Property="Template">
+                                                <Setter.Value>
+                                                    <ControlTemplate TargetType="Button">
+                                                        <Border
+                                                            Background="{TemplateBinding Background}"
+                                                            BorderBrush="{TemplateBinding BorderBrush}"
+                                                            BorderThickness="{TemplateBinding BorderThickness}"
+                                                            CornerRadius="3">
+                                                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                                        </Border>
+                                                        <ControlTemplate.Triggers>
+                                                            <Trigger Property="IsMouseOver" Value="True">
+                                                                <Setter Property="Background" Value="#FF5252" />
+                                                                <Setter Property="BorderBrush" Value="#FF3333" />
+                                                            </Trigger>
+                                                            <Trigger Property="IsPressed" Value="True">
+                                                                <Setter Property="Background" Value="#FF3333" />
+                                                                <Setter Property="BorderBrush" Value="#FF1111" />
+                                                            </Trigger>
+                                                        </ControlTemplate.Triggers>
+                                                    </ControlTemplate>
+                                                </Setter.Value>
+                                            </Setter>
+                                        </Style>
+                                    </Button.Style>
+                                </Button>
+                                <Popup
+                                    x:Name="ContentTypeFilterPopup"
+                                    AllowsTransparency="True"
+                                    Placement="Bottom"
+                                    PlacementTarget="{Binding ElementName=ContentTypeFilterButton}"
+                                    StaysOpen="False">
+                                    <Border
+                                        MinWidth="180"
+                                        Padding="12"
+                                        Background="#1E1E1E"
+                                        BorderBrush="#404040"
+                                        BorderThickness="1"
+                                        CornerRadius="4">
+                                        <StackPanel>
+                                            <StackPanel Margin="0,0,0,10" Orientation="Horizontal">
+                                                <CheckBox
+                                                    x:Name="FilterShowAll"
+                                                    VerticalAlignment="Center"
+                                                    Checked="FilterShowAll_Checked"
+                                                    Content="Show All"
+                                                    FontSize="12"
+                                                    FontWeight="SemiBold"
+                                                    Foreground="White"
+                                                    Unchecked="FilterShowAll_Unchecked">
+                                                    <CheckBox.Style>
+                                                        <Style TargetType="CheckBox">
+                                                            <Setter Property="Template">
+                                                                <Setter.Value>
+                                                                    <ControlTemplate TargetType="CheckBox">
+                                                                        <StackPanel Orientation="Horizontal">
+                                                                            <Border
+                                                                                Width="18"
+                                                                                Height="18"
+                                                                                Margin="0,0,8,0"
+                                                                                Background="#2D2D2D"
+                                                                                BorderBrush="#555555"
+                                                                                BorderThickness="1"
+                                                                                CornerRadius="2">
+                                                                                <TextBlock
+                                                                                    x:Name="CheckMark"
+                                                                                    HorizontalAlignment="Center"
+                                                                                    VerticalAlignment="Center"
+                                                                                    FontSize="12"
+                                                                                    FontWeight="Bold"
+                                                                                    Foreground="#00D4FF"
+                                                                                    Text="✓"
+                                                                                    Visibility="Collapsed" />
+                                                                            </Border>
+                                                                            <ContentPresenter VerticalAlignment="Center" />
+                                                                        </StackPanel>
+                                                                        <ControlTemplate.Triggers>
+                                                                            <Trigger Property="IsChecked" Value="True">
+                                                                                <Setter TargetName="CheckMark" Property="TextBlock.Visibility" Value="Visible" />
+                                                                            </Trigger>
+                                                                        </ControlTemplate.Triggers>
+                                                                    </ControlTemplate>
+                                                                </Setter.Value>
+                                                            </Setter>
+                                                        </Style>
+                                                    </CheckBox.Style>
+                                                </CheckBox>
+                                            </StackPanel>
+                                            <Separator
+                                                Height="1"
+                                                Margin="0,0,0,10"
+                                                Background="#333333" />
+                                            <ItemsControl x:Name="ContentTypeCheckboxes" />
+                                        </StackPanel>
+                                    </Border>
+                                </Popup>
+                            </StackPanel>
+
                             <!--  Play mode buttons (Desktop/VR/Custom/Cancel)  -->
                             <Button
                                 x:Name="DesktopImageButton"
@@ -5980,9 +6126,9 @@
                                         Height="Auto"
                                         Margin="0"
                                         VerticalAlignment="Top"
-                                        Orientation="Horizontal"
+                                        Columns="{Binding ImageColumns, RelativeSource={RelativeSource AncestorType=Window}}"
                                         ImageMatchWidth="{Binding ImageMatchWidth, RelativeSource={RelativeSource AncestorType=Window}}"
-                                        Columns="{Binding ImageColumns, RelativeSource={RelativeSource AncestorType=Window}}" />
+                                        Orientation="Horizontal" />
                                 </ItemsPanelTemplate>
                             </windows:ImageListView.ItemsPanel>
 
@@ -6313,18 +6459,130 @@
                                     <ColumnDefinition Width="Auto" />
                                 </Grid.ColumnDefinitions>
 
+                                <!--  Image statistics display on the left  -->
+                                <StackPanel
+                                    Grid.Column="0"
+                                    Margin="0,0,12,0"
+                                    VerticalAlignment="Center"
+                                    Orientation="Vertical">
+                                    <TextBlock
+                                        x:Name="ImageStatsTextBlock"
+                                        FontSize="11"
+                                        FontWeight="SemiBold"
+                                        Foreground="White"
+                                        Text="0 images" />
+                                    <TextBlock
+                                        x:Name="ImageExtractedStatsTextBlock"
+                                        FontSize="10"
+                                        Foreground="#AAAAAA"
+                                        Text="0 extracted items" />
+                                </StackPanel>
+
+                                <!--  Filter buttons in the middle - stretch to fill space  -->
+                                <StackPanel
+                                    Grid.Column="1"
+                                    HorizontalAlignment="Stretch"
+                                    VerticalAlignment="Center"
+                                    Orientation="Horizontal">
+                                    <Button
+                                        x:Name="ShowExtractedButton"
+                                        Height="26"
+                                        Margin="0,0,3,0"
+                                        Padding="0,0"
+                                        HorizontalAlignment="Stretch"
+                                        Click="ShowExtractedImages_Click"
+                                        Content="  Extracted  "
+                                        FontSize="10"
+                                        FontWeight="Regular"
+                                        ToolTip="Show only extracted items">
+                                        <Button.Style>
+                                            <Style TargetType="Button">
+                                                <Setter Property="Background" Value="#40FFFFFF" />
+                                                <Setter Property="Foreground" Value="White" />
+                                                <Setter Property="BorderThickness" Value="1" />
+                                                <Setter Property="BorderBrush" Value="#60FFFFFF" />
+                                                <Setter Property="Template">
+                                                    <Setter.Value>
+                                                        <ControlTemplate TargetType="Button">
+                                                            <Border
+                                                                Background="{TemplateBinding Background}"
+                                                                BorderBrush="{TemplateBinding BorderBrush}"
+                                                                BorderThickness="{TemplateBinding BorderThickness}"
+                                                                CornerRadius="3">
+                                                                <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                                            </Border>
+                                                            <ControlTemplate.Triggers>
+                                                                <Trigger Property="IsMouseOver" Value="True">
+                                                                    <Setter Property="Background" Value="#80FFFFFF" />
+                                                                    <Setter Property="BorderBrush" Value="#FFFFFFFF" />
+                                                                </Trigger>
+                                                                <Trigger Property="IsPressed" Value="True">
+                                                                    <Setter Property="Background" Value="#A0FFFFFF" />
+                                                                    <Setter Property="BorderBrush" Value="#FFFFFFFF" />
+                                                                </Trigger>
+                                                            </ControlTemplate.Triggers>
+                                                        </ControlTemplate>
+                                                    </Setter.Value>
+                                                </Setter>
+                                            </Style>
+                                        </Button.Style>
+                                    </Button>
+                                    <Button
+                                        x:Name="ShowAllImagesButton"
+                                        Height="26"
+                                        Margin="3,0,16,0"
+                                        Padding="0,0"
+                                        HorizontalAlignment="Stretch"
+                                        Click="ShowAllImages_Click"
+                                        Content="  All  "
+                                        FontSize="10"
+                                        FontWeight="Regular"
+                                        ToolTip="Show all images">
+                                        <Button.Style>
+                                            <Style TargetType="Button">
+                                                <Setter Property="Background" Value="#40FFFFFF" />
+                                                <Setter Property="Foreground" Value="White" />
+                                                <Setter Property="BorderThickness" Value="1" />
+                                                <Setter Property="BorderBrush" Value="#60FFFFFF" />
+                                                <Setter Property="Template">
+                                                    <Setter.Value>
+                                                        <ControlTemplate TargetType="Button">
+                                                            <Border
+                                                                Background="{TemplateBinding Background}"
+                                                                BorderBrush="{TemplateBinding BorderBrush}"
+                                                                BorderThickness="{TemplateBinding BorderThickness}"
+                                                                CornerRadius="3">
+                                                                <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                                            </Border>
+                                                            <ControlTemplate.Triggers>
+                                                                <Trigger Property="IsMouseOver" Value="True">
+                                                                    <Setter Property="Background" Value="#80FFFFFF" />
+                                                                    <Setter Property="BorderBrush" Value="#FFFFFFFF" />
+                                                                </Trigger>
+                                                                <Trigger Property="IsPressed" Value="True">
+                                                                    <Setter Property="Background" Value="#A0FFFFFF" />
+                                                                    <Setter Property="BorderBrush" Value="#FFFFFFFF" />
+                                                                </Trigger>
+                                                            </ControlTemplate.Triggers>
+                                                        </ControlTemplate>
+                                                    </Setter.Value>
+                                                </Setter>
+                                            </Style>
+                                        </Button.Style>
+                                    </Button>
+                                </StackPanel>
+
                                 <!--  Column adjustment buttons on the right  -->
                                 <StackPanel Grid.Column="2" Orientation="Horizontal">
                                     <Button
                                         x:Name="MatchWidthButton"
-                                        Width="26"
                                         Height="26"
-                                        Margin="0,0,6,0"
+                                        Margin="0,0,16,0"
                                         Padding="0,0"
                                         Click="ToggleMatchWidth_Click"
-                                        Content="⊡"
-                                        FontSize="12"
-                                        FontWeight="Bold"
+                                        Content="  Adaptive  "
+                                        FontSize="10"
+                                        FontWeight="Regular"
                                         ToolTip="Toggle match width (fill last row)">
                                         <Button.Style>
                                             <Style TargetType="Button">

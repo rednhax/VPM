@@ -87,17 +87,42 @@ namespace VPM
                 }
                 else
                 {
+                    // Handle .latest suffix for dependency packages
+                    var normalizedPackageName = packageName;
+                    if (packageName.EndsWith(".latest", StringComparison.OrdinalIgnoreCase))
+                    {
+                        normalizedPackageName = packageName[..^7]; // Remove ".latest"
+                    }
+                    
                     // Handle archived packages by stripping suffix for fallback comparisons
-                    var normalizedPackageName = packageName.EndsWith("#archived", StringComparison.OrdinalIgnoreCase)
-                        ? packageName[..^9]
-                        : packageName;
+                    if (normalizedPackageName.EndsWith("#archived", StringComparison.OrdinalIgnoreCase))
+                    {
+                        normalizedPackageName = normalizedPackageName[..^9];
+                    }
 
+                    // Try to find matching metadata
                     packageMetadata = _packageManager.PackageMetadata.Values
                         .FirstOrDefault(p =>
                             System.IO.Path.GetFileNameWithoutExtension(p.Filename).Equals(packageName, StringComparison.OrdinalIgnoreCase) ||
                             System.IO.Path.GetFileNameWithoutExtension(p.Filename).Equals(normalizedPackageName, StringComparison.OrdinalIgnoreCase) ||
                             string.Equals(p.PackageName, packageName, StringComparison.OrdinalIgnoreCase) ||
                             string.Equals(p.PackageName, normalizedPackageName, StringComparison.OrdinalIgnoreCase));
+                    
+                    // If still not found and packageName has .latest, try finding the latest version
+                    if (packageMetadata == null && packageName.EndsWith(".latest", StringComparison.OrdinalIgnoreCase))
+                    {
+                        var baseName = packageName[..^7]; // Remove ".latest"
+                        
+                        // Find all versions of this package and get the latest
+                        var matchingMetadata = _packageManager.PackageMetadata.Values
+                            .Where(p => 
+                                System.IO.Path.GetFileNameWithoutExtension(p.Filename).StartsWith(baseName + ".", StringComparison.OrdinalIgnoreCase) ||
+                                p.PackageName.StartsWith(baseName + ".", StringComparison.OrdinalIgnoreCase))
+                            .OrderByDescending(p => p.Version)
+                            .FirstOrDefault();
+                        
+                        packageMetadata = matchingMetadata;
+                    }
                 }
 
                 // Cache the result (even if null to avoid repeated lookups)
@@ -146,12 +171,475 @@ namespace VPM
             }
         }
 
+        /// <summary>
+        /// Initializes the ImageListView control with service configuration
+        /// </summary>
+        public void InitializeImageListView()
+        {
+            if (ImagesListView != null)
+            {
+                _imageListViewService.ConfigureImageListView(ImagesListView);
+            }
+        }
+
+        /// <summary>
+        /// Gets statistics about the currently displayed images
+        /// </summary>
+        public ImageListViewStatistics GetCurrentImageStatistics()
+        {
+            return _imageListViewService.GetStatistics(PreviewImages);
+        }
+
+        /// <summary>
+        /// Filters displayed images by extraction status
+        /// </summary>
+        public void FilterImagesByExtractionStatus(bool isExtracted)
+        {
+            var filtered = _imageListViewService.FilterByExtractionStatus(PreviewImages, isExtracted);
+            PreviewImages.Clear();
+            foreach (var item in filtered)
+            {
+                PreviewImages.Add(item);
+            }
+        }
+
+        /// <summary>
+        /// Sorts displayed images by package name
+        /// </summary>
+        public void SortImagesByPackageName()
+        {
+            var sorted = _imageListViewService.SortByPackageName(PreviewImages);
+            PreviewImages.Clear();
+            foreach (var item in sorted)
+            {
+                PreviewImages.Add(item);
+            }
+        }
+
+        /// <summary>
+        /// Sorts displayed images by internal path
+        /// </summary>
+        public void SortImagesByPath()
+        {
+            var sorted = _imageListViewService.SortByPath(PreviewImages);
+            PreviewImages.Clear();
+            foreach (var item in sorted)
+            {
+                PreviewImages.Add(item);
+            }
+        }
+
+        /// <summary>
+        /// Updates the image statistics display in the UI
+        /// </summary>
+        private void UpdateImageStatisticsDisplay()
+        {
+            try
+            {
+                var stats = GetCurrentImageStatistics();
+                
+                if (ImageStatsTextBlock != null)
+                {
+                    ImageStatsTextBlock.Text = stats.TotalItems == 1 
+                        ? "1 image" 
+                        : $"{stats.TotalItems} images";
+                }
+                
+                if (ImageExtractedStatsTextBlock != null)
+                {
+                    ImageExtractedStatsTextBlock.Text = stats.ExtractedItems == 1
+                        ? "1 extracted item"
+                        : $"{stats.ExtractedItems} extracted items";
+                }
+                
+                // Log loading metrics for performance monitoring
+                LogLoadingMetrics();
+            }
+            catch (Exception ex)
+            {
+            }
+        }
+        
+        /// <summary>
+        /// Logs loading metrics for performance monitoring
+        /// </summary>
+        private void LogLoadingMetrics()
+        {
+            try
+            {
+                if (_virtualizedImageGridManager != null)
+                {
+                    var metrics = _virtualizedImageGridManager.GetMetrics();
+                }
+            }
+            catch (Exception ex)
+            {
+            }
+        }
+
+        /// <summary>
+        /// Shows only extracted images
+        /// </summary>
+        private void ShowExtractedImages_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                FilterImagesByExtractionStatus(true);
+                UpdateImageStatisticsDisplay();
+            }
+            catch (Exception ex)
+            {
+            }
+        }
+
+        /// <summary>
+        /// Shows all images (clears filter)
+        /// </summary>
+        private void ShowAllImages_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                // Reload all images for currently selected packages
+                var selectedPackages = PackageDataGrid?.SelectedItems?.Cast<PackageItem>()?.ToList();
+                if (selectedPackages != null && selectedPackages.Count > 0)
+                {
+                    _ = DisplayMultiplePackageImagesAsync(selectedPackages);
+                }
+            }
+            catch (Exception ex)
+            {
+            }
+        }
+
+        // Track selected content types for filtering
+        private HashSet<string> _selectedContentTypes = new HashSet<string>();
+        private List<ImagePreviewItem> _allPreviewImages = new List<ImagePreviewItem>();
+
+        /// <summary>
+        /// Opens the content type filter dropdown
+        /// </summary>
+        private void ContentTypeFilterButton_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                // Get all unique content types from current images
+                var contentTypes = new HashSet<string>();
+                foreach (var item in PreviewImages)
+                {
+                    var category = VPM.Services.VarContentExtractor.GetCategoryFromPath(item.InternalPath);
+                    if (!string.IsNullOrEmpty(category))
+                    {
+                        contentTypes.Add(category);
+                    }
+                }
+
+                // Populate checkboxes for each content type
+                var checkboxesPanel = FindName("ContentTypeCheckboxes") as System.Windows.Controls.ItemsControl;
+                if (checkboxesPanel != null)
+                {
+                    checkboxesPanel.Items.Clear();
+                    foreach (var type in contentTypes.OrderBy(x => x))
+                    {
+                        var checkbox = new System.Windows.Controls.CheckBox
+                        {
+                            Content = type,
+                            Foreground = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Colors.White),
+                            Margin = new System.Windows.Thickness(0, 6, 0, 6),
+                            FontSize = 12,
+                            IsChecked = _selectedContentTypes.Contains(type)
+                        };
+
+                        // Apply custom checkbox style
+                        var style = new System.Windows.Style(typeof(System.Windows.Controls.CheckBox));
+                        style.Setters.Add(new System.Windows.Setter(System.Windows.Controls.CheckBox.TemplateProperty, CreateCustomCheckboxTemplate()));
+                        checkbox.Style = style;
+
+                        checkbox.Checked += ContentTypeCheckbox_Changed;
+                        checkbox.Unchecked += ContentTypeCheckbox_Changed;
+                        checkboxesPanel.Items.Add(checkbox);
+                    }
+                }
+
+                // Update filter clear button visibility
+                UpdateFilterClearButtonVisibility();
+
+                // Show the popup
+                var popup = FindName("ContentTypeFilterPopup") as System.Windows.Controls.Primitives.Popup;
+                if (popup != null)
+                {
+                    popup.IsOpen = true;
+                }
+            }
+            catch (Exception ex)
+            {
+            }
+        }
+
+        /// <summary>
+        /// Handles checkbox changes in the filter dropdown
+        /// </summary>
+        private void ContentTypeCheckbox_Changed(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                var checkbox = sender as System.Windows.Controls.CheckBox;
+                if (checkbox == null) return;
+
+                var contentType = checkbox.Content as string;
+                if (string.IsNullOrEmpty(contentType)) return;
+
+                if (checkbox.IsChecked == true)
+                {
+                    _selectedContentTypes.Add(contentType);
+                    
+                    // Uncheck "Show All" when a content type is selected
+                    var filterShowAll = FindName("FilterShowAll") as System.Windows.Controls.CheckBox;
+                    if (filterShowAll != null && filterShowAll.IsChecked == true)
+                    {
+                        filterShowAll.IsChecked = false;
+                    }
+                }
+                else
+                {
+                    _selectedContentTypes.Remove(contentType);
+                }
+
+                ApplyContentTypeFilter();
+                UpdateFilterClearButtonVisibility();
+            }
+            catch (Exception ex)
+            {
+            }
+        }
+
+        /// <summary>
+        /// Handles "Show All" checkbox
+        /// </summary>
+        private void FilterShowAll_Checked(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                _selectedContentTypes.Clear();
+                
+                // Uncheck all content type checkboxes
+                var checkboxesPanel = FindName("ContentTypeCheckboxes") as System.Windows.Controls.ItemsControl;
+                if (checkboxesPanel != null)
+                {
+                    foreach (var item in checkboxesPanel.Items)
+                    {
+                        if (item is System.Windows.Controls.CheckBox checkbox)
+                        {
+                            checkbox.IsChecked = false;
+                        }
+                    }
+                }
+                
+                ApplyContentTypeFilter();
+                UpdateFilterClearButtonVisibility();
+            }
+            catch (Exception ex)
+            {
+            }
+        }
+
+        /// <summary>
+        /// Handles "Show All" checkbox unchecked
+        /// </summary>
+        private void FilterShowAll_Unchecked(object sender, RoutedEventArgs e)
+        {
+            // No action needed - user will select specific types
+        }
+
+        /// <summary>
+        /// Clears all filters and selects "Show All"
+        /// </summary>
+        private void ClearFilters_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                _selectedContentTypes.Clear();
+                
+                // Check "Show All"
+                var filterShowAll = FindName("FilterShowAll") as System.Windows.Controls.CheckBox;
+                if (filterShowAll != null)
+                {
+                    filterShowAll.IsChecked = true;
+                }
+                
+                // Uncheck all content type checkboxes
+                var checkboxesPanel = FindName("ContentTypeCheckboxes") as System.Windows.Controls.ItemsControl;
+                if (checkboxesPanel != null)
+                {
+                    foreach (var item in checkboxesPanel.Items)
+                    {
+                        if (item is System.Windows.Controls.CheckBox checkbox)
+                        {
+                            checkbox.IsChecked = false;
+                        }
+                    }
+                }
+                
+                ApplyContentTypeFilter();
+                UpdateFilterClearButtonVisibility();
+                
+                // Close the popup
+                var popup = FindName("ContentTypeFilterPopup") as System.Windows.Controls.Primitives.Popup;
+                if (popup != null)
+                {
+                    popup.IsOpen = false;
+                }
+            }
+            catch (Exception ex)
+            {
+            }
+        }
+
+        /// <summary>
+        /// Updates the visibility of the filter clear button
+        /// </summary>
+        private void UpdateFilterClearButtonVisibility()
+        {
+            try
+            {
+                var clearButton = FindName("ClearFiltersButton") as System.Windows.Controls.Button;
+                if (clearButton != null)
+                {
+                    // Show button only if there are selected content types (not "Show All")
+                    clearButton.Visibility = _selectedContentTypes.Count > 0 
+                        ? System.Windows.Visibility.Visible 
+                        : System.Windows.Visibility.Collapsed;
+                }
+            }
+            catch (Exception ex)
+            {
+            }
+        }
+
+        /// <summary>
+        /// Creates a custom checkbox template with dark theme styling
+        /// </summary>
+        private System.Windows.Controls.ControlTemplate CreateCustomCheckboxTemplate()
+        {
+            var template = new System.Windows.Controls.ControlTemplate(typeof(System.Windows.Controls.CheckBox));
+
+            // Create the checkbox box
+            var border = new System.Windows.FrameworkElementFactory(typeof(System.Windows.Controls.Border));
+            border.SetValue(System.Windows.Controls.Border.WidthProperty, 18.0);
+            border.SetValue(System.Windows.Controls.Border.HeightProperty, 18.0);
+            border.SetValue(System.Windows.Controls.Border.CornerRadiusProperty, new System.Windows.CornerRadius(2));
+            border.SetValue(System.Windows.Controls.Border.BackgroundProperty, new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(45, 45, 45)));
+            border.SetValue(System.Windows.Controls.Border.BorderBrushProperty, new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(85, 85, 85)));
+            border.SetValue(System.Windows.Controls.Border.BorderThicknessProperty, new System.Windows.Thickness(1));
+            border.SetValue(System.Windows.Controls.Border.MarginProperty, new System.Windows.Thickness(0, 0, 8, 0));
+
+            // Create the checkmark text - bind visibility to IsChecked
+            var checkmark = new System.Windows.FrameworkElementFactory(typeof(System.Windows.Controls.TextBlock));
+            checkmark.SetValue(System.Windows.Controls.TextBlock.TextProperty, "✓");
+            checkmark.SetValue(System.Windows.Controls.TextBlock.ForegroundProperty, new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(0, 212, 255)));
+            checkmark.SetValue(System.Windows.Controls.TextBlock.FontSizeProperty, 12.0);
+            checkmark.SetValue(System.Windows.Controls.TextBlock.FontWeightProperty, System.Windows.FontWeights.Bold);
+            checkmark.SetValue(System.Windows.Controls.TextBlock.HorizontalAlignmentProperty, System.Windows.HorizontalAlignment.Center);
+            checkmark.SetValue(System.Windows.Controls.TextBlock.VerticalAlignmentProperty, System.Windows.VerticalAlignment.Center);
+            
+            // Use binding instead of triggers to avoid VisualTree issues
+            var visibilityBinding = new System.Windows.Data.Binding("IsChecked");
+            visibilityBinding.RelativeSource = new System.Windows.Data.RelativeSource(System.Windows.Data.RelativeSourceMode.TemplatedParent);
+            visibilityBinding.Converter = new BooleanToVisibilityConverter();
+            checkmark.SetBinding(System.Windows.Controls.TextBlock.VisibilityProperty, visibilityBinding);
+
+            border.AppendChild(checkmark);
+
+            // Create the content presenter
+            var contentPresenter = new System.Windows.FrameworkElementFactory(typeof(System.Windows.Controls.ContentPresenter));
+            contentPresenter.SetValue(System.Windows.Controls.ContentPresenter.VerticalAlignmentProperty, System.Windows.VerticalAlignment.Center);
+
+            // Create the stack panel
+            var stackPanel = new System.Windows.FrameworkElementFactory(typeof(System.Windows.Controls.StackPanel));
+            stackPanel.SetValue(System.Windows.Controls.StackPanel.OrientationProperty, System.Windows.Controls.Orientation.Horizontal);
+            stackPanel.AppendChild(border);
+            stackPanel.AppendChild(contentPresenter);
+
+            template.VisualTree = stackPanel;
+
+            return template;
+        }
+
+        /// <summary>
+        /// Simple converter to convert boolean to visibility
+        /// </summary>
+        private class BooleanToVisibilityConverter : System.Windows.Data.IValueConverter
+        {
+            public object Convert(object value, System.Type targetType, object parameter, System.Globalization.CultureInfo culture)
+            {
+                if (value is bool b)
+                {
+                    return b ? System.Windows.Visibility.Visible : System.Windows.Visibility.Collapsed;
+                }
+                return System.Windows.Visibility.Collapsed;
+            }
+
+            public object ConvertBack(object value, System.Type targetType, object parameter, System.Globalization.CultureInfo culture)
+            {
+                if (value is System.Windows.Visibility v)
+                {
+                    return v == System.Windows.Visibility.Visible;
+                }
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// Applies the content type filter to the preview images
+        /// </summary>
+        private void ApplyContentTypeFilter()
+        {
+            try
+            {
+                // If no types selected, show all
+                if (_selectedContentTypes.Count == 0)
+                {
+                    PreviewImages.Clear();
+                    foreach (var item in _allPreviewImages)
+                    {
+                        PreviewImages.Add(item);
+                    }
+                }
+                else
+                {
+                    // Filter to only selected types
+                    var filtered = new List<ImagePreviewItem>();
+                    foreach (var item in _allPreviewImages)
+                    {
+                        var category = VPM.Services.VarContentExtractor.GetCategoryFromPath(item.InternalPath);
+                        if (_selectedContentTypes.Contains(category))
+                        {
+                            filtered.Add(item);
+                        }
+                    }
+
+                    PreviewImages.Clear();
+                    foreach (var item in filtered)
+                    {
+                        PreviewImages.Add(item);
+                    }
+                }
+
+                UpdateImageStatisticsDisplay();
+            }
+            catch (Exception ex)
+            {
+            }
+        }
+
         private VPM.Services.VirtualizedImageGridManager _virtualizedImageGridManager;
+        private List<VPM.Windows.LazyLoadImage> _pendingLazyImages = new List<VPM.Windows.LazyLoadImage>();
+        private DispatcherTimer _batchRegistrationTimer;
 
         private void LazyLoadImage_Loaded(object sender, RoutedEventArgs e)
         {
             if (sender is VPM.Windows.LazyLoadImage lazyImage)
             {
+                // Ensure manager is initialized
                 if (_virtualizedImageGridManager == null)
                 {
                     // Try to find the ScrollViewer from the ImageListView
@@ -160,12 +648,43 @@ namespace VPM
                     {
                         _virtualizedImageGridManager = new VPM.Services.VirtualizedImageGridManager(scrollViewer);
                     }
+                    else
+                    {
+                        return; // Can't proceed without manager
+                    }
                 }
 
-                _virtualizedImageGridManager?.RegisterImage(lazyImage);
+                // Collect images for batch registration instead of registering individually
+                _pendingLazyImages.Add(lazyImage);
                 
-                // Trigger initial load check
-                _virtualizedImageGridManager?.ProcessImagesAsync();
+                // Debounce batch registration to collect all loaded images
+                if (_batchRegistrationTimer == null)
+                {
+                    _batchRegistrationTimer = new DispatcherTimer
+                    {
+                        Interval = TimeSpan.FromMilliseconds(150) // Increased to 150ms for better batching
+                    };
+                    
+                    _batchRegistrationTimer.Tick += async (s, args) =>
+                    {
+                        _batchRegistrationTimer.Stop();
+                        
+                        if (_pendingLazyImages.Count > 0 && _virtualizedImageGridManager != null)
+                        {
+                            var imagesToRegister = new List<VPM.Windows.LazyLoadImage>(_pendingLazyImages);
+                            _pendingLazyImages.Clear();
+                            
+                            // Batch register all pending images
+                            await _virtualizedImageGridManager.BatchRegisterAsync(imagesToRegister);
+                        }
+                        else if (_virtualizedImageGridManager == null)
+                        {
+                        }
+                    };
+                }
+                
+                _batchRegistrationTimer.Stop();
+                _batchRegistrationTimer.Start();
             }
         }
 
@@ -192,9 +711,24 @@ namespace VPM
                 }
 
                 PreviewImages.Clear();
+                _allPreviewImages.Clear();
+                _selectedContentTypes.Clear();
+                
+                // Stop and reset batch registration timer to prevent stale registrations
+                if (_batchRegistrationTimer != null)
+                {
+                    _batchRegistrationTimer.Stop();
+                }
+                _pendingLazyImages.Clear();
                 
                 // Clear the virtualized manager if it exists
                 _virtualizedImageGridManager?.Clear();
+                
+                // Clear service cache and selection for fresh display
+                _imageListViewService.ClearSelection();
+                
+                // Clear statistics display
+                UpdateImageStatisticsDisplay();
                 
                 if (selectedPackages == null || selectedPackages.Count == 0)
                     return;
@@ -226,37 +760,7 @@ namespace VPM
                         
                         if (_imageManager.ImageIndex.TryGetValue(packageBase, out var locations) && locations != null && locations.Count > 0)
                         {
-                            // Create brush on UI thread or use a frozen one
-                            // Since we are on a background thread, we must create and freeze it carefully
-                            // However, SolidColorBrush constructor might require STA if not careful with colors
-                            // Safer to just use the color property and let the UI bind to it, or create it on UI thread
                             
-                            // Option 1: Create on UI thread (slows down loop)
-                            // Option 2: Use pre-frozen brushes (better)
-                            // Option 3: Just pass the color and let the item create the brush (best for MVVM)
-                            
-                            // For now, let's try to create it safely. 
-                            // System.Windows.Media.Color is a struct, so it's safe.
-                            // SolidColorBrush is a DispatcherObject.
-                            
-                            // FIX: Create the brush on the UI thread before the loop or inside Invoke
-                            // But since we are in a background loop, let's just store the color in the item 
-                            // and let the UI converter handle it, OR create a frozen brush.
-                            
-                            // Actually, the error "The calling thread must be STA" happens when creating UI objects.
-                            // We can create a frozen brush on any thread IF we don't access DependencyProperties that require thread affinity.
-                            // But SolidColorBrush constructor IS safe on background threads if frozen immediately? 
-                            // Apparently not always in WPF.
-                            
-                            // Let's move the brush creation to the UI thread dispatch.
-                            // Or better, since all items for a package share the same status color, 
-                            // we can just pass the color to the item and let the item create the brush?
-                            // No, ImagePreviewItem expects a Brush.
-                            
-                            // Let's create a thread-safe way to get the brush.
-                            // We can't easily do it here without Invoke.
-                            
-                            // Workaround: Create a frozen brush using Dispatcher
                             SolidColorBrush statusBrush = null;
                             await Dispatcher.InvokeAsync(() => 
                             {
@@ -296,8 +800,15 @@ namespace VPM
                                     ImageHeight = location.Height,
                                     LoadImageCallback = async () => 
                                     {
-                                        var img = await _imageManager.LoadImageAsync(location.VarFilePath, location.InternalPath, 0, 0);
-                                        return img;
+                                        try
+                                        {
+                                            var img = await _imageManager.LoadImageAsync(location.VarFilePath, location.InternalPath, 0, 0);
+                                            return img;
+                                        }
+                                        catch (Exception ex)
+                                        {
+                                            return null;
+                                        }
                                     }
                                 };
                                 
@@ -315,6 +826,9 @@ namespace VPM
                                         foreach (var i in itemsToAdd)
                                         {
                                             PreviewImages.Add(i);
+                                            _allPreviewImages.Add(i);
+                                            // Cache items in the service for fast lookup
+                                            _imageListViewService.CacheItem(i);
                                         }
                                     }, DispatcherPriority.Background);
                                 }
@@ -331,6 +845,9 @@ namespace VPM
                             foreach (var i in batch)
                             {
                                 PreviewImages.Add(i);
+                                _allPreviewImages.Add(i);
+                                // Cache items in the service for fast lookup
+                                _imageListViewService.CacheItem(i);
                             }
                         }, DispatcherPriority.Background);
                     }
@@ -338,11 +855,8 @@ namespace VPM
 
                 }, cancellationToken);
                 
-                // Trigger initial load for visible images
-                if (_virtualizedImageGridManager != null)
-                {
-                    await _virtualizedImageGridManager.LoadInitialVisibleImagesAsync();
-                }
+                // Update statistics display
+                UpdateImageStatisticsDisplay();
             }
             catch (Exception)
             {
@@ -433,15 +947,24 @@ namespace VPM
                 }
                 else
                 {
-                    // Extract
-                    int extractedCount = await VPM.Services.VarContentExtractor.ExtractRelatedFilesAsync(metadata.FilePath, imageItem.InternalPath, gameFolder);
+                    // Extract and track parent items that were automatically extracted
+                    var (extractedCount, extractedParentPaths) = await VPM.Services.VarContentExtractor.ExtractRelatedFilesWithParentsAsync(metadata.FilePath, imageItem.InternalPath, gameFolder);
                     
                     if (extractedCount > 0)
                     {
                         imageItem.IsExtracted = true;
                         
-                        // Refresh the header button binding to show the delete button
-                        RefreshPackageHeaderBinding(packageItem);
+                        // Update only the affected item's button state
+                        UpdateImageItemButtonState(imageItem);
+                        
+                        // Update parent items that were automatically extracted
+                        if (extractedParentPaths.Count > 0)
+                        {
+                            UpdateExtractedParentItems(extractedParentPaths);
+                        }
+                        
+                        // Update statistics display to show new extracted count
+                        UpdateImageStatisticsDisplay();
                     }
                     else
                     {
@@ -493,6 +1016,12 @@ namespace VPM
                 await VPM.Services.VarContentExtractor.RemoveRelatedFilesAsync(metadata.FilePath, imageItem.InternalPath, gameFolder);
                 
                 imageItem.IsExtracted = false;
+                
+                // Update only the affected item's button state
+                UpdateImageItemButtonState(imageItem);
+                
+                // Update statistics display to show new extracted count
+                UpdateImageStatisticsDisplay();
             }
             catch (Exception ex)
             {
@@ -553,15 +1082,17 @@ namespace VPM
                     {
                         await VPM.Services.VarContentExtractor.RemoveRelatedFilesAsync(metadata.FilePath, item.InternalPath, gameFolder);
                         item.IsExtracted = false;
+                        
+                        // Update only the affected item's button state
+                        UpdateImageItemButtonState(item);
                     }
                     catch (Exception ex)
                     {
-                        System.Diagnostics.Debug.WriteLine($"Error deleting {item.InternalPath}: {ex.Message}");
                     }
                 }
 
-                // Refresh the header button binding to hide the delete button
-                RefreshPackageHeaderBinding(packageItem);
+                // Update statistics display to show new extracted count
+                UpdateImageStatisticsDisplay();
             }
             catch (Exception ex)
             {
@@ -858,9 +1389,9 @@ namespace VPM
         }
 
         /// <summary>
-        /// Refreshes the package header binding to update the delete button visibility
+        /// Updates only the button state for a specific image item without refreshing the entire grid
         /// </summary>
-        private void RefreshPackageHeaderBinding(PackageItem packageItem)
+        private void UpdateImageItemButtonState(ImagePreviewItem imageItem)
         {
             try
             {
@@ -868,29 +1399,100 @@ namespace VPM
                 var imageListView = this.FindName("ImagesListView") as ImageListView;
                 if (imageListView == null) return;
 
-                // Get the items source and find the group for this package
-                var collectionView = System.Windows.Data.CollectionViewSource.GetDefaultView(imageListView.ItemsSource);
-                if (collectionView?.Groups == null) return;
-
-                foreach (var group in collectionView.Groups)
+                // Find the LazyLoadImage control for this item
+                var lazyLoadImages = FindAllVisualChildren<LazyLoadImage>(imageListView);
+                foreach (var lazyImage in lazyLoadImages)
                 {
-                    var groupItem = group as System.Windows.Data.CollectionViewGroup;
-                    if (groupItem?.Items.Count > 0)
+                    // Match by internal path since that's unique per image
+                    if (lazyImage.InternalImagePath == imageItem.InternalPath)
                     {
-                        var firstItem = groupItem.Items[0] as ImagePreviewItem;
-                        if (firstItem?.PackageItem == packageItem)
-                        {
-                            // With the official ImageListView, grouping is handled natively
-                            // Refresh the collection view to update the UI
-                            collectionView.Refresh();
-                            return;
-                        }
+                        // Update the extraction state which updates the button UI
+                        lazyImage.SetExtractionState(imageItem.IsExtracted);
+                        return;
                     }
                 }
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine($"Error refreshing package header binding: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// Updates extracted parent items in the preview grid when they're automatically extracted as dependencies
+        /// </summary>
+        private void UpdateExtractedParentItems(List<string> extractedParentPaths)
+        {
+            try
+            {
+                if (extractedParentPaths == null || extractedParentPaths.Count == 0)
+                    return;
+
+                // Update all matching items in both PreviewImages and _allPreviewImages collections
+                foreach (var parentPath in extractedParentPaths)
+                {
+                    var normalizedParentPath = parentPath.Replace('\\', '/').ToLower();
+                    
+                    // Update in PreviewImages (currently displayed)
+                    var matchingItems = PreviewImages
+                        .Where(item => item.InternalPath.Replace('\\', '/').ToLower() == normalizedParentPath)
+                        .ToList();
+                    
+                    foreach (var item in matchingItems)
+                    {
+                        item.IsExtracted = true;
+                    }
+                    
+                    // Also update in _allPreviewImages (master list for filtering)
+                    var allMatchingItems = _allPreviewImages
+                        .Where(item => item.InternalPath.Replace('\\', '/').ToLower() == normalizedParentPath)
+                        .ToList();
+                    
+                    foreach (var item in allMatchingItems)
+                    {
+                        item.IsExtracted = true;
+                    }
+                }
+
+                // Then, update the visual LazyLoadImage controls if they're loaded
+                var imageListView = this.FindName("ImagesListView") as ImageListView;
+                if (imageListView == null) return;
+
+                var lazyLoadImages = FindAllVisualChildren<LazyLoadImage>(imageListView);
+                if (lazyLoadImages.Count == 0) return;
+
+                // For each extracted parent path, find and update matching LazyLoadImage controls
+                foreach (var parentPath in extractedParentPaths)
+                {
+                    var normalizedParentPath = parentPath.Replace('\\', '/').ToLower();
+
+                    // Find all LazyLoadImage controls that match this parent image path
+                    var found = false;
+                    foreach (var lazyImage in lazyLoadImages)
+                    {
+                        if (string.IsNullOrEmpty(lazyImage.InternalImagePath)) continue;
+
+                        var normalizedImagePath = lazyImage.InternalImagePath.Replace('\\', '/').ToLower();
+
+                        // Match if paths are the same
+                        if (normalizedImagePath == normalizedParentPath)
+                        {
+                            // Update the extraction state which updates the button UI
+                            lazyImage.SetExtractionState(true);
+                            found = true;
+                            break; // Found the match, move to next parent path
+                        }
+                    }
+                    
+                    // If not found in current view, it means the parent item is not displayed
+                    // This is normal - the parent might be in a different package or scrolled out of view
+                    if (!found)
+                    {
+                        // The data model was already updated above, so when the user scrolls to it, it will show as extracted
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
             }
         }
 

@@ -220,6 +220,20 @@ namespace VPM.Models
 
         public System.Func<System.Threading.Tasks.Task<System.Windows.Media.Imaging.BitmapImage>> LoadImageCallback { get; set; }
 
+        private bool _isBannerItem;
+        public bool IsBannerItem
+        {
+            get => _isBannerItem;
+            set
+            {
+                if (_isBannerItem != value)
+                {
+                    _isBannerItem = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
         public event PropertyChangedEventHandler PropertyChanged;
 
         protected virtual void OnPropertyChanged([CallerMemberName] string propertyName = null)

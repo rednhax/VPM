@@ -360,7 +360,13 @@ namespace VPM.Windows
                     var callback = LoadImageCallback;
                     if (callback != null)
                     {
-                        image = await callback();
+                        try
+                        {
+                            image = await callback();
+                        }
+                        catch (Exception ex)
+                        {
+                        }
                     }
                 }
                 
@@ -385,9 +391,8 @@ namespace VPM.Windows
                     });
                 }
             }
-            catch (Exception)
+            catch (Exception ex)
             {
-                // Ignore errors
             }
             finally
             {

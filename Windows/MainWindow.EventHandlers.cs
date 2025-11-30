@@ -2035,6 +2035,9 @@ namespace VPM
             if (CustomAtomDataGrid != null)
                 CustomAtomDataGrid.ItemsSource = CustomAtomItemsView;
             
+            // Initialize ImageListView control with service configuration
+            InitializeImageListView();
+            
             // Initialize button states
             UpdateLinkedFiltersButtonState();
         }

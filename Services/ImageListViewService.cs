@@ -70,7 +70,7 @@ namespace VPM.Services
         /// <summary>
         /// Caches an item for fast lookup
         /// </summary>
-        private void CacheItem(ImagePreviewItem sourceItem)
+        public void CacheItem(ImagePreviewItem sourceItem)
         {
             if (sourceItem != null && !_itemCache.ContainsKey(sourceItem))
             {
