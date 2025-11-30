@@ -242,7 +242,6 @@ namespace VPM.Services
                     // isSourceInArchive remains false - we're modifying current package
                     // Note: Textures being converted will be read from archive in the conversion loop for better quality
                     
-                    System.Diagnostics.Debug.WriteLine($"SCENARIO 2: Copied source to temp: {tempSourcePath}");
                 }
                 else if (!createBackup && File.Exists(archiveFilePath) && (config.MinifyJson || config.ForceLatestDependencies || config.DisabledDependencies.Count > 0 || config.DisableMorphPreload))
                 {
@@ -261,7 +260,6 @@ namespace VPM.Services
                     finalOutputPath = sourceVarPath; // Write back to original location
                     // isSourceInArchive remains false for in-place modification
                     
-                    System.Diagnostics.Debug.WriteLine($"SCENARIO 2B: Copied source to temp: {tempSourcePath}");
                 }
                 else if (createBackup && !File.Exists(archiveFilePath))
                 {
@@ -561,28 +559,6 @@ namespace VPM.Services
                         var textureEntries = entriesToProcess.Where(e => e.needsTextureConversion).ToList();
                         var unsupportedCompressionTextures = new List<string>();
                         
-                        // DEBUG: Log texture conversion configuration
-                        System.Diagnostics.Debug.WriteLine($"\n=== TEXTURE CONVERSION IN REPACKAGER ===");
-                        System.Diagnostics.Debug.WriteLine($"Textures in config.TextureConversions: {config.TextureConversions.Count}");
-                        foreach (var texPath in config.TextureConversions.Keys)
-                        {
-                            System.Diagnostics.Debug.WriteLine($"  - {texPath}");
-                        }
-                        System.Diagnostics.Debug.WriteLine($"Total entries in archive: {entriesToProcess.Count}");
-                        System.Diagnostics.Debug.WriteLine($"Entries needing texture conversion: {textureEntries.Count}");
-                        
-                        // Show which archive entries are image files
-                        var imageEntries = entriesToProcess.Where(e => 
-                            e.entry.Key.EndsWith(".png", StringComparison.OrdinalIgnoreCase) ||
-                            e.entry.Key.EndsWith(".jpg", StringComparison.OrdinalIgnoreCase) ||
-                            e.entry.Key.EndsWith(".jpeg", StringComparison.OrdinalIgnoreCase)).ToList();
-                        System.Diagnostics.Debug.WriteLine($"Image files in archive: {imageEntries.Count}");
-                        foreach (var img in imageEntries)
-                        {
-                            bool isInConfig = config.TextureConversions.ContainsKey(img.entry.Key);
-                            System.Diagnostics.Debug.WriteLine($"  - {img.entry.Key} | IN_CONFIG: {isInConfig}");
-                        }
-                        
                         if (textureEntries.Count > 0)
                         {
                             progressCallback?.Invoke($"⚡ Starting texture conversion...", 0, totalOperations);
@@ -596,13 +572,23 @@ namespace VPM.Services
                         int maxConcurrentTextures = Math.Max(2, Environment.ProcessorCount); // Full parallelism for CPU-bound work
                         _performanceTimer.Start("Texture Conversion (All)");
                         
-                        // For texture conversion, prefer reading from archive (original) for better quality
-                        // This allows 8K→2K conversion even if current package has 4K textures
-                        string textureSourcePath = File.Exists(archiveFilePath) ? archiveFilePath : sourcePathForProcessing;
+                        // Determine texture source paths
+                        // - For downscaling: read from current package (sourcePathForProcessing)
+                        // - For upscaling: read from archive (archiveFilePath) if available
+                        bool archiveExists = File.Exists(archiveFilePath);
                         
-                        using (var archivePool = new ArchiveHandlePool(textureSourcePath, maxConcurrentTextures))
+                        // Create archive pool for upscaling from archive (if needed)
+                        ArchiveHandlePool archivePoolForUpscale = null;
+                        if (archiveExists)
+                        {
+                            archivePoolForUpscale = new ArchiveHandlePool(archiveFilePath, maxConcurrentTextures);
+                        }
+                        
+                        using (var archivePool = new ArchiveHandlePool(sourcePathForProcessing, maxConcurrentTextures))
                         using (var semaphore = new System.Threading.SemaphoreSlim(maxConcurrentTextures))
                         {
+                            try
+                            {
                             var tasks = textureEntries.Select(async item =>
                             {
                                 await semaphore.WaitAsync();
@@ -614,15 +600,27 @@ namespace VPM.Services
                                     progressCallback?.Invoke($"⚡ Converting: {Path.GetFileName(entry.Key)}", processedCount, totalOperations);
 
                                     var conversionInfo = config.TextureConversions[entry.Key];
+                                    
+                                    // Determine if this is an upscale operation
+                                    int targetDimension = TextureConverter.GetTargetDimension(conversionInfo.targetResolution);
+                                    int currentMaxDim = Math.Max(conversionInfo.originalWidth, conversionInfo.originalHeight);
+                                    bool needsUpscale = targetDimension > currentMaxDim;
+                                    
+                                    // For upscaling, we need to read from archive (original high-res source)
+                                    bool useArchiveSource = needsUpscale && archiveExists && archivePoolForUpscale != null;
 
                                     try
                                     {
                                         // Load texture data - use pool for parallel access
                                         byte[] sourceData = null;
+                                        int actualSourceDimension = currentMaxDim; // Track actual source dimension for reporting
                                         try
                                         {
+                                            // Choose which archive to read from
+                                            var poolToUse = useArchiveSource ? archivePoolForUpscale : archivePool;
+                                            
                                             // Acquire a dedicated archive handle for this thread
-                                            var poolArchive = await archivePool.AcquireHandleAsync();
+                                            var poolArchive = await poolToUse.AcquireHandleAsync();
                                             try
                                             {
                                                 // Find the entry in this archive instance
@@ -636,6 +634,34 @@ namespace VPM.Services
                                                         stream.CopyTo(ms);
                                                         sourceData = ms.ToArray();
                                                     }
+                                                    
+                                                    // If reading from archive for upscale, get actual dimensions from archive
+                                                    if (useArchiveSource && sourceData != null && sourceData.Length > 0)
+                                                    {
+                                                        try
+                                                        {
+                                                            using var tempImage = NetVips.Image.NewFromBuffer(sourceData);
+                                                            actualSourceDimension = Math.Max(tempImage.Width, tempImage.Height);
+                                                        }
+                                                        catch { /* Keep original dimension on error */ }
+                                                    }
+                                                }
+                                                else if (useArchiveSource)
+                                                {
+                                                    // Entry not found in archive, fall back to current package
+                                                    poolToUse.ReleaseHandle(poolArchive);
+                                                    poolArchive = await archivePool.AcquireHandleAsync();
+                                                    threadEntry = SharpCompressHelper.FindEntry(poolArchive, entry.Key);
+                                                    if (threadEntry != null)
+                                                    {
+                                                        using (var stream = threadEntry.OpenEntryStream())
+                                                        using (var ms = new MemoryStream())
+                                                        {
+                                                            stream.CopyTo(ms);
+                                                            sourceData = ms.ToArray();
+                                                        }
+                                                    }
+                                                    useArchiveSource = false; // Fell back to current
                                                 }
                                                 else
                                                 {
@@ -644,7 +670,7 @@ namespace VPM.Services
                                             }
                                             finally
                                             {
-                                                archivePool.ReleaseHandle(poolArchive);
+                                                poolToUse.ReleaseHandle(poolArchive);
                                             }
                                         }
                                         catch (SharpCompress.Compressors.Deflate.ZlibException)
@@ -658,11 +684,13 @@ namespace VPM.Services
                                         Interlocked.Add(ref originalTotalSize, sourceData.Length);
 
                                         // Convert texture asynchronously
-                                        int targetDimension = TextureConverter.GetTargetDimension(conversionInfo.targetResolution);
+                                        // For upscaling from archive: allowUpscale=true to permit resizing to target
+                                        // For downscaling: allowUpscale=false (default behavior)
                                         string extension = Path.GetExtension(entry.Key);
+                                        bool allowUpscale = useArchiveSource && actualSourceDimension >= targetDimension;
                                         
                                         byte[] convertedData = await Task.Run(() => 
-                                            _textureConverter.ResizeImage(sourceData, targetDimension, extension));
+                                            _textureConverter.ResizeImage(sourceData, targetDimension, extension, allowUpscale));
 
                                         int currentProcessed = Interlocked.Increment(ref processedCount);
                                         
@@ -672,17 +700,33 @@ namespace VPM.Services
                                             Interlocked.Add(ref newTotalSize, convertedData.Length);
                                             
                                             string textureName = Path.GetFileName(entry.Key);
-                                            string originalRes = GetResolutionString(conversionInfo.originalWidth, conversionInfo.originalHeight);
-                                            string detail = $"  • {textureName}: {originalRes} -> {conversionInfo.targetResolution} ({FormatHelper.FormatBytes(sourceData.Length)} -> {FormatHelper.FormatBytes(convertedData.Length)})";
+                                            // Use actual source dimension for reporting (archive dimension if upscaling)
+                                            string sourceRes = GetResolutionStringFromDimension(actualSourceDimension);
+                                            string detail = $"  • {textureName}: {sourceRes} -> {conversionInfo.targetResolution} ({FormatHelper.FormatBytes(sourceData.Length)} -> {FormatHelper.FormatBytes(convertedData.Length)})";
                                             textureConversionDetails.Add(detail);
                                             
                                             convertedTextures[entry.Key] = (convertedData, entry.LastModifiedTime ?? DateTimeOffset.Now);
                                             progressCallback?.Invoke($"⚡ [{currentProcessed}/{totalOperations}] ✓ Converted: {Path.GetFileName(entry.Key)}", currentProcessed, totalOperations);
                                         }
+                                        else if (useArchiveSource && actualSourceDimension == targetDimension)
+                                        {
+                                            // RESTORATION: Archive has exact resolution we want, use archive data directly
+                                            // This happens when restoring from 2K back to 4K - archive already has 4K
+                                            Interlocked.Add(ref newTotalSize, sourceData.Length);
+                                            
+                                            string textureName = Path.GetFileName(entry.Key);
+                                            string sourceRes = GetResolutionStringFromDimension(actualSourceDimension);
+                                            string currentRes = GetResolutionStringFromDimension(currentMaxDim);
+                                            string detail = $"  • {textureName}: {currentRes} -> {conversionInfo.targetResolution} (restored from archive)";
+                                            textureConversionDetails.Add(detail);
+                                            
+                                            // Use archive data directly (no resize needed, already at target resolution)
+                                            convertedTextures[entry.Key] = (sourceData, entry.LastModifiedTime ?? DateTimeOffset.Now);
+                                            progressCallback?.Invoke($"⚡ [{currentProcessed}/{totalOperations}] ✓ Restored: {Path.GetFileName(entry.Key)}", currentProcessed, totalOperations);
+                                        }
                                         else
                                         {
                                             Interlocked.Add(ref newTotalSize, sourceData.Length);
-                                            System.Diagnostics.Debug.WriteLine($"  SKIPPED (no conversion): {Path.GetFileName(entry.Key)} | {sourceData.Length} bytes (converted data was null or larger)");
                                             progressCallback?.Invoke($"⚡ [{currentProcessed}/{totalOperations}] ⊘ Skipped: {Path.GetFileName(entry.Key)}", currentProcessed, totalOperations);
                                         }
                                         
@@ -746,6 +790,12 @@ namespace VPM.Services
 
                             // Wait for all texture conversions to complete
                             await System.Threading.Tasks.Task.WhenAll(tasks);
+                            }
+                            finally
+                            {
+                                // Dispose archive pool for upscaling if it was created
+                                archivePoolForUpscale?.Dispose();
+                            }
                         }
                         _performanceTimer.Stop("Texture Conversion (All)");
 
@@ -871,13 +921,6 @@ namespace VPM.Services
                         int writeIndex = 0;
                         int totalWrites = entriesToProcess.Count;
                         
-                        // DEBUG: Log archive writing details
-                        System.Diagnostics.Debug.WriteLine($"\n=== ARCHIVE WRITING DEBUG ===");
-                        System.Diagnostics.Debug.WriteLine($"Total entries to write: {totalWrites}");
-                        System.Diagnostics.Debug.WriteLine($"Converted textures: {convertedTextures.Count}");
-                        System.Diagnostics.Debug.WriteLine($"Modified scenes: {modifiedScenes.Count}");
-                        System.Diagnostics.Debug.WriteLine($"Failed textures: {failedTextures.Count}");
-                        
                         long totalBytesWritten = 0;
                         long totalBytesOriginal = 0;
                         var convertedTexturesList = new List<(string name, long original, long written)>();
@@ -970,11 +1013,9 @@ namespace VPM.Services
                                     var ms = new MemoryStream(dataToWrite);
                                     outputArchive.AddEntry(entry.Key, ms, closeStream: true);
                                     
-                                    // DEBUG: Log texture conversions
                                     if (needsTextureConversion && convertedTextures.ContainsKey(entry.Key))
                                     {
                                         convertedTexturesList.Add((Path.GetFileName(entry.Key), originalSize, writtenSize));
-                                        System.Diagnostics.Debug.WriteLine($"  CONVERTED: {Path.GetFileName(entry.Key)} | {originalSize} -> {writtenSize} bytes ({(writtenSize - originalSize > 0 ? "+" : "")}{writtenSize - originalSize})");
                                     }
                                 }
                                 else
@@ -1084,13 +1125,6 @@ namespace VPM.Services
                             }
                         }
                         
-                        // DEBUG: Log archive writing summary
-                        System.Diagnostics.Debug.WriteLine($"\n=== ARCHIVE WRITING SUMMARY ===");
-                        System.Diagnostics.Debug.WriteLine($"Total bytes original (in archive): {totalBytesOriginal}");
-                        System.Diagnostics.Debug.WriteLine($"Total bytes written: {totalBytesWritten}");
-                        System.Diagnostics.Debug.WriteLine($"Difference: {(totalBytesWritten - totalBytesOriginal > 0 ? "+" : "")}{totalBytesWritten - totalBytesOriginal} bytes");
-                        System.Diagnostics.Debug.WriteLine($"Entries written: {writeIndex}");
-
                         // Update meta.json with conversion details
                         if (!string.IsNullOrEmpty(originalMetaJson))
                         {
@@ -1206,25 +1240,15 @@ namespace VPM.Services
                         else
                         {
                             // Overwriting in the same location - delete the old file with retry
-                            System.Diagnostics.Debug.WriteLine($"\n=== FILE DELETE DEBUG ===");
-                            System.Diagnostics.Debug.WriteLine($"Attempting to delete: {finalOutputPath}");
-                            System.Diagnostics.Debug.WriteLine($"sourcePathForProcessing: {sourcePathForProcessing}");
-                            System.Diagnostics.Debug.WriteLine($"sourceVarPath: {sourceVarPath}");
-                            System.Diagnostics.Debug.WriteLine($"Are they same? finalOutputPath==sourcePathForProcessing: {finalOutputPath.Equals(sourcePathForProcessing, StringComparison.OrdinalIgnoreCase)}");
-                            System.Diagnostics.Debug.WriteLine($"Are they same? finalOutputPath==sourceVarPath: {finalOutputPath.Equals(sourceVarPath, StringComparison.OrdinalIgnoreCase)}");
-                            
                             for (int attempt = 1; attempt <= 5; attempt++)
                             {
                                 try
                                 {
-                                    System.Diagnostics.Debug.WriteLine($"Delete attempt {attempt}/5...");
                                     File.Delete(finalOutputPath);
-                                    System.Diagnostics.Debug.WriteLine($"Delete SUCCESS on attempt {attempt}");
                                     break;
                                 }
-                                catch (IOException ex) when (attempt < 5)
+                                catch (IOException) when (attempt < 5)
                                 {
-                                    System.Diagnostics.Debug.WriteLine($"Delete FAILED attempt {attempt}: {ex.Message}");
                                     // Force GC and wait for file handles to be released
                                     GC.Collect();
                                     GC.WaitForPendingFinalizers();
@@ -1244,7 +1268,6 @@ namespace VPM.Services
                         try
                         {
                             File.Delete(sourcePathForProcessing);
-                            System.Diagnostics.Debug.WriteLine($"Cleaned up temp source: {sourcePathForProcessing}");
                         }
                         catch { /* Ignore cleanup errors */ }
                     }
@@ -1256,18 +1279,6 @@ namespace VPM.Services
                     
                     // Get file sizes for statistics
                     long convertedSize = new FileInfo(finalOutputPath).Length;
-                    
-                    // Print performance report
-                    string perfReport = _performanceTimer.GetReport();
-                    System.Diagnostics.Debug.WriteLine(perfReport);
-                    Console.WriteLine(perfReport);
-                    
-                    // DEBUG: Final size comparison
-                    System.Diagnostics.Debug.WriteLine($"\n=== FINAL SIZE COMPARISON ===");
-                    System.Diagnostics.Debug.WriteLine($"Original file size: {originalFileSize} bytes");
-                    System.Diagnostics.Debug.WriteLine($"Converted file size: {convertedSize} bytes");
-                    System.Diagnostics.Debug.WriteLine($"Difference: {(convertedSize - originalFileSize > 0 ? "+" : "")}{convertedSize - originalFileSize} bytes");
-                    System.Diagnostics.Debug.WriteLine($"Percentage: {((double)(convertedSize - originalFileSize) / originalFileSize * 100):F1}%");
                     
                     // Use the original file size we captured at the start
                     // This ensures we compare the input size to output size correctly
@@ -2645,6 +2656,15 @@ namespace VPM.Services
             if (maxDim >= 2048) return "2K";
             if (maxDim >= 1024) return "1K";
             return $"{width}x{height}";
+        }
+        
+        private string GetResolutionStringFromDimension(int maxDim)
+        {
+            if (maxDim >= 7680) return "8K";
+            if (maxDim >= 4096) return "4K";
+            if (maxDim >= 2048) return "2K";
+            if (maxDim >= 1024) return "1K";
+            return $"{maxDim}px";
         }
 
         private sealed class VamJsonWriter : IDisposable

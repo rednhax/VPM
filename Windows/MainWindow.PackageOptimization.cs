@@ -2822,19 +2822,6 @@ namespace VPM
             var config = new PackageRepackager.OptimizationConfig();
 
             // Add texture conversions
-            System.Diagnostics.Debug.WriteLine($"\n=== TEXTURE CONVERSION DEBUG FOR {packageName} ===");
-            System.Diagnostics.Debug.WriteLine($"Total textures in result: {textureResult.Textures.Count}");
-            System.Diagnostics.Debug.WriteLine($"Selected textures (HasConversionSelected): {selectedTextures.Count}");
-            
-            // Show all textures with their status
-            foreach (var texture in textureResult.Textures)
-            {
-                System.Diagnostics.Debug.WriteLine($"\n{Path.GetFileName(texture.ReferencedPath)}:");
-                System.Diagnostics.Debug.WriteLine($"  {texture.GetDebugInfo()}");
-                System.Diagnostics.Debug.WriteLine($"  SELECTED: {selectedTextures.Contains(texture)}");
-            }
-            
-            System.Diagnostics.Debug.WriteLine($"\n--- Adding {selectedTextures.Count} textures to conversion config ---");
             foreach (var texture in selectedTextures)
             {
                 string targetResolution = texture.ConvertTo8K ? "8K" :
@@ -2844,11 +2831,9 @@ namespace VPM
                 // Skip textures where target resolution equals current resolution (no actual conversion)
                 if (targetResolution == texture.Resolution)
                 {
-                    System.Diagnostics.Debug.WriteLine($"  SKIPPING {Path.GetFileName(texture.ReferencedPath)}: already at {targetResolution}");
                     continue;
                 }
                 
-                System.Diagnostics.Debug.WriteLine($"  {Path.GetFileName(texture.ReferencedPath)}: {texture.Resolution} -> {targetResolution}");
                 config.TextureConversions[texture.ReferencedPath] =
                     (targetResolution, texture.Width, texture.Height, texture.FileSize);
             }

@@ -18,13 +18,14 @@ namespace VPM.Services
         public int CompressionQuality { get; set; } = 90;
 
         /// <summary>
-        /// Resizes an image to the target resolution (only downscaling)
+        /// Resizes an image to the target resolution (supports both upscaling and downscaling)
         /// </summary>
         /// <param name="sourceData">Source image bytes</param>
         /// <param name="targetMaxDimension">Target maximum dimension (e.g., 4096 for 4K)</param>
         /// <param name="originalExtension">Original file extension (.jpg, .png, etc.)</param>
+        /// <param name="allowUpscale">If true, allows upscaling from archive source. Default false for backward compatibility.</param>
         /// <returns>Resized image bytes, or null if no conversion needed</returns>
-        public byte[] ResizeImage(byte[] sourceData, int targetMaxDimension, string originalExtension)
+        public byte[] ResizeImage(byte[] sourceData, int targetMaxDimension, string originalExtension, bool allowUpscale = false)
         {
             try
             {
@@ -38,14 +39,23 @@ namespace VPM.Services
                 int originalHeight = image.Height;
                 int maxDimension = Math.Max(originalWidth, originalHeight);
 
-                if (maxDimension <= targetMaxDimension)
+                // Check if conversion is needed
+                if (maxDimension == targetMaxDimension)
                 {
-                    return null; // No conversion needed
+                    return null; // Already at target resolution
+                }
+                
+                // For downscaling: always allowed
+                // For upscaling: only allowed if explicitly requested (reading from archive)
+                if (maxDimension < targetMaxDimension && !allowUpscale)
+                {
+                    return null; // Upscaling not allowed
                 }
 
-                // Use ThumbnailImage for high-quality, fast downscaling
-                // size: Enums.Size.Down ensures we only downscale
-                using var resized = image.ThumbnailImage(targetMaxDimension, height: targetMaxDimension, size: Enums.Size.Down);
+                // Use ThumbnailImage for high-quality resizing
+                // size: Enums.Size.Both allows both up and down scaling
+                var sizeMode = allowUpscale ? Enums.Size.Both : Enums.Size.Down;
+                using var resized = image.ThumbnailImage(targetMaxDimension, height: targetMaxDimension, size: sizeMode);
                 
                 // Prepare save options
                 string extension = originalExtension.ToLowerInvariant();
@@ -74,9 +84,11 @@ namespace VPM.Services
                     convertedData = resized.WriteToBuffer(extension);
                 }
 
-                if (convertedData.Length >= sourceData.Length)
+                // For downscaling: skip if result is larger (compression inefficiency)
+                // For upscaling: always return result (user explicitly requested higher resolution)
+                if (!allowUpscale && convertedData.Length >= sourceData.Length)
                 {
-                    return null; // Keep original
+                    return null; // Keep original for downscaling if result is larger
                 }
 
                 return convertedData;
