@@ -169,9 +169,8 @@ namespace VPM.Services
             {
                 await Task.Run(() => _binaryCache.LoadCache());
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                Console.WriteLine($"[BinaryCache] Error loading cache: {ex.Message}");
             }
         }
         
@@ -185,9 +184,8 @@ namespace VPM.Services
             {
                 await Task.Run(() => _binaryCache.SaveCache());
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                Console.WriteLine($"[BinaryCache] Error saving cache: {ex.Message}");
             }
         }
         
@@ -200,9 +198,8 @@ namespace VPM.Services
             {
                 _binaryCache.SaveCache();
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                Console.WriteLine($"[BinaryCache] Error saving cache: {ex.Message}");
             }
         }
         

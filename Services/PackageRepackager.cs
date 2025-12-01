@@ -509,6 +509,15 @@ namespace VPM.Services
                         var entriesToProcess = new List<(IArchiveEntry entry, bool needsTextureConversion, bool needsHairModification, bool needsSceneModification)>();
                         int entryIndex = 0;
                         int totalEntries = sourceArchive.Archive.Entries.Count();
+                        
+                        // PERFORMANCE: Pre-build HashSets for O(1) lookups instead of O(n) Any() per entry
+                        // This changes O(n*m) to O(n+m) where n=entries, m=conversions
+                        var hairSceneFiles = new HashSet<string>(
+                            config.HairConversions.Values.Select(h => h.sceneFile), 
+                            StringComparer.OrdinalIgnoreCase);
+                        var lightSceneFiles = new HashSet<string>(
+                            config.LightConversions.Values.Select(l => l.sceneFile), 
+                            StringComparer.OrdinalIgnoreCase);
 
                         foreach (var entry in sourceArchive.Archive.Entries)
                         {
@@ -526,8 +535,11 @@ namespace VPM.Services
                             }
                             
                             bool needsTextureConversion = config.TextureConversions.ContainsKey(entry.Key);
-                            bool needsHairModification = config.HairConversions.Values.Any(h => h.sceneFile == Path.GetFileName(entry.Key));
-                            bool needsLightModification = config.LightConversions.Values.Any(l => l.sceneFile == Path.GetFileName(entry.Key));
+                            
+                            // Use pre-built HashSets for O(1) lookup instead of O(n) Any()
+                            var entryFileName = Path.GetFileName(entry.Key);
+                            bool needsHairModification = hairSceneFiles.Contains(entryFileName);
+                            bool needsLightModification = lightSceneFiles.Contains(entryFileName);
 
                             // Also check if this is a .vap hair preset file that needs modification
                             bool isVapFile = entry.Key.StartsWith("Custom/Atom/Person/Hair/", StringComparison.OrdinalIgnoreCase) && 
@@ -1839,9 +1851,8 @@ namespace VPM.Services
                     return (updatedJson, changes);
                 }
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                Console.WriteLine($"[DEPENDENCY-CONVERSION-ERROR] Failed to convert dependencies: {ex.Message}");
                 return (originalMetaJson, changes);
             }
         }
@@ -1993,9 +2004,8 @@ namespace VPM.Services
                     return beforeDeps + "\"dependencies\" : { \r\n" + filteredDepsJson + "   }" + afterDeps;
                 }
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                Console.WriteLine($"[DEPENDENCY-REMOVAL-ERROR] Failed to remove dependencies: {ex.Message}");
                 return originalMetaJson;
             }
         }
@@ -2146,9 +2156,8 @@ namespace VPM.Services
                 
                 return originalMetaJson;
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                Console.WriteLine($"[SET-PRELOAD-MORPHS-ERROR] Failed to set preloadMorphs flag: {ex.Message}");
                 return originalMetaJson;
             }
         }
@@ -2374,9 +2383,8 @@ namespace VPM.Services
                     return updatedJson;
                 }
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                Console.WriteLine($"[META-UPDATE-ERROR] Failed to update description: {ex.Message}");
                 return originalMetaJson;
             }
         }
@@ -2414,9 +2422,8 @@ namespace VPM.Services
                     }
                 }
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                Console.WriteLine($"[VPM-FLAGS-PARSE-ERROR] {ex.Message}");
             }
             
             return flags;

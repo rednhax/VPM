@@ -450,11 +450,9 @@ namespace VPM.Services
                     _memoryCache[packageKey] = packageCache;
                 }
 
-                Console.WriteLine($"[ImageDiskCache] Loaded {packageCount} packages with {_memoryCache.Sum(p => p.Value.Images.Count)} images");
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                Console.WriteLine($"[ImageDiskCache] Error loading database: {ex.Message}");
                 _memoryCache.Clear();
             }
         }
@@ -509,9 +507,8 @@ namespace VPM.Services
                 }
                 File.Move(tempPath, _cacheFilePath);
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                Console.WriteLine($"[ImageDiskCache] Error saving database: {ex.Message}");
             }
         }
 
@@ -562,12 +559,10 @@ namespace VPM.Services
                     }
                 }
 
-                Console.WriteLine($"[ImageDiskCache] Cache cleared");
                 return true;
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                Console.WriteLine($"[ImageDiskCache] Error clearing cache: {ex.Message}");
                 return false;
             }
         }

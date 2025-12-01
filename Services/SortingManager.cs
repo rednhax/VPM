@@ -63,10 +63,8 @@ namespace VPM.Services
                 view.Refresh();
                 UpdateSortingState("Packages", sortOption, isAscending);
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                // If sorting fails (e.g., due to null values or type mismatches), log and continue
-                Console.WriteLine($"[SORTING] Failed to apply package sorting: {ex.Message}");
                 // Fall back to sorting by Name
                 try
                 {
@@ -75,9 +73,8 @@ namespace VPM.Services
                     view.Refresh();
                     UpdateSortingState("Packages", PackageSortOption.Name, true);
                 }
-                catch (Exception fallbackEx)
+                catch (Exception)
                 {
-                    Console.WriteLine($"[SORTING] Fallback sorting also failed: {fallbackEx.Message}");
                 }
             }
         }
@@ -143,10 +140,8 @@ namespace VPM.Services
                 view.Refresh();
                 UpdateSortingState("Dependencies", sortOption, isAscending);
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                // If sorting fails (e.g., due to null values or type mismatches), log and continue
-                Console.WriteLine($"[SORTING] Failed to apply dependency sorting: {ex.Message}");
                 // Fall back to sorting by Name
                 try
                 {
@@ -155,9 +150,8 @@ namespace VPM.Services
                     view.Refresh();
                     UpdateSortingState("Dependencies", DependencySortOption.Name, true);
                 }
-                catch (Exception fallbackEx)
+                catch (Exception)
                 {
-                    Console.WriteLine($"[SORTING] Fallback sorting also failed: {fallbackEx.Message}");
                 }
             }
         }
@@ -208,10 +202,8 @@ namespace VPM.Services
                 view.Refresh();
                 UpdateSortingState("Scenes", sortOption, isAscending);
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                // If sorting fails (e.g., due to null values or type mismatches), log and continue
-                Console.WriteLine($"[SORTING] Failed to apply scene sorting: {ex.Message}");
                 // Fall back to sorting by Name
                 try
                 {
@@ -220,9 +212,8 @@ namespace VPM.Services
                     view.Refresh();
                     UpdateSortingState("Scenes", SceneSortOption.Name, true);
                 }
-                catch (Exception fallbackEx)
+                catch (Exception)
                 {
-                    Console.WriteLine($"[SORTING] Fallback sorting also failed: {fallbackEx.Message}");
                 }
             }
         }
@@ -277,10 +268,8 @@ namespace VPM.Services
                 view.Refresh();
                 UpdateSortingState("Presets", sortOption, isAscending);
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                // If sorting fails (e.g., due to null values or type mismatches), log and continue
-                Console.WriteLine($"[SORTING] Failed to apply preset sorting: {ex.Message}");
                 // Fall back to sorting by Name
                 try
                 {
@@ -289,9 +278,8 @@ namespace VPM.Services
                     view.Refresh();
                     UpdateSortingState("Presets", PresetSortOption.Name, true);
                 }
-                catch (Exception fallbackEx)
+                catch (Exception)
                 {
-                    Console.WriteLine($"[SORTING] Fallback sorting also failed: {fallbackEx.Message}");
                 }
             }
         }
@@ -514,17 +502,14 @@ namespace VPM.Services
                     }
                     _settingsManager.Settings.SortingStates[tableKey] = serializedState;
                     
-                    Console.WriteLine($"[SORTING] Saved sorting state: {tableKey} = {sortOption} {(isAscending ? "Ascending" : "Descending")}");
-                    
                     // Trigger property change notification by reassigning the dictionary
                     // This ensures the SettingsManager detects the change and saves
                     var currentStates = _settingsManager.Settings.SortingStates;
                     _settingsManager.Settings.SortingStates = new Dictionary<string, SerializableSortingState>(currentStates);
                 }
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                Console.WriteLine($"[SORTING] Failed to save sorting state: {ex.Message}");
             }
         }
 

@@ -48,12 +48,6 @@ namespace VPM.Services
                 if (!_localPackageVersions.ContainsKey(baseName) || _localPackageVersions[baseName] < version)
                 {
                     _localPackageVersions[baseName] = version;
-                    
-                    // Debug logging for specific package
-                    if (baseName.Contains("Naturalis", StringComparison.OrdinalIgnoreCase))
-                    {
-                        Console.WriteLine($"[UpdateChecker] Found local: {package.Name} -> base: {baseName}, version: {version}");
-                    }
                 }
             }
             

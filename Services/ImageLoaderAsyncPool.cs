@@ -160,12 +160,9 @@ namespace VPM.Services
                 }
             }
             
-            // 3. Force garbage collection to ensure any lingering file handles are released
-            // This is critical for the "Rock Solid" solution
-            // Console.WriteLine($"[ImageLoaderAsyncPool.ReleaseFileLocksAsync] Forcing garbage collection to release file handles...");
-            GC.Collect();
-            GC.WaitForPendingFinalizers();
-            // GC.Collect(); // Double collect for generations - REMOVED: Excessive GC causing slowdowns
+            // 3. Use optimized GC collection for file handle release
+            // Full GC.Collect() causes UI stuttering - use non-blocking Gen 0 instead
+            GC.Collect(0, GCCollectionMode.Optimized, blocking: false);
             
             // Console.WriteLine($"[ImageLoaderAsyncPool.ReleaseFileLocksAsync] === COMPLETE ===");
         }
@@ -321,9 +318,8 @@ namespace VPM.Services
                                     ImageProcessed?.Invoke(queuedImage);
                                     queuedImage.Callback?.Invoke(queuedImage);
                                 }
-                                catch (Exception callbackEx)
+                                catch (Exception)
                                 {
-                                    Console.WriteLine($"[ImageLoader] Callback error: {callbackEx.Message}");
                                 }
                                 finally
                                 {
@@ -350,7 +346,6 @@ namespace VPM.Services
                     {
                         queuedImage.HadError = true;
                         queuedImage.ErrorText = ex.Message;
-                        Console.WriteLine($"[ImageLoader] Error processing image: {ex.Message}");
                     }
                 }
             }
@@ -423,9 +418,8 @@ namespace VPM.Services
                     {
                         archive = SharpCompressHelper.OpenForRead(qi.VarPath, this);
                     }
-                    catch (OperationCanceledException ex)
+                    catch (OperationCanceledException)
                     {
-                        Console.WriteLine($"[ImageLoaderAsyncPool.ProcessImage] Operation cancelled: {ex.Message}");
                         qi.HadError = true;
                         qi.ErrorText = "Operation cancelled";
                         return;
@@ -595,7 +589,6 @@ namespace VPM.Services
             // Don't queue if path is cancelled (prevents file lock conflicts during unload)
             if (!string.IsNullOrEmpty(qi.VarPath) && _cancelledPaths.ContainsKey(qi.VarPath))
             {
-                Console.WriteLine($"[ImageLoaderAsyncPool.QueueImage] Skipping cancelled path: {qi.VarPath}");
                 return;
             }
             
@@ -619,7 +612,6 @@ namespace VPM.Services
             // Don't queue if path is cancelled (prevents file lock conflicts during unload)
             if (!string.IsNullOrEmpty(qi.VarPath) && _cancelledPaths.ContainsKey(qi.VarPath))
             {
-                Console.WriteLine($"[ImageLoaderAsyncPool.QueueThumbnail] Skipping cancelled path: {qi.VarPath}");
                 return;
             }
             
@@ -658,9 +650,8 @@ namespace VPM.Services
                     {
                         ProgressChanged?.Invoke(current, total);
                     }
-                    catch (Exception ex)
+                    catch (Exception)
                     {
-                        Console.WriteLine($"[ImageLoader] Progress callback error: {ex.Message}");
                     }
                 }), DispatcherPriority.Normal);
             }

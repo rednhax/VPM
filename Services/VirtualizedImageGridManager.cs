@@ -107,7 +107,7 @@ namespace VPM.Services
             // Use Dispatcher to schedule on UI thread after current batch completes
             if (_isInitialLoad)
             {
-                _scrollViewer.Dispatcher.InvokeAsync(async () =>
+                _ = _scrollViewer.Dispatcher.InvokeAsync(async () =>
                 {
                     // Give UI time to render the controls
                     await Task.Delay(50);
@@ -284,7 +284,7 @@ namespace VPM.Services
             {
                 await image.LoadImageAsync();
             }
-            catch (Exception ex)
+            catch (Exception)
             {
             }
             finally

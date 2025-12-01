@@ -268,7 +268,7 @@ namespace VPM
                 // Log loading metrics for performance monitoring
                 LogLoadingMetrics();
             }
-            catch (Exception ex)
+            catch (Exception)
             {
             }
         }
@@ -285,7 +285,7 @@ namespace VPM
                     var metrics = _virtualizedImageGridManager.GetMetrics();
                 }
             }
-            catch (Exception ex)
+            catch (Exception)
             {
             }
         }
@@ -322,7 +322,7 @@ namespace VPM
                 
                 UpdateImageStatisticsDisplay();
             }
-            catch (Exception ex)
+            catch (Exception)
             {
             }
         }
@@ -386,7 +386,7 @@ namespace VPM
                     popup.IsOpen = true;
                 }
             }
-            catch (Exception ex)
+            catch (Exception)
             {
             }
         }
@@ -423,7 +423,7 @@ namespace VPM
                 ApplyContentTypeFilter();
                 UpdateFilterClearButtonVisibility();
             }
-            catch (Exception ex)
+            catch (Exception)
             {
             }
         }
@@ -453,7 +453,7 @@ namespace VPM
                 ApplyContentTypeFilter();
                 UpdateFilterClearButtonVisibility();
             }
-            catch (Exception ex)
+            catch (Exception)
             {
             }
         }
@@ -505,7 +505,7 @@ namespace VPM
                     popup.IsOpen = false;
                 }
             }
-            catch (Exception ex)
+            catch (Exception)
             {
             }
         }
@@ -526,7 +526,7 @@ namespace VPM
                         : System.Windows.Visibility.Collapsed;
                 }
             }
-            catch (Exception ex)
+            catch (Exception)
             {
             }
         }
@@ -648,7 +648,7 @@ namespace VPM
 
                 UpdateImageStatisticsDisplay();
             }
-            catch (Exception ex)
+            catch (Exception)
             {
             }
         }
@@ -851,7 +851,7 @@ namespace VPM
                                             var img = await _imageManager.LoadImageAsync(location.VarFilePath, location.InternalPath, 0, 0);
                                             return img;
                                         }
-                                        catch (Exception ex)
+                                        catch (Exception)
                                         {
                                             return null;
                                         }
@@ -1222,7 +1222,7 @@ namespace VPM
                         // Update only the affected item's button state
                         UpdateImageItemButtonState(item);
                     }
-                    catch (Exception ex)
+                    catch (Exception)
                     {
                     }
                 }
@@ -1546,7 +1546,7 @@ namespace VPM
                     }
                 }
             }
-            catch (Exception ex)
+            catch (Exception)
             {
             }
         }
@@ -1575,7 +1575,7 @@ namespace VPM
                     }
                 }
             }
-            catch (Exception ex)
+            catch (Exception)
             {
             }
         }

@@ -1231,18 +1231,7 @@ namespace VPM
                 
                 if (!success)
                 {
-                    // Check if user has denied network permission
-                    bool permissionDenied = _settingsManager?.Settings?.NetworkPermissionAsked == true && 
-                                           _settingsManager?.Settings?.NetworkPermissionGranted == false;
-                    
-                    if (permissionDenied)
-                    {
-                        // User denied network access - this is not an error, just inform them
-                        SetStatus("Network access denied - using local cache");
-                        return; // Don't show error message
-                    }
-                    
-                    // Actual failure (not permission denial)
+                    // Database load failed
                     SetStatus("Database update failed");
                     CustomMessageBox.Show("Failed to load package database.\n\nPlease check:\n• Network connection\n• Firewall settings",
                         "Update Failed", MessageBoxButton.OK, MessageBoxImage.Error);
@@ -2062,9 +2051,8 @@ namespace VPM
                 // Apply window settings after packages are loaded
                 ApplyWindowSettings(settings);
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                Console.WriteLine($"[Startup] Error during cache loading: {ex.Message}");
             }
         }
         
@@ -3975,12 +3963,6 @@ namespace VPM
                     InitializePackageDownloader();
                 }
 
-                // Ensure network permission service is initialized
-                if (_networkPermissionService == null)
-                {
-                    _networkPermissionService = new NetworkPermissionService(_settingsManager);
-                }
-
                 // Get the AddonPackages folder path
                 string addonPackagesFolder = System.IO.Path.Combine(_selectedFolder, "AddonPackages");
                 
@@ -3991,7 +3973,6 @@ namespace VPM
                         _packageManager,
                         _packageDownloader,
                         _downloadQueueManager,
-                        _networkPermissionService,
                         addonPackagesFolder,
                         LoadPackageDownloadListAsync,
                         OnPackageDownloadedFromSearchWindow)
@@ -4461,18 +4442,8 @@ namespace VPM
                     // If still empty after offline load attempt, offer database update
                     if (_packageDownloader.GetPackageCount() == 0)
                     {
-                        // Offer database update only if database is empty
-                        bool offerDatabaseUpdate = true;
-                        
-                        // Request network access and check if user wants to update database
-                        var (granted, updateDatabase) = await _networkPermissionService.RequestNetworkAccessWithOptionsAsync(offerDatabaseUpdate);
-                        
-                        if (!granted)
-                        {
-                            CustomMessageBox.Show("Network access is required to download packages.",
-                                "Network Access Denied", MessageBoxButton.OK, MessageBoxImage.Warning);
-                            return;
-                        }
+                        // Always grant network access and update database
+                        bool updateDatabase = true;
                         
                         if (updateDatabase)
                         {
@@ -4518,7 +4489,6 @@ namespace VPM
                         _packageManager,
                         _packageDownloader,
                         _downloadQueueManager,
-                        _networkPermissionService,
                         addonPackagesFolder,
                         LoadPackageDownloadListAsync,
                         OnPackageDownloadedFromSearchWindow)
@@ -4579,12 +4549,6 @@ namespace VPM
                     InitializePackageDownloader();
                 }
 
-                // Ensure network permission service is initialized
-                if (_networkPermissionService == null)
-                {
-                    _networkPermissionService = new NetworkPermissionService(_settingsManager);
-                }
-
                 // Check if package downloader is initialized and database is loaded
                 if (_packageDownloader == null || _packageDownloader.GetPackageCount() == 0)
                 {
@@ -4597,18 +4561,8 @@ namespace VPM
                     // If still empty after offline load attempt, offer database update
                     if (_packageDownloader.GetPackageCount() == 0)
                     {
-                        // Offer database update only if database is empty
-                        bool offerDatabaseUpdate = true;
-                        
-                        // Request network access and check if user wants to update database
-                        var (granted, updateDatabase) = await _networkPermissionService.RequestNetworkAccessWithOptionsAsync(offerDatabaseUpdate);
-                        
-                        if (!granted)
-                        {
-                            CustomMessageBox.Show("Network access is required to download packages.",
-                                "Network Access Denied", MessageBoxButton.OK, MessageBoxImage.Warning);
-                            return;
-                        }
+                        // Always grant network access and update database
+                        bool updateDatabase = true;
                         
                         if (updateDatabase)
                         {
@@ -4652,7 +4606,6 @@ namespace VPM
                         _packageManager,
                         _packageDownloader,
                         _downloadQueueManager,
-                        _networkPermissionService,
                         addonPackagesFolder,
                         LoadPackageDownloadListAsync,
                         OnPackageDownloadedFromSearchWindow)

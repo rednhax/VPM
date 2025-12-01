@@ -333,15 +333,13 @@ namespace VPM.Services
                                         outputArchive.AddEntry(entry.Key, new MemoryStream(ms.ToArray()));
                                     }
                                 }
-                                catch (InvalidDataException ex)
+                                catch (InvalidDataException)
                                 {
                                     // Skip entries with unsupported compression methods
-                                    Console.WriteLine($"[WRITE-SKIP] Skipping {entry.Key} due to unsupported compression: {ex.Message}");
                                 }
-                                catch (Exception ex)
+                                catch (Exception)
                                 {
                                     // Skip entries that cannot be read
-                                    Console.WriteLine($"[WRITE-SKIP] Skipping {entry.Key}: {ex.GetType().Name}: {ex.Message}");
                                 }
                             }
                         }

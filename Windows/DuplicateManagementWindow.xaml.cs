@@ -321,9 +321,8 @@ namespace VPM
                     }
                 }
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                Console.WriteLine($"[GetPackageInstancesInAddonPackages] Error: {ex.Message}");
             }
             return instances;
         }
@@ -353,9 +352,8 @@ namespace VPM
                     }
                 }
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                Console.WriteLine($"[GetPackageInstancesInAllPackages] Error: {ex.Message}");
             }
             return instances;
         }

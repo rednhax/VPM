@@ -102,10 +102,6 @@ namespace VPM.Models
         // Package Downloader Settings
         private bool _enableAutoDownload = false;
         
-        // Network Permission Settings
-        private bool _networkPermissionGranted = false;
-        private bool _networkPermissionAsked = false;
-        private bool _neverShowNetworkPermissionDialog = false;
         
         // Package Optimizer Settings
         private bool _forceLatestDependencies = true;
@@ -564,24 +560,6 @@ namespace VPM.Models
             set => SetProperty(ref _enableAutoDownload, value);
         }
         
-        // Network Permission Settings Properties
-        public bool NetworkPermissionGranted
-        {
-            get => _networkPermissionGranted;
-            set => SetProperty(ref _networkPermissionGranted, value);
-        }
-        
-        public bool NetworkPermissionAsked
-        {
-            get => _networkPermissionAsked;
-            set => SetProperty(ref _networkPermissionAsked, value);
-        }
-        
-        public bool NeverShowNetworkPermissionDialog
-        {
-            get => _neverShowNetworkPermissionDialog;
-            set => SetProperty(ref _neverShowNetworkPermissionDialog, value);
-        }
         
         // Package Optimizer Settings Properties
         public bool ForceLatestDependencies

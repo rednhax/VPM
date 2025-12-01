@@ -40,6 +40,7 @@ namespace VPM.Services
         
         // Preloading queue for background image loading
         private readonly Queue<string> _preloadQueue = new Queue<string>();
+        private readonly HashSet<string> _preloadQueueSet = new HashSet<string>(StringComparer.OrdinalIgnoreCase); // O(1) contains check
         private readonly SemaphoreSlim _preloadLock = new SemaphoreSlim(1, 1);
         private Task _preloadTask;
         private CancellationTokenSource _preloadCancellation;
@@ -168,10 +169,6 @@ namespace VPM.Services
         /// </summary>
         private void OnThreadPoolImageProcessed(QueuedImage qi)
         {
-            if (qi.HadError)
-            {
-                Console.WriteLine($"[ImageLoader] Error loading {qi.InternalPath}: {qi.ErrorText}");
-            }
         }
 
 
@@ -974,9 +971,8 @@ namespace VPM.Services
                     }
                 }
             }
-            catch (Exception ex) when (ex is ArgumentException or IOException or SharpCompress.Common.ArchiveException or InvalidOperationException)
+            catch (Exception)
             {
-                Console.WriteLine($"[ImageManager] Error loading images from '{varPath}': {ex.Message}");
             }
             finally
             {
@@ -1038,7 +1034,6 @@ namespace VPM.Services
                     // Check if file exists before attempting to open
                     if (!File.Exists(varPath))
                     {
-                        Console.WriteLine($"[ImageManager] VAR file not found: {varPath}");
                         return results; // Return empty results
                     }
     
@@ -1162,14 +1157,12 @@ namespace VPM.Services
                             pool.ReleaseHandle(archive);
                         }
                     }
-                    catch (FileNotFoundException fnfEx)
+                    catch (FileNotFoundException)
                     {
-                        Console.WriteLine($"[ImageManager] Archive file not found during parallel load: {fnfEx.Message}");
                         return (internalPath, bitmap: (BitmapImage)null);
                     }
-                    catch (Exception ex)
+                    catch (Exception)
                     {
-                        Console.WriteLine($"[ImageManager] Error loading image {internalPath}: {ex.Message}");
                         return (internalPath, bitmap: (BitmapImage)null);
                     }
                 })).ToArray();
@@ -1187,7 +1180,6 @@ namespace VPM.Services
                 // Wait for all parallel tasks with 30 second timeout to prevent indefinite hangs
                 if (!Task.WaitAll(tasks, TimeSpan.FromSeconds(30)))
                 {
-                    Console.WriteLine($"[ImageManager] Parallel loading timeout after 30 seconds for {varPath}");
                     throw new TimeoutException($"Parallel image loading exceeded 30 second timeout for {varPath}");
                 }
 
@@ -1220,9 +1212,8 @@ namespace VPM.Services
                     _parallelMetricsLock.ExitWriteLock();
                 }
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                Console.WriteLine($"[ImageManager] Parallel loading failed, falling back to sequential: {ex.Message}");
                 return LoadImagesFromVarBatch(varPath, internalPaths, cacheOnly);
             }
             finally
@@ -1298,10 +1289,8 @@ namespace VPM.Services
 
                 return bitmap;
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                // Log error if needed, but return null to avoid crashing UI
-                Console.WriteLine($"[ImageManager] Error loading image {internalPath} from {varPath}: {ex.Message}");
                 return null;
             }
         }
@@ -1321,12 +1310,13 @@ namespace VPM.Services
             // Check memory pressure before loading new images
             CheckMemoryPressure();
 
-            if (!ImageIndex.ContainsKey(packageName))
+            // Use TryGetValue to avoid double dictionary lookup (ContainsKey + indexer)
+            if (!ImageIndex.TryGetValue(packageName, out var imageLocations))
             {
                 return new List<BitmapImage>();
             }
 
-            var indexedLocations = ImageIndex[packageName]
+            var indexedLocations = imageLocations
                 .Take(maxImages)
                 .Select((loc, index) => (Location: loc, Index: index))
                 .ToList();
@@ -1391,9 +1381,8 @@ namespace VPM.Services
                                 // Use parallel loading for batches > 1 image, with fallback to sequential
                                 loadedImages = LoadImagesFromVarParallel(varPath, internalPaths);
                             }
-                            catch (Exception ex)
+                            catch (Exception)
                             {
-                                Console.WriteLine($"[ImageManager] Error loading images from '{varPath}': {ex.Message}");
                                 loadedImages = new Dictionary<string, BitmapImage>();
                             }
 
@@ -1865,6 +1854,8 @@ namespace VPM.Services
                             if (_preloadQueue.Count > 0)
                             {
                                 packageToPreload = _preloadQueue.Dequeue();
+                                // Remove from HashSet to allow re-queueing later
+                                _preloadQueueSet.Remove(packageToPreload);
                             }
                         }
                         finally
@@ -1901,11 +1892,14 @@ namespace VPM.Services
         {
             if (string.IsNullOrEmpty(packageName)) return;
             
-            _preloadLock.Wait();
+            if (!_preloadLock.Wait(TimeSpan.FromSeconds(1)))
+            {
+                return; // Timeout - skip this preload request
+            }
             try
             {
-                // Don't add duplicates
-                if (!_preloadQueue.Contains(packageName))
+                // Use HashSet for O(1) contains check instead of O(n) Queue.Contains
+                if (_preloadQueueSet.Add(packageName))
                 {
                     _preloadQueue.Enqueue(packageName);
                 }
@@ -1926,9 +1920,10 @@ namespace VPM.Services
                 // Check memory pressure before preloading
                 CheckMemoryPressure();
                 
-                if (!ImageIndex.ContainsKey(packageName)) return;
+                // Use TryGetValue to avoid double dictionary lookup
+                if (!ImageIndex.TryGetValue(packageName, out var locations)) return;
                 
-                var imageLocations = ImageIndex[packageName].Take(10).ToList(); // Preload first 10 images
+                var imageLocations = locations.Take(10).ToList(); // Preload first 10 images
                 
                 // Group by VAR file for efficient batch loading
                 var imagesByVar = imageLocations
@@ -2452,7 +2447,7 @@ namespace VPM.Services
                 
                 // Console.WriteLine($"[ImageManager.CloseFileHandlesAsync] === COMPLETE ===");
             }
-            catch (Exception ex)
+            catch (Exception)
             {
                 // Console.WriteLine($"[ImageManager.CloseFileHandlesAsync] Error: {ex.Message}");
                 // Console.WriteLine($"[ImageManager.CloseFileHandlesAsync] Stack trace: {ex.StackTrace}");
@@ -2519,9 +2514,8 @@ namespace VPM.Services
                     _varArchiveLock.ExitWriteLock();
                 }
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                Console.WriteLine($"[ImageManager] Error invalidating cache for {packageName}: {ex.Message}");
             }
         }
 

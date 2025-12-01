@@ -48,21 +48,13 @@ namespace VPM.Services
                 
                 if (_forceGcOnDispose)
                 {
-                    // Force garbage collection to ensure FileStream is released
-                    // This is critical for the "Rock Solid" solution to prevent file locks
-                    GC.Collect();
-                    GC.WaitForPendingFinalizers();
-                }
-                else
-                {
-                    // Lightweight cleanup for normal operations
-                    // Only suppress finalization to reduce GC pressure
-                    GC.SuppressFinalize(this);
+                    // Use optimized GC collection for file handle release
+                    // Gen 0 collection is much faster than full collection
+                    GC.Collect(0, GCCollectionMode.Optimized, blocking: false);
                 }
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                Console.WriteLine($"[DisposableArchive] Error disposing archive: {ex.Message}");
             }
         }
     }
@@ -224,9 +216,9 @@ namespace VPM.Services
                 handle?.Dispose();
             }
             
-            // Force garbage collection to ensure FileStreams are released
-            GC.Collect();
-            GC.WaitForPendingFinalizers();
+            // Use optimized GC collection - non-blocking Gen 0 only
+            // Full GC.Collect() causes UI stuttering and is rarely needed
+            GC.Collect(0, GCCollectionMode.Optimized, blocking: false);
         }
     }
 
@@ -250,7 +242,6 @@ namespace VPM.Services
                     // Check full path
                     if (asyncPool.IsFileCancelled(filePath))
                     {
-                        Console.WriteLine($"[SharpCompressHelper.OpenForRead] BLOCKED: Full path is cancelled: {filePath}");
                         throw new OperationCanceledException($"Archive operation cancelled for path: {filePath}");
                     }
                     
@@ -258,7 +249,6 @@ namespace VPM.Services
                     var fileName = System.IO.Path.GetFileNameWithoutExtension(filePath);
                     if (!string.IsNullOrEmpty(fileName) && asyncPool.IsFileCancelled(fileName))
                     {
-                        Console.WriteLine($"[SharpCompressHelper.OpenForRead] BLOCKED: Package name is cancelled: {fileName}");
                         throw new OperationCanceledException($"Archive operation cancelled for package: {fileName}");
                     }
                 }
@@ -273,7 +263,6 @@ namespace VPM.Services
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"[SharpCompressHelper.OpenForRead] ERROR: {ex.Message}");
                 fileStream?.Dispose(); // Dispose stream if archive creation failed
                 throw new InvalidOperationException($"Failed to open archive '{filePath}': {ex.Message}", ex);
             }

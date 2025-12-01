@@ -37,12 +37,10 @@ namespace VPM.Services
                 if (!Directory.Exists(_cacheDirectory))
                 {
                     Directory.CreateDirectory(_cacheDirectory);
-                    Console.WriteLine($"[BinaryCache] Created cache directory: {_cacheDirectory}");
                 }
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                Console.WriteLine($"[BinaryCache] Error creating cache directory: {ex.Message}");
             }
         }
 
@@ -159,9 +157,8 @@ namespace VPM.Services
 
                 return true;
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                Console.WriteLine($"[BinaryCache] Error in SaveCache: {ex.Message}");
                 // Clean up temp file if it exists
                 try
                 {

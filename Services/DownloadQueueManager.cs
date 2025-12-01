@@ -73,8 +73,6 @@ namespace VPM.Services
             
             // Start processing queue
             _processingTask = Task.Run(ProcessQueueAsync);
-            
-            Console.WriteLine($"[DownloadQueue] Initialized with max {_maxConcurrentDownloads} concurrent downloads");
         }
         
         /// <summary>
@@ -88,7 +86,6 @@ namespace VPM.Services
             // Check if already queued or downloading
             if (_activeDownloads.ContainsKey(packageName))
             {
-                Console.WriteLine($"[DownloadQueue] Package already queued or downloading: {packageName}");
                 return false;
             }
 
@@ -101,12 +98,14 @@ namespace VPM.Services
             };
 
             int queueSize;
-            _queueLock.Wait();
+            if (!_queueLock.Wait(TimeSpan.FromSeconds(5)))
+            {
+                return false;
+            }
             try
             {
                 if (_downloadQueue.Any(d => d.PackageName.Equals(packageName, StringComparison.OrdinalIgnoreCase)))
                 {
-                    Console.WriteLine($"[DownloadQueue] Package already queued or downloading: {packageName}");
                     return false;
                 }
 
@@ -118,8 +117,6 @@ namespace VPM.Services
             {
                 _queueLock.Release();
             }
-
-            Console.WriteLine($"[DownloadQueue] Queued: {packageName} (Queue size: {queueSize})");
             
             OnDownloadQueued(queuedDownload);
             OnQueueStatusChanged();
@@ -135,12 +132,14 @@ namespace VPM.Services
             // Can't remove if actively downloading
             if (_activeDownloads.ContainsKey(packageName))
             {
-                Console.WriteLine($"[DownloadQueue] Cannot remove {packageName} - download in progress");
                 return false;
             }
             
             QueuedDownload removed = null;
-            _queueLock.Wait();
+            if (!_queueLock.Wait(TimeSpan.FromSeconds(5)))
+            {
+                return false;
+            }
             try
             {
                 removed = _downloadQueue.FirstOrDefault(d => d.PackageName.Equals(packageName, StringComparison.OrdinalIgnoreCase));
@@ -157,7 +156,6 @@ namespace VPM.Services
             }
 
             removed.Status = DownloadStatus.Cancelled;
-            Console.WriteLine($"[DownloadQueue] Removed from queue: {packageName}");
             OnDownloadRemoved(removed);
             OnQueueStatusChanged();
 
@@ -172,7 +170,6 @@ namespace VPM.Services
             if (_activeDownloads.TryGetValue(packageName, out var download))
             {
                 download.CancellationTokenSource?.Cancel();
-                Console.WriteLine($"[DownloadQueue] Cancelled download: {packageName}");
                 return true;
             }
             
@@ -185,7 +182,10 @@ namespace VPM.Services
         public void ClearQueue()
         {
             int count;
-            _queueLock.Wait();
+            if (!_queueLock.Wait(TimeSpan.FromSeconds(5)))
+            {
+                return;
+            }
             try
             {
                 count = _downloadQueue.Count;
@@ -197,7 +197,6 @@ namespace VPM.Services
                 _queueLock.Release();
             }
             
-            Console.WriteLine($"[DownloadQueue] Cleared {count} items from queue");
             OnQueueStatusChanged();
         }
         
@@ -206,8 +205,6 @@ namespace VPM.Services
         /// </summary>
         private async Task ProcessQueueAsync()
         {
-            Console.WriteLine("[DownloadQueue] Processing task started");
-            
             while (!_cancellationTokenSource.Token.IsCancellationRequested)
             {
                 try
@@ -275,14 +272,11 @@ namespace VPM.Services
                 {
                     break;
                 }
-                catch (Exception ex)
+                catch (Exception)
                 {
-                    Console.WriteLine($"[DownloadQueue] Error in processing loop: {ex.Message}");
                     await Task.Delay(1000);
                 }
             }
-            
-            Console.WriteLine("[DownloadQueue] Processing task stopped");
         }
         
         /// <summary>
@@ -296,8 +290,6 @@ namespace VPM.Services
             queuedDownload.Status = DownloadStatus.Downloading;
             queuedDownload.StartTime = DateTime.Now;
             
-            Console.WriteLine($"[DownloadQueue] Started: {packageName} (Active: {_activeDownloads.Count})");
-            
             OnDownloadStarted(queuedDownload);
             OnQueueStatusChanged();
             
@@ -309,24 +301,20 @@ namespace VPM.Services
                 if (success)
                 {
                     queuedDownload.Status = DownloadStatus.Completed;
-                    Console.WriteLine($"[DownloadQueue] Completed: {packageName}");
                 }
                 else
                 {
                     queuedDownload.Status = DownloadStatus.Failed;
-                    Console.WriteLine($"[DownloadQueue] Failed: {packageName}");
                 }
             }
             catch (OperationCanceledException)
             {
                 queuedDownload.Status = DownloadStatus.Cancelled;
-                Console.WriteLine($"[DownloadQueue] Cancelled: {packageName}");
             }
             catch (Exception ex)
             {
                 queuedDownload.Status = DownloadStatus.Failed;
                 queuedDownload.ErrorMessage = ex.Message;
-                Console.WriteLine($"[DownloadQueue] Error downloading {packageName}: {ex.Message}");
             }
             finally
             {
@@ -334,7 +322,6 @@ namespace VPM.Services
                 
                 // Remove from active downloads
                 _activeDownloads.TryRemove(packageName, out _);
-                Console.WriteLine($"[DownloadQueue] Removed from active: {packageName} (Active: {_activeDownloads.Count})");
                 
                 OnQueueStatusChanged();
                 
@@ -344,7 +331,10 @@ namespace VPM.Services
 
         private QueuedDownload[] GetQueueSnapshot()
         {
-            _queueLock.Wait();
+            if (!_queueLock.Wait(TimeSpan.FromSeconds(5)))
+            {
+                return Array.Empty<QueuedDownload>();
+            }
             try
             {
                 if (_downloadQueue.Count == 0)
@@ -417,16 +407,18 @@ namespace VPM.Services
         
         public void Dispose()
         {
-            Console.WriteLine("[DownloadQueue] Disposing...");
-            
             _cancellationTokenSource?.Cancel();
             
-            // Wait for processing task to complete
-            try
+            // Wait for processing task to complete with proper timeout handling
+            if (_processingTask != null)
             {
-                _processingTask?.Wait(TimeSpan.FromSeconds(5));
+                try
+                {
+                    _processingTask.Wait(TimeSpan.FromSeconds(5));
+                }
+                catch (AggregateException) { /* Task was cancelled or faulted */ }
+                catch (ObjectDisposedException) { /* Already disposed */ }
             }
-            catch { }
             
             // Unsubscribe from events
             if (_downloader != null)
@@ -439,8 +431,6 @@ namespace VPM.Services
             _cancellationTokenSource?.Dispose();
             _downloadSemaphore?.Dispose();
             _queueLock?.Dispose();
-            
-            Console.WriteLine("[DownloadQueue] Disposed");
         }
     }
     

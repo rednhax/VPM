@@ -714,11 +714,8 @@ namespace VPM
         {
             try
             {
-                Console.WriteLine("[UnloadDependencies] === START ===");
-                
                 if (!EnsureVamFolderSelected()) 
                 {
-                    Console.WriteLine("[UnloadDependencies] VAM folder not selected, returning");
                     return;
                 }
 
@@ -726,15 +723,8 @@ namespace VPM
                     .Where(d => d.Status == "Loaded")
                     .ToList();
 
-                Console.WriteLine($"[UnloadDependencies] Selected {selectedDependencies.Count} loaded dependencies");
-                foreach (var dep in selectedDependencies)
-                {
-                    Console.WriteLine($"  - {dep.Name} (Status: {dep.Status})");
-                }
-
                 if (selectedDependencies.Count == 0)
                 {
-                    Console.WriteLine("[UnloadDependencies] No loaded dependencies selected");
                     MessageBox.Show("No loaded dependencies selected.", "No Dependencies",
                                    MessageBoxButton.OK, MessageBoxImage.Information);
                     return;
@@ -743,7 +733,6 @@ namespace VPM
                 // Only show confirmation for large batches (100+ dependencies)
                 if (selectedDependencies.Count >= 100)
                 {
-                    Console.WriteLine($"[UnloadDependencies] Large batch detected ({selectedDependencies.Count}), showing confirmation");
                     var dependencyNames = selectedDependencies.Take(10).Select(d => d.Name).ToList();
                     var displayNames = string.Join("\n", dependencyNames);
                     if (selectedDependencies.Count > 10)
@@ -759,34 +748,27 @@ namespace VPM
 
                     if (result != MessageBoxResult.Yes)
                     {
-                        Console.WriteLine("[UnloadDependencies] User cancelled unload operation");
                         return;
                     }
                 }
 
                 // Disable UI during operation
-                Console.WriteLine("[UnloadDependencies] Disabling UI buttons");
                 UnloadDependenciesButton.IsEnabled = false;
 
                 try
                 {
                     // Use enhanced batch operation with progress reporting
                     var dependencyNames = selectedDependencies.Select(d => d.Name).ToList();
-                    Console.WriteLine($"[UnloadDependencies] Dependency names to unload: {string.Join(", ", dependencyNames)}");
                     
                     // Cancel any pending image loading operations to free up file handles
-                    Console.WriteLine("[UnloadDependencies] Cancelling pending image loading operations");
                     _imageLoadingCts?.Cancel();
                     _imageLoadingCts = new System.Threading.CancellationTokenSource();
                     
                     // Clear image preview grid before processing
-                    Console.WriteLine("[UnloadDependencies] Clearing image preview grid");
                     PreviewImages.Clear();
                     
                     // Release file locks before operation to prevent conflicts with image grid
-                    Console.WriteLine("[UnloadDependencies] Releasing file locks from image manager");
                     await _imageManager.ReleasePackagesAsync(dependencyNames);
-                    Console.WriteLine("[UnloadDependencies] File locks released successfully");
                     
                     var progress = new Progress<(int completed, int total, string currentPackage)>(p =>
                     {
@@ -796,33 +778,22 @@ namespace VPM
                             : $"Unloading {p.currentPackage}...");
                     });
 
-                    Console.WriteLine("[UnloadDependencies] Starting unload operation via PackageFileManager");
                     var results = await _packageFileManager.UnloadPackagesAsync(dependencyNames, progress);
-                    Console.WriteLine($"[UnloadDependencies] Unload operation completed. Results count: {results.Count}");
 
                     // Update dependency statuses based on results
                     var statusUpdates = new List<(string packageName, string status, Color statusColor)>();
 
                     foreach ((string packageName, bool success, string error) in results)
                     {
-                        Console.WriteLine($"[UnloadDependencies] Result: {packageName} - Success: {success}, Error: {error}");
-                        
                         var dependency = selectedDependencies.FirstOrDefault(d => d.Name == packageName);
                         if (dependency != null && success)
                         {
-                            Console.WriteLine($"[UnloadDependencies] Updating {packageName} status to Available");
                             dependency.Status = "Available";
                             statusUpdates.Add((packageName, "Available", dependency.StatusColor));
-                        }
-                        if (!success)
-                        {
-                            // Unload failed - error handled in status reporting below
-                            Console.WriteLine($"[UnloadDependencies] Unload failed for {packageName}: {error}");
                         }
                     }
 
                     // Update image grid status indicators in batch
-                    Console.WriteLine($"[UnloadDependencies] Updating image grid with {statusUpdates.Count} status updates");
                     if (statusUpdates.Count > 0)
                     {
                         UpdateMultiplePackageStatusInImageGrid(statusUpdates);
@@ -835,23 +806,17 @@ namespace VPM
                         .Distinct(StringComparer.OrdinalIgnoreCase)
                         .ToList();
 
-                    Console.WriteLine($"[UnloadDependencies] Successfully unloaded: {string.Join(", ", successfullyUnloaded)}");
                     if (successfullyUnloaded.Count > 0)
                     {
-                        Console.WriteLine($"[UnloadDependencies] Bulk updating {successfullyUnloaded.Count} packages to Available status");
                         await BulkUpdatePackageStatus(successfullyUnloaded, "Available");
                     }
 
                     // Refresh image grid to show updated dependency status
-                    Console.WriteLine("[UnloadDependencies] Refreshing image grid");
                     await RefreshCurrentlyDisplayedImagesAsync();
-                    Console.WriteLine("[UnloadDependencies] Image grid refresh completed");
 
                     // Enhanced status reporting
                     var successCount = results.Count(r => r.success);
                     var failureCount = results.Count(r => !r.success);
-
-                    Console.WriteLine($"[UnloadDependencies] Final status - Success: {successCount}, Failed: {failureCount}");
 
                     if (successCount > 0 && failureCount == 0)
                     {
@@ -872,20 +837,11 @@ namespace VPM
                                           "Unload Failed", MessageBoxButton.OK, MessageBoxImage.Warning);
                         }
                     }
-                    
-                    Console.WriteLine("[UnloadDependencies] === END (SUCCESS) ===");
 
-                }
-                catch (Exception ex)
-                {
-                    Console.WriteLine($"[UnloadDependencies] Exception in try block: {ex.GetType().Name}: {ex.Message}");
-                    Console.WriteLine($"[UnloadDependencies] Stack trace: {ex.StackTrace}");
-                    throw;
                 }
                 finally
                 {
                     // Re-enable UI
-                    Console.WriteLine("[UnloadDependencies] Re-enabling UI buttons");
                     UnloadDependenciesButton.IsEnabled = true;
                     UpdateDependenciesButtonBar();
                 }
@@ -893,10 +849,7 @@ namespace VPM
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"[UnloadDependencies] === END (EXCEPTION) ===");
-                Console.WriteLine($"[UnloadDependencies] Outer exception: {ex.GetType().Name}: {ex.Message}");
-                Console.WriteLine($"[UnloadDependencies] Stack trace: {ex.StackTrace}");
-                MessageBox.Show($"Error unloading dependencies: {ex.Message}\n\nCheck console for details.", "Error",
+                MessageBox.Show($"Error unloading dependencies: {ex.Message}", "Error",
                                MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
@@ -954,10 +907,9 @@ namespace VPM
                             }
                         }
                     }
-                    catch (Exception ex)
+                    catch (Exception)
                     {
-                        // Log error for debugging but continue processing other dependencies
-                        Console.WriteLine($"[DEBUG] Error resolving dependency '{fullDependencyName}': {ex.Message}");
+                        // Continue processing other dependencies
                     }
                     
                     if (packageItem != null)
@@ -1609,9 +1561,8 @@ namespace VPM
                     UpdateDependenciesButtonBar();
                 });
             }
-            catch (Exception ex) when (ex is IOException || ex is UnauthorizedAccessException)
+            catch (Exception)
             {
-                Console.WriteLine($"[Warning] Failed to refresh package statuses: {ex.Message}");
             }
         }
 
@@ -1813,10 +1764,6 @@ namespace VPM
                 Packages.Add(package);
             }
             
-            if (packagesToRemove.Count > 0 || packagesToAdd.Count > 0)
-            {
-                Console.WriteLine($"[SYNC-DISPLAY] Removed {packagesToRemove.Count}, Added {packagesToAdd.Count} packages ({sw.ElapsedMilliseconds}ms)");
-            }
         }
 
         #endregion

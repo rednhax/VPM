@@ -189,49 +189,50 @@ namespace VPM.Services
 
         private void AnalyzeFileForMetadata(string path, HashSet<string> contentTypes, HashSet<string> categories)
         {
-            var pathLower = path.ToLowerInvariant();
-
-            if (pathLower.Contains("/saves/scene/"))
+            // Use OrdinalIgnoreCase comparison instead of ToLowerInvariant() to avoid string allocations
+            // This is a hot path called for every file in every package
+            
+            if (path.Contains("/saves/scene/", StringComparison.OrdinalIgnoreCase))
             {
                 contentTypes.Add("Scenes");
                 categories.Add("Scene");
             }
-            else if (pathLower.Contains("/custom/atom/person/appearance/"))
+            else if (path.Contains("/custom/atom/person/appearance/", StringComparison.OrdinalIgnoreCase))
             {
                 contentTypes.Add("Looks");
                 categories.Add("Appearance");
             }
-            else if (pathLower.Contains("/custom/atom/person/pose/"))
+            else if (path.Contains("/custom/atom/person/pose/", StringComparison.OrdinalIgnoreCase))
             {
                 contentTypes.Add("Poses");
                 categories.Add("Pose");
             }
-            else if (pathLower.Contains("/custom/clothing/"))
+            else if (path.Contains("/custom/clothing/", StringComparison.OrdinalIgnoreCase))
             {
                 contentTypes.Add("Clothing");
                 categories.Add("Clothing");
             }
-            else if (pathLower.Contains("/custom/hair/"))
+            else if (path.Contains("/custom/hair/", StringComparison.OrdinalIgnoreCase))
             {
                 contentTypes.Add("Hair");
                 categories.Add("Hair");
             }
-            else if (pathLower.Contains("/custom/assets/"))
+            else if (path.Contains("/custom/assets/", StringComparison.OrdinalIgnoreCase))
             {
                 contentTypes.Add("Assets");
                 categories.Add("Asset");
             }
-            else if (pathLower.Contains("/custom/subscene/"))
+            else if (path.Contains("/custom/subscene/", StringComparison.OrdinalIgnoreCase))
             {
                 contentTypes.Add("SubScenes");
                 categories.Add("SubScene");
             }
-            else if (pathLower.Contains("/custom/scripts/"))
+            else if (path.Contains("/custom/scripts/", StringComparison.OrdinalIgnoreCase))
             {
                 contentTypes.Add("Scripts");
                 categories.Add("Script");
             }
-            else if (pathLower.EndsWith(".assetbundle"))
+            else if (path.EndsWith(".assetbundle", StringComparison.OrdinalIgnoreCase))
             {
                 contentTypes.Add("AssetBundles");
             }

@@ -65,24 +65,6 @@ namespace VPM
 
         private void LogException(string source, Exception exception)
         {
-            if (exception == null) return;
-            
-            Console.WriteLine($"\n{'='*80}");
-            Console.WriteLine($"[{source}] EXCEPTION CAUGHT");
-            Console.WriteLine($"{'='*80}");
-            Console.WriteLine($"Type: {exception.GetType().FullName}");
-            Console.WriteLine($"Message: {exception.Message}");
-            Console.WriteLine($"Stack Trace:\n{exception.StackTrace}");
-            
-            if (exception.InnerException != null)
-            {
-                Console.WriteLine($"\nInner Exception:");
-                Console.WriteLine($"Type: {exception.InnerException.GetType().FullName}");
-                Console.WriteLine($"Message: {exception.InnerException.Message}");
-                Console.WriteLine($"Stack Trace:\n{exception.InnerException.StackTrace}");
-            }
-            
-            Console.WriteLine($"{'='*80}\n");
         }
 
         /// <summary>
@@ -94,9 +76,6 @@ namespace VPM
             {
                 // Load settings to check if this is first launch
                 var settingsManager = new SettingsManager();
-                
-                Console.WriteLine($"[App] IsFirstLaunch: {settingsManager.Settings.IsFirstLaunch}");
-                Console.WriteLine($"[App] SelectedFolder: {settingsManager.Settings.SelectedFolder}");
                 
                 if (settingsManager.Settings.IsFirstLaunch)
                 {
@@ -113,11 +92,9 @@ namespace VPM
                         try
                         {
                             settingsManager.SaveSettingsImmediate();
-                            Console.WriteLine($"[App] Settings saved successfully after first launch setup");
                         }
                         catch (Exception saveEx)
                         {
-                            Console.WriteLine($"[App] Warning: Failed to save settings after first launch setup: {saveEx.Message}");
                             MessageBox.Show(
                                 $"Settings could not be saved to disk:\n\n{saveEx.Message}\n\n" +
                                 "The application will continue to work, but your settings may not persist between sessions.",

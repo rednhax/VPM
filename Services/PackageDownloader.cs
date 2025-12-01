@@ -468,7 +468,6 @@ namespace VPM.Services
         {
             if (string.IsNullOrWhiteSpace(packageName) || _packageUrlCache == null)
             {
-                Console.WriteLine($"[PackageDownloader] GetPackageInfo: '{packageName}' - cache is null or empty");
                 return null;
             }
 
@@ -767,7 +766,6 @@ namespace VPM.Services
                 // Check if file already exists
                 if (File.Exists(destinationPath))
                 {
-                    Console.WriteLine($"[PackageDownloader] File already exists: {fileName}");
                     OnDownloadCompleted(packageName, destinationPath, true);
                     return true;
                 }
@@ -781,28 +779,23 @@ namespace VPM.Services
                 // Add Hub URLs first (preferred - faster, no speed limit)
                 if (packageInfo.HubUrls != null && packageInfo.HubUrls.Any())
                 {
-                    Console.WriteLine($"[PackageDownloader] Found {packageInfo.HubUrls.Count} Hub URL(s) for {packageName}");
                     urlsToTry.AddRange(packageInfo.HubUrls);
                 }
                 
                 // Add Pixeldrain URLs as fallback
                 if (packageInfo.PdrUrls != null && packageInfo.PdrUrls.Any())
                 {
-                    Console.WriteLine($"[PackageDownloader] Found {packageInfo.PdrUrls.Count} Pixeldrain URL(s) for {packageName} (fallback)");
                     urlsToTry.AddRange(packageInfo.PdrUrls);
                 }
                 
                 // If no specific URLs, use the primary URL
                 if (!urlsToTry.Any() && !string.IsNullOrEmpty(packageInfo.DownloadUrl))
                 {
-                    Console.WriteLine($"[PackageDownloader] Using primary URL for {packageName}");
-                    Console.WriteLine($"[PackageDownloader] Primary URL: {packageInfo.DownloadUrl}");
                     urlsToTry.Add(packageInfo.DownloadUrl);
                 }
                 
                 if (!urlsToTry.Any())
                 {
-                    Console.WriteLine($"[PackageDownloader] ✗ No download URLs available for {packageName}");
                     OnDownloadError(packageName, "No download URLs available");
                     return false;
                 }
@@ -827,19 +820,14 @@ namespace VPM.Services
                         {
                             // Wait before retrying (exponential backoff: 2s, 4s, 8s)
                             int delaySeconds = (int)Math.Pow(2, retry);
-                            Console.WriteLine($"[PackageDownloader] Waiting {delaySeconds} seconds before retry {retry + 1}/{maxRetries}...");
                             await Task.Delay(TimeSpan.FromSeconds(delaySeconds), cancellationToken);
                         }
-                        
-                        Console.WriteLine($"[PackageDownloader] Attempt {i + 1}/{urlsToTry.Count} (Retry {retry + 1}/{maxRetries}): Trying {urlType} URL for {packageName}");
-                        Console.WriteLine($"[PackageDownloader]   URL: {url}");
                         
                         try
                         {
                             bool success = await DownloadFromSingleUrlAsync(packageName, url, destinationPath, cancellationToken);
                             if (success)
                             {
-                                Console.WriteLine($"[PackageDownloader] ✓ Successfully downloaded from {urlType} URL");
                                 return true;
                             }
                         }
@@ -851,7 +839,6 @@ namespace VPM.Services
                         catch (Exception ex)
                         {
                             lastException = ex;
-                            Console.WriteLine($"[PackageDownloader] ✗ {urlType} URL failed: {ex.Message}");
                             
                             // Check if it's a rate limit or server error that might benefit from retry
                             bool shouldRetry = ex.Message.Contains("400") || 
@@ -871,7 +858,6 @@ namespace VPM.Services
                     // Continue to next URL if current one failed all retries
                     if (i < urlsToTry.Count - 1)
                     {
-                        Console.WriteLine($"[PackageDownloader] Trying next URL...");
                     }
                 }
                 
@@ -879,13 +865,11 @@ namespace VPM.Services
                 var errorMsg = lastException != null 
                     ? $"All download URLs failed. Last error: {lastException.Message}"
                     : "All download URLs failed";
-                Console.WriteLine($"[PackageDownloader] ✗ {errorMsg}");
                 OnDownloadError(packageName, errorMsg);
                 return false;
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"[PackageDownloader] ✗ Unexpected error: {ex.Message}");
                 OnDownloadError(packageName, $"Download error: {ex.Message}");
                 return false;
             }
@@ -898,19 +882,10 @@ namespace VPM.Services
         {
             try
             {
-                // Debug: Print the URL being downloaded
-                Console.WriteLine($"[PackageDownloader] Downloading package: {packageName}");
-                Console.WriteLine($"[PackageDownloader] URL: {url}");
-                
                 // Download with progress reporting
                 using (var response = await _httpClient.GetAsync(url, HttpCompletionOption.ResponseHeadersRead, cancellationToken))
                 {
-                    // Log HTTP response details
-                    Console.WriteLine($"[PackageDownloader]   HTTP Status: {(int)response.StatusCode} {response.StatusCode}");
-                    Console.WriteLine($"[PackageDownloader]   Content-Type: {response.Content.Headers.ContentType?.MediaType ?? "unknown"}");
-                    
                     var totalBytes = response.Content.Headers.ContentLength ?? 0;
-                    Console.WriteLine($"[PackageDownloader]   Content-Length: {totalBytes} bytes ({totalBytes / 1024.0:F1} KB)");
                     
                     // Check if content type suggests an error page (HTML instead of ZIP)
                     var contentType = response.Content.Headers.ContentType?.MediaType ?? "";
@@ -919,13 +894,8 @@ namespace VPM.Services
                         // Prevent infinite retry loop
                         if (retryCount >= 2)
                         {
-                            Console.WriteLine($"[PackageDownloader]   ✗ Still getting HTML after {retryCount} retries - giving up");
                             throw new Exception("Hub returned HTML page even after retry attempts");
                         }
-                        
-                        Console.WriteLine($"[PackageDownloader]   – Warning: Server returned HTML instead of a file (likely Hub 'I agree' page)");
-                        Console.WriteLine($"[PackageDownloader]   Note: vamhubconsent cookie should already be set, but server still returned HTML");
-                        Console.WriteLine($"[PackageDownloader]   This may indicate the package requires login or has other restrictions");
                         
                         throw new Exception("Hub returned HTML page - package may require login or have access restrictions");
                     }
@@ -956,13 +926,10 @@ namespace VPM.Services
                             }
                         }
                     }
-                    
-                    Console.WriteLine($"[PackageDownloader]   Downloaded: {downloadedBytes} bytes ({downloadedBytes / 1024.0:F1} KB)");
                 }
 
                 // Validate downloaded file
                 var fileInfo = new FileInfo(destinationPath);
-                Console.WriteLine($"[PackageDownloader] Validating downloaded file: {fileInfo.Length} bytes ({fileInfo.Length / 1024.0:F1} KB)");
                 
                 // Validate ZIP structure and check for meta.json
                 bool isValidVarPackage = false;
@@ -970,38 +937,25 @@ namespace VPM.Services
                 {
                     using (var archive = SharpCompressHelper.OpenForRead(destinationPath))
                     {
-                        // Check if ZIP can be read
-                        var entryCount = archive.Entries.Count();
-                        Console.WriteLine($"[PackageDownloader] ZIP contains {entryCount} entries");
-                        
                         // Check for meta.json file (required for VAR packages)
                         var metaEntry = archive.Entries.FirstOrDefault(e => 
                             e.Key.Equals("meta.json", StringComparison.OrdinalIgnoreCase));
                         
                         if (metaEntry != null)
                         {
-                            Console.WriteLine($"[PackageDownloader] ✓ Found meta.json in package");
                             isValidVarPackage = true;
-                        }
-                        else
-                        {
-                            Console.WriteLine($"[PackageDownloader] ✗ No meta.json found in package");
                         }
                     }
                 }
                 catch (Exception zipEx)
                 {
-                    Console.WriteLine($"[PackageDownloader] ✗ Downloaded file is not a valid ZIP/VAR: {zipEx.Message}");
-                    
                     // Delete the corrupted file
                     try
                     {
                         File.Delete(destinationPath);
-                        Console.WriteLine($"[PackageDownloader] Deleted invalid file");
                     }
-                    catch (Exception deleteEx)
+                    catch (Exception)
                     {
-                        Console.WriteLine($"[PackageDownloader] Warning: Could not delete invalid file: {deleteEx.Message}");
                     }
                     
                     throw new Exception($"Downloaded file is not a valid VAR package: {zipEx.Message}");
@@ -1010,23 +964,17 @@ namespace VPM.Services
                 // If no meta.json found, the package is invalid
                 if (!isValidVarPackage)
                 {
-                    Console.WriteLine($"[PackageDownloader] ✗ Invalid VAR package: missing meta.json");
-                    
                     // Delete the invalid file
                     try
                     {
                         File.Delete(destinationPath);
-                        Console.WriteLine($"[PackageDownloader] Deleted invalid package");
                     }
-                    catch (Exception deleteEx)
+                    catch (Exception)
                     {
-                        Console.WriteLine($"[PackageDownloader] Warning: Could not delete invalid file: {deleteEx.Message}");
                     }
                     
                     throw new Exception($"Invalid VAR package: meta.json not found");
                 }
-                
-                Console.WriteLine($"[PackageDownloader] ✓ Valid VAR package: {fileInfo.Length} bytes ({fileInfo.Length / 1024.0:F1} KB)");
 
                 OnDownloadCompleted(packageName, destinationPath, false);
                 return true;
@@ -1039,11 +987,9 @@ namespace VPM.Services
                     try
                     {
                         File.Delete(destinationPath);
-                        Console.WriteLine($"[PackageDownloader] Deleted partial download: {destinationPath}");
                     }
-                    catch (Exception deleteEx)
+                    catch (Exception)
                     {
-                        Console.WriteLine($"[PackageDownloader] Warning: Could not delete partial download: {deleteEx.Message}");
                     }
                 }
                 

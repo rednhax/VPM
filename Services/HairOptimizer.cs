@@ -415,9 +415,7 @@ namespace VPM.Services
                     }
                     catch (Exception archiveEx)
                     {
-                        // Log detailed error for archive opening issues
                         result.ErrorMessage = $"Failed to open archive: {archiveEx.Message}";
-                        Console.WriteLine($"[HairOptimizer] Error opening archive '{packagePath}': {archiveEx.Message}");
                     }
                 }
                 else

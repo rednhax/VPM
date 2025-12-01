@@ -1473,9 +1473,8 @@ namespace VPM
                     }
                 });
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                Console.WriteLine($"[RefreshFilterLists] Error: {ex.Message}");
             }
         }
 

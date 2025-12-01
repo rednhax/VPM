@@ -29,7 +29,6 @@ namespace VPM
         private readonly PackageManager _packageManager;
         private readonly PackageDownloader _packageDownloader;
         private readonly DownloadQueueManager _downloadQueueManager;
-        private readonly NetworkPermissionService _networkPermissionService;
         private readonly string _addonPackagesFolder;
         private readonly string _allPackagesFolder;
         private readonly Func<Task<bool>> _updateDatabaseCallback;
@@ -55,7 +54,6 @@ namespace VPM
             PackageManager packageManager,
             PackageDownloader packageDownloader,
             DownloadQueueManager downloadQueueManager,
-            NetworkPermissionService networkPermissionService,
             string addonPackagesFolder,
             Func<Task<bool>> updateDatabaseCallback,
             Action<string, string> onPackageDownloadedCallback = null)
@@ -65,7 +63,6 @@ namespace VPM
             _packageManager = packageManager ?? throw new ArgumentNullException(nameof(packageManager));
             _packageDownloader = packageDownloader ?? throw new ArgumentNullException(nameof(packageDownloader));
             _downloadQueueManager = downloadQueueManager ?? throw new ArgumentNullException(nameof(downloadQueueManager));
-            _networkPermissionService = networkPermissionService ?? throw new ArgumentNullException(nameof(networkPermissionService));
             _addonPackagesFolder = addonPackagesFolder ?? throw new ArgumentNullException(nameof(addonPackagesFolder));
             _updateDatabaseCallback = updateDatabaseCallback ?? throw new ArgumentNullException(nameof(updateDatabaseCallback));
             _onPackageDownloadedCallback = onPackageDownloadedCallback;
@@ -116,26 +113,18 @@ namespace VPM
             
             try
             {
-                Console.WriteLine("[PackageSearchWindow] Attempting to load offline database...");
-                
                 // Try to load without network permission (will use offline file if available)
                 bool loaded = await _packageDownloader.LoadEncryptedPackageListAsync("", forceRefresh: false);
                 
                 if (loaded && _packageDownloader.GetPackageCount() > 0)
                 {
                     int packageCount = _packageDownloader.GetPackageCount();
-                    Console.WriteLine($"[PackageSearchWindow] ✓ Loaded offline database: {packageCount:N0} packages");
                     SetStatus($"Offline database loaded: {packageCount:N0} packages");
                     UpdateDatabaseStatus();
                 }
-                else
-                {
-                    Console.WriteLine("[PackageSearchWindow] No offline database found");
-                }
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                Console.WriteLine($"[PackageSearchWindow] Error loading offline database: {ex.Message}");
             }
         }
 
@@ -573,18 +562,7 @@ namespace VPM
                 // This includes both missing packages AND local packages (to check for newer versions)
                 if (packageNames.Any())
                 {
-                    // Request network permission
-                    bool hasPermission = await _networkPermissionService.RequestNetworkAccessAsync();
-                    
-                    if (hasPermission)
-                    {
-                        await SearchOnline(packageNames);
-                    }
-                    else
-                    {
-                        var missingCount = _searchResults.Count(r => !r.IsLocal);
-                        SetStatus($"Search complete. {missingCount} package(s) not found locally. Network access denied.");
-                    }
+                    await SearchOnline(packageNames);
                 }
 
                 var foundCount = _searchResults.Count(r => r.IsLocal);
@@ -833,11 +811,20 @@ namespace VPM
                                         result.HasNewerVersionOnline = true;
                                     }
                                 }
-                                catch (Exception ex)
+                                catch (Exception)
                                 {
                                     // If version comparison fails, assume no newer version
                                     result.HasNewerVersionOnline = false;
-                                    Console.WriteLine($"[PackageSearchWindow]   ✗ Version comparison failed: {ex.Message}");
+                                }
+                            }
+                            else if (!result.IsLocal)
+                            {
+                                // For packages not found locally, check if there are multiple versions available
+                                // If the search term doesn't include a version, mark as having update available
+                                // This indicates the user can download a version
+                                if (!packageName.Contains(".") || !char.IsDigit(packageName[packageName.Length - 1]))
+                                {
+                                    result.HasNewerVersionOnline = true;
                                 }
                             }
                             
@@ -950,7 +937,6 @@ namespace VPM
                 }
                 else
                 {
-                    Console.WriteLine($"[PackageSearchWindow] Progress event for {e.PackageName} but no matching result found");
                 }
             });
         }
@@ -959,8 +945,6 @@ namespace VPM
         {
             Dispatcher.Invoke(() =>
             {
-                Console.WriteLine($"[PackageSearchWindow] Download completed event for: {e.PackageName}");
-                
                 // Find the result that matches this download (check both PackageName and OnlineVersion)
                 var result = _searchResults.FirstOrDefault(r => 
                     r.OnlineVersion?.Equals(e.PackageName, StringComparison.OrdinalIgnoreCase) == true ||
@@ -968,16 +952,16 @@ namespace VPM
                     
                 if (result != null)
                 {
-                    Console.WriteLine($"[PackageSearchWindow] Updating UI for: {result.PackageName}");
                     result.IsDownloading = false;
                     result.StatusText = "✓ Completed";
                     result.StatusColor = "#4CAF50"; // Green
                     result.ProgressText = "Download completed successfully";
                     result.ProgressVisibility = Visibility.Collapsed;
                     result.Location = e.FilePath;
+                    result.LocalPackageName = Path.GetFileNameWithoutExtension(e.FilePath);
                     result.IsLocal = true; // Mark as local now
                     result.HasNewerVersionOnline = false; // No longer has update available
-                    result.LocalPackageName = Path.GetFileNameWithoutExtension(e.FilePath);
+                    result.OnlineVersion = null; // Clear online version so display shows just local version
                     
                     // Update file size
                     if (File.Exists(e.FilePath))
@@ -994,12 +978,9 @@ namespace VPM
                     
                     // Reapply filter in case "Hide local packages" is checked
                     ApplyFilter();
-                    
-                    Console.WriteLine($"[PackageSearchWindow] ✓ UI updated successfully");
                 }
                 else
                 {
-                    Console.WriteLine($"[PackageSearchWindow] ✗ No matching result found for: {e.PackageName}");
                 }
             });
         }
@@ -1008,7 +989,6 @@ namespace VPM
         {
             Dispatcher.Invoke(() =>
             {
-                Console.WriteLine($"[PackageSearchWindow] Download error event for: {e.PackageName} - {e.ErrorMessage}");
                 
                 // Find the result that matches this download (check both PackageName and OnlineVersion)
                 var result = _searchResults.FirstOrDefault(r => 
@@ -1067,19 +1047,8 @@ namespace VPM
                 // If still empty after offline load attempt, offer database update
                 if (_packageDownloader.GetPackageCount() == 0)
                 {
-                    // Offer database update only if database is empty
-                    bool offerDatabaseUpdate = true;
-                    
-                    // Request network access and check if user wants to update database
-                    var (granted, updateDatabase) = await _networkPermissionService.RequestNetworkAccessWithOptionsAsync(offerDatabaseUpdate);
-                    
-                    if (!granted)
-                    {
-                        SetStatus("Network access denied");
-                        CustomMessageBox.Show("Network access is required to download the package database.",
-                            "Network Access Denied", MessageBoxButton.OK, MessageBoxImage.Warning);
-                        return;
-                    }
+                    // Always grant network access and update database
+                    bool updateDatabase = true;
                     
                     if (updateDatabase)
                     {
@@ -1299,8 +1268,6 @@ namespace VPM
                 // Use OnlineVersion if available, otherwise use PackageName
                 string packageToCancel = !string.IsNullOrEmpty(result.OnlineVersion) ? result.OnlineVersion : result.PackageName;
                 
-                Console.WriteLine($"[PackageSearchWindow] Cancel requested for: {packageToCancel}");
-                
                 // Try to cancel active download first
                 bool cancelledActive = _downloadQueueManager.CancelDownload(packageToCancel);
                 
@@ -1321,30 +1288,24 @@ namespace VPM
                     
                     string action = cancelledActive ? "Cancelled active download" : "Removed from queue";
                     SetStatus($"{action}: {packageToCancel}");
-                    Console.WriteLine($"[PackageSearchWindow] {action}: {packageToCancel}");
                 }
                 else
                 {
-                    Console.WriteLine($"[PackageSearchWindow] Could not cancel/remove: {packageToCancel}");
                 }
             }
         }
         
         private void CancelAllButton_Click(object sender, RoutedEventArgs e)
         {
-            Console.WriteLine("[PackageSearchWindow] Cancel All requested");
-            
             // Cancel all active downloads
             var activeDownloads = _downloadQueueManager.ActiveDownloads.ToList();
             foreach (var download in activeDownloads)
             {
                 _downloadQueueManager.CancelDownload(download.PackageName);
-                Console.WriteLine($"[PackageSearchWindow] Cancelled active: {download.PackageName}");
             }
             
             // Clear the queue
             _downloadQueueManager.ClearQueue();
-            Console.WriteLine("[PackageSearchWindow] Cleared download queue");
             
             // Reset all downloading/queued items in UI
             foreach (var result in _searchResults.Where(r => r.IsDownloading).ToList())
@@ -1419,6 +1380,31 @@ namespace VPM
                     return p1.CompareTo(p2);
             }
             return 0;
+        }
+
+        /// <summary>
+        /// Marks packages as having updates available
+        /// Called after update checker finds updates
+        /// </summary>
+        public void MarkPackagesWithUpdates(List<string> packageNamesWithUpdates)
+        {
+            if (packageNamesWithUpdates == null || packageNamesWithUpdates.Count == 0)
+                return;
+            
+            Dispatcher.Invoke(() =>
+            {
+                foreach (var packageName in packageNamesWithUpdates)
+                {
+                    // Find matching result in search results by package name
+                    var result = _searchResults.FirstOrDefault(r => 
+                        r.PackageName.Equals(packageName, StringComparison.OrdinalIgnoreCase));
+                    
+                    if (result != null && result.IsLocal)
+                    {
+                        result.HasNewerVersionOnline = true;
+                    }
+                }
+            });
         }
 
         #endregion

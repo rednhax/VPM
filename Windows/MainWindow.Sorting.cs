@@ -43,28 +43,21 @@ namespace VPM
                 var packageState = _sortingManager.GetSortingState("Packages");
                 if (packageState?.CurrentSortOption is PackageSortOption packageSort)
                 {
-                    Console.WriteLine($"[SORTING] Restoring package sorting: {packageSort} {(packageState.IsAscending ? "Ascending" : "Descending")}");
                     ReapplyPackageSortingInternal(packageSort, packageState.IsAscending);
-                }
-                else
-                {
-                    Console.WriteLine($"[SORTING] No package sorting state found to restore. CurrentSortOption: {packageState?.CurrentSortOption}");
                 }
                 
                 // Restore dependencies sorting - use internal method to avoid toggle logic
                 var depsState = _sortingManager.GetSortingState("Dependencies");
                 if (depsState?.CurrentSortOption is DependencySortOption depsSort)
                 {
-                    Console.WriteLine($"[SORTING] Restoring dependencies sorting: {depsSort} {(depsState.IsAscending ? "Ascending" : "Descending")}");
                     ReapplyDependenciesSortingInternal(depsSort, depsState.IsAscending);
                 }
                 
                 // NOTE: Filter list sorting restoration is deferred until after filter lists are populated
                 // See RestoreFilterListsSorting() which is called from RefreshFilterLists()
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                Console.WriteLine($"[SORTING] Failed to restore sorting: {ex.Message}");
             }
         }
         
@@ -84,9 +77,8 @@ namespace VPM
                 RestoreFilterListSorting("LicenseTypes", LicenseTypeList, LicenseTypeSortButton);
                 RestoreFilterListSorting("Subfolders", SubfoldersFilterList, SubfoldersSortButton);
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                Console.WriteLine($"[SORTING] Failed to restore filter list sorting: {ex.Message}");
             }
         }
         
@@ -178,9 +170,8 @@ namespace VPM
                 var displayText = sortOption.GetDisplayText(isAscending);
                 sortButton.ToolTip = $"Sort {filterType.ToLower()} (Current: {displayText})";
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                Console.WriteLine($"[SORTING] Error reapplying filter sorting for {filterType}: {ex.Message}");
             }
         }
         
@@ -820,9 +811,8 @@ namespace VPM
                 var displayText = currentState != null ? sortOption.GetDisplayText(currentState.IsAscending) : sortOption.GetDescription();
                 sortButton.ToolTip = $"Sort {filterType.ToLower()} (Current: {displayText})";
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                Console.WriteLine($"[SORTING] Error applying filter sorting for {filterType}: {ex.Message}");
             }
         }
 

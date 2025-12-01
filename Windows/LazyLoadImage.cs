@@ -409,7 +409,7 @@ namespace VPM.Windows
                         {
                             image = await callback();
                         }
-                        catch (Exception ex)
+                        catch (Exception)
                         {
                         }
                     }
@@ -436,7 +436,7 @@ namespace VPM.Windows
                     });
                 }
             }
-            catch (Exception ex)
+            catch (Exception)
             {
             }
             finally
@@ -645,7 +645,7 @@ namespace VPM.Windows
                     _extractButton.Visibility = Visibility.Visible;
                 });
             }
-            catch (Exception ex)
+            catch (Exception)
             {
                 // Ignore errors during state update
             }

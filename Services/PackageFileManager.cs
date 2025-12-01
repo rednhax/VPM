@@ -725,12 +725,9 @@ namespace VPM.Services
         /// </summary>
         public async Task<(bool success, string error)> UnloadPackageAsync(string packageName)
         {
-            Console.WriteLine($"[UnloadPackageAsync] === START: {packageName} ===");
-            
             // Prevent unloading archived packages
             if (packageName.EndsWith("#archived", StringComparison.OrdinalIgnoreCase))
             {
-                Console.WriteLine($"[UnloadPackageAsync] Package is archived, rejecting");
                 return (false, "Cannot unload archived packages. Archived packages are read-only.");
             }
 
@@ -739,7 +736,6 @@ namespace VPM.Services
             // Check for recent duplicate operations (1 second throttle for keyboard/UI responsiveness)
             if (WasRecentlyPerformed(operationKey, TimeSpan.FromSeconds(1)))
             {
-                Console.WriteLine($"[UnloadPackageAsync] Operation was recently performed, throttling");
                 return (false, "Operation was recently performed, please wait before retrying");
             }
 
@@ -756,13 +752,11 @@ namespace VPM.Services
                 RecordOperation(operationKey);
 
                 // Find the package file in AddonPackages
-                Console.WriteLine($"[UnloadPackageAsync] Finding package in AddonPackages");
                 var sourceFile = FindLatestPackageVersion(packageName, _addonPackagesFolder);
 
                 if (string.IsNullOrEmpty(sourceFile))
                 {
                     var errorMsg = $"Package '{packageName}' not found in loaded packages";
-                    Console.WriteLine($"[UnloadPackageAsync] ERROR: {errorMsg}");
                     
                     OperationCompleted?.Invoke(this, new PackageOperationEventArgs
                     {
@@ -774,8 +768,6 @@ namespace VPM.Services
                     
                     return (false, errorMsg);
                 }
-                
-                Console.WriteLine($"[UnloadPackageAsync] Found source file: {sourceFile}");
 
                 // Preserve subfolder structure when moving from AddonPackages to AllPackages
                 var relativePath = Path.GetRelativePath(_addonPackagesFolder, sourceFile);
@@ -786,21 +778,14 @@ namespace VPM.Services
                 {
                     try
                     {
-                        Console.WriteLine($"[UnloadPackageAsync] Destination already exists, deleting source");
-                        
                         // CRITICAL: Invalidate all image caches for this package BEFORE file operations
                         // This ensures no image references are held when the file is deleted
-                        Console.WriteLine($"[UnloadPackageAsync] Invalidating image cache");
                         _imageManager?.InvalidatePackageCache(packageName);
                         
-                        Console.WriteLine($"[UnloadPackageAsync] Closing file handles");
                         if (_imageManager != null) await _imageManager.CloseFileHandlesAsync(sourceFile);
-                        Console.WriteLine($"[UnloadPackageAsync] File handles closed");
                         
                         // Delete the loaded copy (retry on transient failures)
-                        Console.WriteLine($"[UnloadPackageAsync] Deleting source file: {sourceFile}");
                         File.Delete(sourceFile);
-                        Console.WriteLine($"[UnloadPackageAsync] Source file deleted successfully");
                         
                         // Remove empty directories from source location
                         var sourceDirectory = Path.GetDirectoryName(sourceFile);
@@ -837,18 +822,13 @@ namespace VPM.Services
 
                 // CRITICAL: Invalidate all image caches for this package BEFORE file operations
                 // This ensures no image references are held when the file is moved
-                Console.WriteLine($"[UnloadPackageAsync] Invalidating image cache");
                 _imageManager?.InvalidatePackageCache(packageName);
                 
-                Console.WriteLine($"[UnloadPackageAsync] Closing file handles");
                 if (_imageManager != null) await _imageManager.CloseFileHandlesAsync(sourceFile);
-                Console.WriteLine($"[UnloadPackageAsync] File handles closed");
                 
                 // Move the file (skip validation to allow corrupt VARs to move)
                 // SafeMoveFileAsync includes retry logic with exponential backoff for transient failures
-                Console.WriteLine($"[UnloadPackageAsync] Attempting to move file from {sourceFile} to {destinationFile}");
                 var (success, error) = await SafeMoveFileAsync(sourceFile, destinationFile, 5, true);
-                Console.WriteLine($"[UnloadPackageAsync] Move result: Success={success}, Error={error}");
 
                 if (success)
                 {

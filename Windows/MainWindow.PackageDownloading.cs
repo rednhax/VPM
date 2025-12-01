@@ -19,7 +19,6 @@ namespace VPM
         private PackageDownloader _packageDownloader;
         private DownloadQueueManager _downloadQueueManager;
         private CancellationTokenSource _downloadCancellationTokenSource;
-        private NetworkPermissionService _networkPermissionService;
         private Windows.DownloadProgressWindow _currentProgressWindow;
         private PackageSearchWindow _packageDownloadsWindow;
         
@@ -37,7 +36,6 @@ namespace VPM
             {
                 if (string.IsNullOrEmpty(_selectedFolder))
                 {
-                    Console.WriteLine("[PackageDownloader] Cannot initialize: No folder selected");
                     return;
                 }
                 
@@ -49,16 +47,10 @@ namespace VPM
                 // Create new downloader
                 _packageDownloader = new PackageDownloader(addonPackagesFolder);
                 
-                // Initialize network permission service only once
-                if (_networkPermissionService == null)
-                {
-                    _networkPermissionService = new NetworkPermissionService(_settingsManager);
-                }
-                
-                // Set network permission check callback
+                // Set network permission check callback (always grant access)
                 _packageDownloader.SetNetworkPermissionCheck(async () =>
                 {
-                    return await _networkPermissionService.RequestNetworkAccessAsync();
+                    return await Task.FromResult(true);
                 });
                 
                 // Subscribe to events
@@ -76,12 +68,9 @@ namespace VPM
                 
                 // Initialize update checker now that downloader is ready
                 InitializeUpdateChecker();
-                
-                Console.WriteLine("[PackageDownloader] Initialized successfully");
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                Console.WriteLine($"[PackageDownloader] Initialization error: {ex.Message}");
             }
         }
         
@@ -117,9 +106,8 @@ namespace VPM
                     Console.SetOut(originalOut);
                 }
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                Console.WriteLine($"[PackageDownloader] Error loading package list: {ex.Message}");
                 return false;
             }
         }
@@ -476,9 +464,8 @@ namespace VPM
                         dep.Status = "Downloading";
                     }
                 }
-                catch (Exception ex)
+                catch (Exception)
                 {
-                    Console.WriteLine($"[PackageDownloader] Error in progress handler: {ex.Message}");
                 }
             });
         }
@@ -489,8 +476,6 @@ namespace VPM
             {
                 try
                 {
-                    Console.WriteLine($"[MainWindow] Download completed: {e.PackageName} at {e.FilePath}");
-                    
                     // Update progress window if it exists
                     string message = e.AlreadyExisted ? "Package already exists" : "Download completed successfully";
                     _currentProgressWindow?.MarkCompleted(e.PackageName, true, message);
@@ -503,21 +488,17 @@ namespace VPM
                     
                     if (dep != null)
                     {
-                        Console.WriteLine($"[MainWindow] Updating dependency status for: {dep.Name}");
                         dep.Status = "Loaded";
                     }
                     
                     // Incrementally add the downloaded package to the UI
-                    Console.WriteLine($"[MainWindow] Adding package to UI: {e.PackageName}");
                     await AddDownloadedPackageToUIAsync(e.FilePath, e.PackageName);
                     
                     // Always update toolbar buttons to reflect new missing count
                     UpdateToolbarButtons();
                 }
-                catch (Exception ex)
+                catch (Exception)
                 {
-                    Console.WriteLine($"[PackageDownloader] Error in completion handler: {ex.Message}");
-                    Console.WriteLine($"[PackageDownloader] Stack trace: {ex.StackTrace}");
                 }
             });
         }
@@ -544,9 +525,8 @@ namespace VPM
                         UpdateToolbarButtons();
                     }
                 }
-                catch (Exception ex)
+                catch (Exception)
                 {
-                    Console.WriteLine($"[PackageDownloader] Error in error handler: {ex.Message}");
                 }
             });
         }
@@ -630,9 +610,8 @@ namespace VPM
                 
                 // Refresh filter lists will happen at the end of all downloads
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                Console.WriteLine($"[Error] Failed to add downloaded package to UI: {ex.Message}");
             }
         }
         
@@ -656,9 +635,8 @@ namespace VPM
                 // This will also reload preview images automatically
                 await Dispatcher.InvokeAsync(() => RefreshPackages());
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                Console.WriteLine($"[PackageDownloader] Error refreshing packages: {ex.Message}");
             }
         }
         
@@ -692,7 +670,6 @@ namespace VPM
         {
             Dispatcher.Invoke(() =>
             {
-                Console.WriteLine($"[DownloadQueue] Status: {e.ActiveCount} active, {e.QueuedCount} queued");
                 // Update UI status bar or queue window if needed
             });
         }
@@ -701,7 +678,6 @@ namespace VPM
         {
             Dispatcher.Invoke(() =>
             {
-                Console.WriteLine($"[DownloadQueue] Queued: {e.Download.PackageName}");
             });
         }
         
@@ -709,7 +685,6 @@ namespace VPM
         {
             Dispatcher.Invoke(() =>
             {
-                Console.WriteLine($"[DownloadQueue] Started: {e.Download.PackageName}");
             });
         }
         
@@ -717,7 +692,6 @@ namespace VPM
         {
             Dispatcher.Invoke(() =>
             {
-                Console.WriteLine($"[DownloadQueue] Removed: {e.Download.PackageName}");
             });
         }
         
@@ -764,11 +738,9 @@ namespace VPM
                     _packageDownloader = null;
                 }
                 
-                Console.WriteLine("[PackageDownloader] Disposed successfully");
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                Console.WriteLine($"[PackageDownloader] Error during disposal: {ex.Message}");
             }
         }
         
