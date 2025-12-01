@@ -44,6 +44,7 @@ namespace VPM.Services
             {
                 // Step 1: Build a list of ALL files in the archive (using full paths)
                 // This allows us to check for companion files in the SAME directory
+                // Use OrdinalIgnoreCase comparer to avoid string allocations from ToLower()
                 var allEntries = SharpCompressHelper.GetAllEntries(archive);
                 var allFilePaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
@@ -51,7 +52,7 @@ namespace VPM.Services
                 {
                     if (!entry.Key.EndsWith("/"))
                     {
-                        allFilePaths.Add(entry.Key.ToLower());
+                        allFilePaths.Add(entry.Key);  // No ToLower() - comparer handles case-insensitivity
                     }
                 }
 

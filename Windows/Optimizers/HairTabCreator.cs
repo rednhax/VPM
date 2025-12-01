@@ -26,9 +26,9 @@ namespace VPM
                 "✓ Hair at or below target density remains unchanged\n" +
                 "✓ Modifies curveDensity and hairMultiplier values\n\n" +
                 "Example: If you select density 16:\n" +
-                "  • Hair with density 32 †’ Reduced to 16\n" +
-                "  • Hair with density 16 †’ Kept as-is\n" +
-                "  • Hair with density 8 †’ Kept as-is\n\n" +
+                "  • Hair with density 32 -> Reduced to 16\n" +
+                "  • Hair with density 16 -> Kept as-is\n" +
+                "  • Hair with density 8 -> Kept as-is\n\n" +
                 "Performance: Lower density = better FPS in VaM.";
             
             headerPanel.Children.Add(CreateTooltipInfoIcon(tooltipText));

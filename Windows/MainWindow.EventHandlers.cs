@@ -4566,7 +4566,7 @@ namespace VPM
                 {
                     CustomMessageBox.Show(
                         "Please select a VAM root folder first.\n\n" +
-                        "Go to File †’ Select Root Folder to choose your VAM installation directory.",
+                        "Go to File -> Select Root Folder to choose your VAM installation directory.",
                         "No Folder Selected",
                         MessageBoxButton.OK,
                         MessageBoxImage.Information);

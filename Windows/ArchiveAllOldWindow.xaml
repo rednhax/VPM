@@ -43,7 +43,7 @@
                                         <TextBlock Grid.Column="1" FontSize="11" Foreground="#888" VerticalAlignment="Center" Margin="8,0,0,0">
                                             <Run Text="v"/>
                                             <Run Text="{Binding Version, Mode=OneWay}"/>
-                                            <Run Text=" †’ "/>
+                                            <Run Text=" -> "/>
                                             <Run Text="{Binding LatestVersionNumber, Mode=OneWay}" Foreground="#4CAF50"/>
                                         </TextBlock>
                                     </Grid>

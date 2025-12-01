@@ -128,7 +128,7 @@ namespace VPM.Services
                 {
                     // SCENARIO 2: Re-optimizing already optimized package in loaded folder
                     // Read from archive (original) to allow re-optimization with different settings
-                    // This provides BETTER QUALITY when downscaling (e.g., 8K†’2K is better than 4K†’2K)
+                    // This provides BETTER QUALITY when downscaling (e.g., 8K->2K is better than 4K->2K)
                     progressCallback?.Invoke("Re-optimizing from original archive (better quality)...", 0, textureConversions.Count);
                     
                     if (_imageManager != null) await _imageManager.CloseFileHandlesAsync(sourceVarPath);

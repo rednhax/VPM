@@ -691,7 +691,7 @@ namespace VPM
                     
                     var itemText = new TextBlock
                     {
-                        Text = $"  • {Path.GetFileName(texture.ReferencedPath)}: {currentRes} †’ {targetRes}",
+                        Text = $"  • {Path.GetFileName(texture.ReferencedPath)}: {currentRes} -> {targetRes}",
                         FontSize = 12,
                         Foreground = new SolidColorBrush(Color.FromRgb(180, 180, 180)),
                         FontFamily = new FontFamily("Consolas"),
@@ -743,7 +743,7 @@ namespace VPM
                 foreach (var hair in selectedHairs)
                 {
                     int targetDensity = hair.ConvertTo32 ? 32 : hair.ConvertTo24 ? 24 : hair.ConvertTo16 ? 16 : hair.ConvertTo8 ? 8 : 0;
-                    string status = hair.HasCurveDensity ? $"{hair.CurveDensity} †’ {targetDensity}" : $"Add †’ {targetDensity}";
+                    string status = hair.HasCurveDensity ? $"{hair.CurveDensity} -> {targetDensity}" : $"Add -> {targetDensity}";
                     
                     var itemText = new TextBlock
                     {
@@ -2487,7 +2487,7 @@ namespace VPM
                                 string originalDensity = hair.CurveDensity > 0 ? hair.CurveDensity.ToString() : "-";
                                 int targetDensity = hair.ConvertTo32 ? 32 : hair.ConvertTo24 ? 24 : hair.ConvertTo16 ? 16 : hair.ConvertTo8 ? 8 : 16;
                                 details.HairDetails.Add(
-                                    $"{hair.SceneFile} - Hair {hair.HairId} ({hair.HairName}) | Density: {originalDensity} †’ {targetDensity}");
+                                    $"{hair.SceneFile} - Hair {hair.HairId} ({hair.HairName}) | Density: {originalDensity} -> {targetDensity}");
                             }
                         }
 
@@ -2502,7 +2502,7 @@ namespace VPM
                                                     light.SetShadows1024 ? "1024px" :
                                                     light.SetShadows2048 ? "2048px" : "Default";
                                 details.LightDetails.Add(
-                                    $"{light.SceneFile} - Light {light.LightId} ({light.LightName}) | Shadows: {originalShadow} †’ {targetShadow}");
+                                    $"{light.SceneFile} - Light {light.LightId} ({light.LightName}) | Shadows: {originalShadow} -> {targetShadow}");
                             }
                         }
 
@@ -2511,7 +2511,7 @@ namespace VPM
                         {
                             foreach (var dep in pkgDisabledDeps)
                             {
-                                details.DisabledDependencyDetails.Add($"{dep.Name} †’ REMOVED");
+                                details.DisabledDependencyDetails.Add($"{dep.Name} -> REMOVED");
                             }
                         }
 
@@ -2523,7 +2523,7 @@ namespace VPM
                                 // Extract base name without version (e.g., "Package.Name.123" -> "Package.Name")
                                 int lastDotIndex = dep.Name.LastIndexOf('.');
                                 string baseName = lastDotIndex > 0 ? dep.Name.Substring(0, lastDotIndex) : dep.Name;
-                                details.LatestDependencyDetails.Add($"{dep.Name} †’ {baseName}.latest");
+                                details.LatestDependencyDetails.Add($"{dep.Name} -> {baseName}.latest");
                             }
                         }
 

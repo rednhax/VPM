@@ -497,7 +497,7 @@ Examples:
                                                                     </MultiDataTrigger.Conditions>
                                                                     <Setter Property="Text">
                                                                         <Setter.Value>
-                                                                            <MultiBinding StringFormat="Size: {0} • Update available v{1} †’ v{2}">
+                                                                            <MultiBinding StringFormat="Size: {0} • Update available v{1} -> v{2}">
                                                                                 <Binding Path="SizeFormatted"/>
                                                                                 <Binding Path="LocalVersionNumber"/>
                                                                                 <Binding Path="OnlineVersionNumber"/>

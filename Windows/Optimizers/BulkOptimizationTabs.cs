@@ -677,7 +677,7 @@ namespace VPM
                 VerticalAlignment = VerticalAlignment.Center,
                 Margin = new Thickness(15, 0, 0, 0),
                 Cursor = System.Windows.Input.Cursors.Hand,
-                ToolTip = "Convert all dependency versions to .latest when optimizing.\n\nExample:\n  MacGruber.PostMagic.3 †’ MacGruber.PostMagic.latest\n\nChanges will be tracked in the description for easy reversion.",
+                ToolTip = "Convert all dependency versions to .latest when optimizing.\n\nExample:\n  MacGruber.PostMagic.3 -> MacGruber.PostMagic.latest\n\nChanges will be tracked in the description for easy reversion.",
                 IsChecked = initialForceLatestState
             };
             
@@ -1309,7 +1309,7 @@ namespace VPM
                     foreach (var hair in packageGroup.Take(3))
                     {
                         int targetDensity = hair.ConvertTo32 ? 32 : hair.ConvertTo24 ? 24 : hair.ConvertTo16 ? 16 : hair.ConvertTo8 ? 8 : 0;
-                        string status = hair.HasCurveDensity ? $"{hair.CurveDensity} †’ {targetDensity}" : $"Add †’ {targetDensity}";
+                        string status = hair.HasCurveDensity ? $"{hair.CurveDensity} -> {targetDensity}" : $"Add -> {targetDensity}";
                         var itemText = new TextBlock
                         {
                             Text = $"    • {hair.HairName}: density {status}",

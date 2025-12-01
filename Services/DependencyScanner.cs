@@ -70,8 +70,8 @@ namespace VPM.Services
                 using var reader = new StreamReader(stream);
                 var metaJson = reader.ReadToEnd();
 
+                // Single pass: ParseDependenciesFromJson now also handles disabled dependencies
                 ParseDependenciesFromJson(metaJson, result);
-                ParseDisabledDependenciesFromDescription(metaJson, result);
             }
             catch (Exception ex)
             {
@@ -95,8 +95,8 @@ namespace VPM.Services
                 }
 
                 var metaJson = File.ReadAllText(metaPath);
+                // Single pass: ParseDependenciesFromJson now also handles disabled dependencies
                 ParseDependenciesFromJson(metaJson, result);
-                ParseDisabledDependenciesFromDescription(metaJson, result);
             }
             catch (Exception ex)
             {
@@ -110,7 +110,7 @@ namespace VPM.Services
         {
             try
             {
-                var jsonDoc = JsonDocument.Parse(metaJson);
+                using var jsonDoc = JsonDocument.Parse(metaJson);
                 var root = jsonDoc.RootElement;
 
                 if (root.TryGetProperty("dependencies", out var depsElement))
@@ -121,6 +121,9 @@ namespace VPM.Services
                 {
                     result.ErrorMessage = "No dependencies found in meta.json";
                 }
+                
+                // Parse disabled dependencies from description in the same pass (avoid re-parsing JSON)
+                ParseDisabledDependenciesFromElement(root, result);
             }
             catch (JsonException ex)
             {
@@ -178,11 +181,36 @@ namespace VPM.Services
             }
         }
 
+        /// <summary>
+        /// Parses disabled dependencies from an already-parsed JSON element (avoids re-parsing JSON).
+        /// </summary>
+        private void ParseDisabledDependenciesFromElement(JsonElement root, DependencyScanResult result)
+        {
+            try
+            {
+                if (!root.TryGetProperty("description", out var descElement))
+                    return;
+
+                string description = descElement.GetString() ?? "";
+                if (string.IsNullOrEmpty(description))
+                    return;
+
+                ParseDisabledDependenciesFromDescriptionText(description, result);
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Error parsing disabled dependencies: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// Legacy method - kept for backward compatibility but prefer ParseDisabledDependenciesFromElement.
+        /// </summary>
         private void ParseDisabledDependenciesFromDescription(string metaJson, DependencyScanResult result)
         {
             try
             {
-                var jsonDoc = JsonDocument.Parse(metaJson);
+                using var jsonDoc = JsonDocument.Parse(metaJson);
                 var root = jsonDoc.RootElement;
 
                 if (!root.TryGetProperty("description", out var descElement))
@@ -192,64 +220,72 @@ namespace VPM.Services
                 if (string.IsNullOrEmpty(description))
                     return;
 
-                var startTag = "[VPM_DISABLED_DEPENDENCIES]";
-                var endTag = "[/VPM_DISABLED_DEPENDENCIES]";
-
-                int startIndex = description.IndexOf(startTag);
-                if (startIndex == -1)
-                    return;
-
-                startIndex += startTag.Length;
-                int endIndex = description.IndexOf(endTag, startIndex);
-                if (endIndex == -1)
-                    return;
-
-                string disabledSection = description.Substring(startIndex, endIndex - startIndex).Trim();
-                if (string.IsNullOrWhiteSpace(disabledSection))
-                    return;
-
-                var lines = disabledSection.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
-                foreach (var line in lines)
-                {
-                    var trimmedLine = line.Trim();
-                    if (trimmedLine.StartsWith("•") || trimmedLine.StartsWith("-"))
-                    {
-                        var depEntry = trimmedLine.TrimStart('•', '-', ' ').Trim();
-                        
-                        // Parse format: depName or depName|PARENT:parentName
-                        string depName = depEntry;
-                        string parentName = "";
-                        
-                        if (depEntry.Contains("|PARENT:"))
-                        {
-                            var parts = depEntry.Split(new[] { "|PARENT:" }, StringSplitOptions.None);
-                            depName = parts[0];
-                            parentName = parts.Length > 1 ? parts[1] : "";
-                        }
-                        
-                        var matchingDep = result.Dependencies.FirstOrDefault(d => d.Name.Equals(depName, StringComparison.OrdinalIgnoreCase));
-                        if (matchingDep != null)
-                        {
-                            matchingDep.IsDisabledByUser = true;
-                            matchingDep.IsEnabled = false;
-                        }
-                        else
-                        {
-                            result.Dependencies.Add(new DependencyItemModel
-                            {
-                                Name = depName,
-                                IsDisabledByUser = true,
-                                IsEnabled = false,
-                                Depth = string.IsNullOrEmpty(parentName) ? 0 : 1,
-                                ParentName = parentName
-                            });
-                        }
-                    }
-                }
+                ParseDisabledDependenciesFromDescriptionText(description, result);
             }
             catch (Exception ex)
             {
                 System.Diagnostics.Debug.WriteLine($"Error parsing disabled dependencies: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// Core logic for parsing disabled dependencies from description text.
+        /// </summary>
+        private void ParseDisabledDependenciesFromDescriptionText(string description, DependencyScanResult result)
+        {
+            var startTag = "[VPM_DISABLED_DEPENDENCIES]";
+            var endTag = "[/VPM_DISABLED_DEPENDENCIES]";
+
+            int startIndex = description.IndexOf(startTag);
+            if (startIndex == -1)
+                return;
+
+            startIndex += startTag.Length;
+            int endIndex = description.IndexOf(endTag, startIndex);
+            if (endIndex == -1)
+                return;
+
+            string disabledSection = description.Substring(startIndex, endIndex - startIndex).Trim();
+            if (string.IsNullOrWhiteSpace(disabledSection))
+                return;
+
+            var lines = disabledSection.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
+            foreach (var line in lines)
+            {
+                var trimmedLine = line.Trim();
+                if (trimmedLine.StartsWith("•") || trimmedLine.StartsWith("-"))
+                {
+                    var depEntry = trimmedLine.TrimStart('•', '-', ' ').Trim();
+                    
+                    // Parse format: depName or depName|PARENT:parentName
+                    string depName = depEntry;
+                    string parentName = "";
+                    
+                    if (depEntry.Contains("|PARENT:"))
+                    {
+                        var parts = depEntry.Split(new[] { "|PARENT:" }, StringSplitOptions.None);
+                        depName = parts[0];
+                        parentName = parts.Length > 1 ? parts[1] : "";
+                    }
+                    
+                    var matchingDep = result.Dependencies.FirstOrDefault(d => d.Name.Equals(depName, StringComparison.OrdinalIgnoreCase));
+                    if (matchingDep != null)
+                    {
+                        matchingDep.IsDisabledByUser = true;
+                        matchingDep.IsEnabled = false;
+                    }
+                    else
+                    {
+                        result.Dependencies.Add(new DependencyItemModel
+                        {
+                            Name = depName,
+                            IsDisabledByUser = true,
+                            IsEnabled = false,
+                            Depth = string.IsNullOrEmpty(parentName) ? 0 : 1,
+                            ParentName = parentName
+                        });
+                    }
+                }
             }
         }
     }

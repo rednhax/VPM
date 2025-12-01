@@ -1481,7 +1481,7 @@ namespace VPM.Services
                             {
                                 modifiedJson = modifiedJson.Substring(0, objectStart) + modifiedSection + modifiedJson.Substring(objectEnd + 1);
                                 string action = (hasCurveDensity || hasHairMultiplier) ? "modified" : "added";
-                                hairConversionDetails.TryAdd(hairMod.Key, $"  • {hairMod.Key}: hair density {action} †’ {targetDensity}");
+                                hairConversionDetails.TryAdd(hairMod.Key, $"  • {hairMod.Key}: hair density {action} -> {targetDensity}");
                             }
                         }
                     }
@@ -1922,7 +1922,7 @@ namespace VPM.Services
                 if (replaced)
                 {
                     string indent = new string(' ', depth * 2);
-                    changes.Add($"{indent}{depName} †’ {newDepName}");
+                    changes.Add($"{indent}{depName} -> {newDepName}");
                 }
                 
                 // Process subdependencies recursively

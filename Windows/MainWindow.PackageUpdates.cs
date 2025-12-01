@@ -117,7 +117,7 @@ namespace VPM
                     Console.WriteLine($"[UpdateChecker] Update examples:");
                     foreach (var update in updates.Take(5))
                     {
-                        Console.WriteLine($"  - {update.BaseName}: v{update.LocalVersion} †’ v{update.OnlineVersion}");
+                        Console.WriteLine($"  - {update.BaseName}: v{update.LocalVersion} -> v{update.OnlineVersion}");
                     }
                 }
                 
