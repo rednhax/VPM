@@ -5,9 +5,9 @@
     xmlns:windows="clr-namespace:VPM.Windows">
 
     <!--  UI Constants  -->
-    <SolidColorBrush x:Key="FocusBorderBrush" Color="#FF0078D7" />
-    <SolidColorBrush x:Key="AccentBrush" Color="#FF0078D7" />
-    <SolidColorBrush x:Key="AccentPressedBrush" Color="#007ACC" />
+    <SolidColorBrush x:Key="FocusBorderBrush" Color="White" />
+    <SolidColorBrush x:Key="AccentBrush" Color="White" />
+    <SolidColorBrush x:Key="AccentPressedBrush" Color="White" />
 
     <!--  Global Button Style with Blue Border Hover Effect  -->
     <Style x:Key="BlueHoverButtonStyle" TargetType="{x:Type Button}">

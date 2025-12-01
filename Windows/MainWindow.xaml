@@ -2505,7 +2505,7 @@
                                                                 Margin="0,0,3,0"
                                                                 FontSize="11"
                                                                 FontWeight="Bold"
-                                                                Foreground="#FF5722"
+                                                                Foreground="#75440E"
                                                                 Text="⏳"
                                                                 ToolTip="Old version available"
                                                                 Visibility="{Binding IsOldVersion, Converter={StaticResource BoolToVis}}" />
@@ -2909,7 +2909,7 @@
                         </DataGrid.Resources>
                         <DataGrid.Columns>
                             <!--  Thumbnail Column  -->
-                            <DataGridTemplateColumn Width="70" IsReadOnly="True">
+                            <DataGridTemplateColumn Width="64" IsReadOnly="True">
                                 <DataGridTemplateColumn.CellTemplate>
                                     <DataTemplate>
                                         <Border
@@ -2918,7 +2918,7 @@
                                             Margin="0"
                                             Background="{DynamicResource {x:Static SystemColors.WindowBrushKey}}"
                                             BorderBrush="{DynamicResource {x:Static SystemColors.ActiveBorderBrushKey}}"
-                                            BorderThickness="1"
+                                            BorderThickness="0"
                                             ClipToBounds="True"
                                             CornerRadius="3">
                                             <Image
@@ -3210,14 +3210,28 @@
                                             <Setter Property="Template">
                                                 <Setter.Value>
                                                     <ControlTemplate TargetType="Button">
-                                                        <Border
-                                                            Padding="{TemplateBinding Padding}"
-                                                            Background="{TemplateBinding Background}"
-                                                            BorderBrush="{TemplateBinding BorderBrush}"
-                                                            BorderThickness="{TemplateBinding BorderThickness}"
-                                                            CornerRadius="3">
-                                                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
-                                                        </Border>
+                                                        <Grid>
+                                                            <Grid.ColumnDefinitions>
+                                                                <ColumnDefinition Width="6" />
+                                                                <ColumnDefinition Width="*" />
+                                                            </Grid.ColumnDefinitions>
+                                                            <!--  Left Status Bar (Green for Load)  -->
+                                                            <Border
+                                                                Grid.Column="0"
+                                                                Margin="0,0,0,0"
+                                                                Background="#FF4CAF50"
+                                                                CornerRadius="3,0,0,3" />
+                                                            <!--  Button Content  -->
+                                                            <Border
+                                                                Grid.Column="1"
+                                                                Padding="{TemplateBinding Padding}"
+                                                                Background="{TemplateBinding Background}"
+                                                                BorderBrush="{TemplateBinding BorderBrush}"
+                                                                BorderThickness="{TemplateBinding BorderThickness}"
+                                                                CornerRadius="0,3,3,0">
+                                                                <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                                            </Border>
+                                                        </Grid>
                                                     </ControlTemplate>
                                                 </Setter.Value>
                                             </Setter>
@@ -3255,28 +3269,35 @@
                                     ToolTip="Unload selected packages"
                                     Visibility="Collapsed">
                                     <Button.Style>
-                                        <Style TargetType="Button">
-                                            <Setter Property="Background" Value="{DynamicResource {x:Static SystemColors.ControlBrushKey}}" />
-                                            <Setter Property="BorderBrush" Value="{DynamicResource {x:Static SystemColors.ActiveBorderBrushKey}}" />
-                                            <Setter Property="BorderThickness" Value="1" />
+                                        <Style BasedOn="{StaticResource BlueHoverButtonStyle}" TargetType="Button">
                                             <Setter Property="Template">
                                                 <Setter.Value>
                                                     <ControlTemplate TargetType="Button">
-                                                        <Border
-                                                            Background="{TemplateBinding Background}"
-                                                            BorderBrush="{TemplateBinding BorderBrush}"
-                                                            BorderThickness="{TemplateBinding BorderThickness}"
-                                                            CornerRadius="3">
-                                                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
-                                                        </Border>
+                                                        <Grid>
+                                                            <Grid.ColumnDefinitions>
+                                                                <ColumnDefinition Width="6" />
+                                                                <ColumnDefinition Width="*" />
+                                                            </Grid.ColumnDefinitions>
+                                                            <!--  Left Status Bar (Blue for Unload)  -->
+                                                            <Border
+                                                                Grid.Column="0"
+                                                                Margin="0,0,0,0"
+                                                                Background="#FF2196F3"
+                                                                CornerRadius="3,0,0,3" />
+                                                            <!--  Button Content  -->
+                                                            <Border
+                                                                Grid.Column="1"
+                                                                Background="{TemplateBinding Background}"
+                                                                BorderBrush="{TemplateBinding BorderBrush}"
+                                                                BorderThickness="{TemplateBinding BorderThickness}"
+                                                                CornerRadius="0,3,3,0">
+                                                                <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                                            </Border>
+                                                        </Grid>
                                                     </ControlTemplate>
                                                 </Setter.Value>
                                             </Setter>
                                             <Style.Triggers>
-                                                <Trigger Property="IsMouseOver" Value="True">
-                                                    <Setter Property="BorderBrush" Value="#FF0078D7" />
-                                                    <Setter Property="BorderThickness" Value="1" />
-                                                </Trigger>
                                                 <Trigger Property="Visibility" Value="Visible">
                                                     <Trigger.EnterActions>
                                                         <BeginStoryboard>
@@ -3310,28 +3331,35 @@
                                     ToolTip="Load selected packages and their dependencies"
                                     Visibility="Collapsed">
                                     <Button.Style>
-                                        <Style TargetType="Button">
-                                            <Setter Property="Background" Value="{DynamicResource {x:Static SystemColors.ControlBrushKey}}" />
-                                            <Setter Property="BorderBrush" Value="{DynamicResource {x:Static SystemColors.ActiveBorderBrushKey}}" />
-                                            <Setter Property="BorderThickness" Value="1" />
+                                        <Style BasedOn="{StaticResource BlueHoverButtonStyle}" TargetType="Button">
                                             <Setter Property="Template">
                                                 <Setter.Value>
                                                     <ControlTemplate TargetType="Button">
-                                                        <Border
-                                                            Background="{TemplateBinding Background}"
-                                                            BorderBrush="{TemplateBinding BorderBrush}"
-                                                            BorderThickness="{TemplateBinding BorderThickness}"
-                                                            CornerRadius="3">
-                                                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
-                                                        </Border>
+                                                        <Grid>
+                                                            <Grid.ColumnDefinitions>
+                                                                <ColumnDefinition Width="6" />
+                                                                <ColumnDefinition Width="*" />
+                                                            </Grid.ColumnDefinitions>
+                                                            <!--  Left Status Bar (Green for Load)  -->
+                                                            <Border
+                                                                Grid.Column="0"
+                                                                Margin="0,0,0,0"
+                                                                Background="#FF4CAF50"
+                                                                CornerRadius="3,0,0,3" />
+                                                            <!--  Button Content  -->
+                                                            <Border
+                                                                Grid.Column="1"
+                                                                Background="{TemplateBinding Background}"
+                                                                BorderBrush="{TemplateBinding BorderBrush}"
+                                                                BorderThickness="{TemplateBinding BorderThickness}"
+                                                                CornerRadius="0,3,3,0">
+                                                                <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                                            </Border>
+                                                        </Grid>
                                                     </ControlTemplate>
                                                 </Setter.Value>
                                             </Setter>
                                             <Style.Triggers>
-                                                <Trigger Property="IsMouseOver" Value="True">
-                                                    <Setter Property="BorderBrush" Value="#FF0078D7" />
-                                                    <Setter Property="BorderThickness" Value="1" />
-                                                </Trigger>
                                                 <Trigger Property="Visibility" Value="Visible">
                                                     <Trigger.EnterActions>
                                                         <BeginStoryboard>
@@ -3365,30 +3393,36 @@
                                     ToolTip="Archive selected old version packages"
                                     Visibility="Collapsed">
                                     <Button.Style>
-                                        <Style TargetType="Button">
-                                            <Setter Property="Background" Value="#FF9800" />
+                                        <Style BasedOn="{StaticResource BlueHoverButtonStyle}" TargetType="Button">
                                             <Setter Property="Foreground" Value="White" />
-                                            <Setter Property="BorderBrush" Value="#F57C00" />
-                                            <Setter Property="BorderThickness" Value="1" />
                                             <Setter Property="Template">
                                                 <Setter.Value>
                                                     <ControlTemplate TargetType="Button">
-                                                        <Border
-                                                            Background="{TemplateBinding Background}"
-                                                            BorderBrush="{TemplateBinding BorderBrush}"
-                                                            BorderThickness="{TemplateBinding BorderThickness}"
-                                                            CornerRadius="3">
-                                                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
-                                                        </Border>
+                                                        <Grid>
+                                                            <Grid.ColumnDefinitions>
+                                                                <ColumnDefinition Width="6" />
+                                                                <ColumnDefinition Width="*" />
+                                                            </Grid.ColumnDefinitions>
+                                                            <!--  Left Status Bar (Orange for Archive)  -->
+                                                            <Border
+                                                                Grid.Column="0"
+                                                                Margin="0,0,0,0"
+                                                                Background="#75440E"
+                                                                CornerRadius="3,0,0,3" />
+                                                            <!--  Button Content  -->
+                                                            <Border
+                                                                Grid.Column="1"
+                                                                Margin="0,0,3,0"
+                                                                Background="{TemplateBinding Background}"
+                                                                BorderBrush="{TemplateBinding BorderBrush}"
+                                                                BorderThickness="{TemplateBinding BorderThickness}"
+                                                                CornerRadius="0,3,3,0">
+                                                                <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                                            </Border>
+                                                        </Grid>
                                                     </ControlTemplate>
                                                 </Setter.Value>
                                             </Setter>
-                                            <Style.Triggers>
-                                                <Trigger Property="IsMouseOver" Value="True">
-                                                    <Setter Property="BorderBrush" Value="#FF0078D7" />
-                                                    <Setter Property="BorderThickness" Value="1" />
-                                                </Trigger>
-                                            </Style.Triggers>
                                         </Style>
                                     </Button.Style>
                                 </Button>
@@ -3410,29 +3444,38 @@
                                 ToolTip="Fix selected duplicate packages"
                                 Visibility="Collapsed">
                                 <Button.Style>
-                                    <Style TargetType="Button">
+                                    <Style BasedOn="{StaticResource BlueHoverButtonStyle}" TargetType="Button">
                                         <Setter Property="Background" Value="#FFEB3B" />
                                         <Setter Property="Foreground" Value="#212121" />
                                         <Setter Property="BorderBrush" Value="#FBC02D" />
-                                        <Setter Property="BorderThickness" Value="1" />
                                         <Setter Property="Template">
                                             <Setter.Value>
                                                 <ControlTemplate TargetType="Button">
-                                                    <Border
-                                                        Background="{TemplateBinding Background}"
-                                                        BorderBrush="{TemplateBinding BorderBrush}"
-                                                        BorderThickness="{TemplateBinding BorderThickness}"
-                                                        CornerRadius="3">
-                                                        <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
-                                                    </Border>
+                                                    <Grid>
+                                                        <Grid.ColumnDefinitions>
+                                                            <ColumnDefinition Width="6" />
+                                                            <ColumnDefinition Width="*" />
+                                                        </Grid.ColumnDefinitions>
+                                                        <!--  Left Status Bar (Gold for Fix Duplicates)  -->
+                                                        <Border
+                                                            Grid.Column="0"
+                                                            Margin="1,2,0,2"
+                                                            Background="#FFFFEB3B"
+                                                            CornerRadius="2" />
+                                                        <!--  Button Content  -->
+                                                        <Border
+                                                            Grid.Column="1"
+                                                            Background="{TemplateBinding Background}"
+                                                            BorderBrush="{TemplateBinding BorderBrush}"
+                                                            BorderThickness="{TemplateBinding BorderThickness}"
+                                                            CornerRadius="0,3,3,0">
+                                                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                                        </Border>
+                                                    </Grid>
                                                 </ControlTemplate>
                                             </Setter.Value>
                                         </Setter>
                                         <Style.Triggers>
-                                            <Trigger Property="IsMouseOver" Value="True">
-                                                <Setter Property="BorderBrush" Value="#FF0078D7" />
-                                                <Setter Property="BorderThickness" Value="1" />
-                                            </Trigger>
                                             <Trigger Property="Visibility" Value="Visible">
                                                 <Trigger.EnterActions>
                                                     <BeginStoryboard>
@@ -3474,14 +3517,28 @@
                                         <Setter Property="Template">
                                             <Setter.Value>
                                                 <ControlTemplate TargetType="Button">
-                                                    <Border
-                                                        Padding="{TemplateBinding Padding}"
-                                                        Background="{TemplateBinding Background}"
-                                                        BorderBrush="{TemplateBinding BorderBrush}"
-                                                        BorderThickness="{TemplateBinding BorderThickness}"
-                                                        CornerRadius="3">
-                                                        <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
-                                                    </Border>
+                                                    <Grid>
+                                                        <Grid.ColumnDefinitions>
+                                                            <ColumnDefinition Width="6" />
+                                                            <ColumnDefinition Width="*" />
+                                                        </Grid.ColumnDefinitions>
+                                                        <!--  Left Status Bar (Green for Load)  -->
+                                                        <Border
+                                                            Grid.Column="0"
+                                                            Margin="0,0,0,0"
+                                                            Background="#FF4CAF50"
+                                                            CornerRadius="3,0,0,3" />
+                                                        <!--  Button Content  -->
+                                                        <Border
+                                                            Grid.Column="1"
+                                                            Padding="{TemplateBinding Padding}"
+                                                            Background="{TemplateBinding Background}"
+                                                            BorderBrush="{TemplateBinding BorderBrush}"
+                                                            BorderThickness="{TemplateBinding BorderThickness}"
+                                                            CornerRadius="0,3,3,0">
+                                                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                                        </Border>
+                                                    </Grid>
                                                 </ControlTemplate>
                                             </Setter.Value>
                                         </Setter>
@@ -3584,21 +3641,31 @@
                                 x:Name="DependenciesTab"
                                 Grid.Column="0"
                                 Margin="0,0,3,0"
-                                Padding="10,6"
+                                Padding="0"
                                 VerticalAlignment="Stretch"
                                 HorizontalContentAlignment="Center"
                                 VerticalContentAlignment="Center"
                                 Click="DependenciesTab_Click"
                                 FontSize="12">
                                 <Button.Content>
-                                    <StackPanel Orientation="Horizontal">
-                                        <TextBlock VerticalAlignment="Center" Text="Dependencies " />
-                                        <TextBlock
-                                            x:Name="DependenciesCountText"
-                                            VerticalAlignment="Center"
-                                            FontWeight="Bold"
-                                            Text="(0)" />
-                                    </StackPanel>
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="6" />
+                                            <ColumnDefinition Width="*" />
+                                        </Grid.ColumnDefinitions>
+                                        <!--  Button Content  -->
+                                        <StackPanel
+                                            Grid.Column="1"
+                                            Margin="10,6,10,6"
+                                            Orientation="Horizontal">
+                                            <TextBlock VerticalAlignment="Center" Text="Dependencies " />
+                                            <TextBlock
+                                                x:Name="DependenciesCountText"
+                                                VerticalAlignment="Center"
+                                                FontWeight="Bold"
+                                                Text="(0)" />
+                                        </StackPanel>
+                                    </Grid>
                                 </Button.Content>
                                 <Button.Style>
                                     <Style BasedOn="{StaticResource BlueHoverButtonStyle}" TargetType="Button">
@@ -3619,21 +3686,31 @@
                                 x:Name="DependentsTab"
                                 Grid.Column="1"
                                 Margin="3,0,0,0"
-                                Padding="10,6"
+                                Padding="0"
                                 VerticalAlignment="Stretch"
                                 HorizontalContentAlignment="Center"
                                 VerticalContentAlignment="Center"
                                 Click="DependentsTab_Click"
                                 FontSize="12">
                                 <Button.Content>
-                                    <StackPanel Orientation="Horizontal">
-                                        <TextBlock VerticalAlignment="Center" Text="Dependents " />
-                                        <TextBlock
-                                            x:Name="DependentsCountText"
-                                            VerticalAlignment="Center"
-                                            FontWeight="Bold"
-                                            Text="(0)" />
-                                    </StackPanel>
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="6" />
+                                            <ColumnDefinition Width="*" />
+                                        </Grid.ColumnDefinitions>
+                                        <!--  Button Content  -->
+                                        <StackPanel
+                                            Grid.Column="1"
+                                            Margin="10,6,10,6"
+                                            Orientation="Horizontal">
+                                            <TextBlock VerticalAlignment="Center" Text="Dependents " />
+                                            <TextBlock
+                                                x:Name="DependentsCountText"
+                                                VerticalAlignment="Center"
+                                                FontWeight="Bold"
+                                                Text="(0)" />
+                                        </StackPanel>
+                                    </Grid>
                                 </Button.Content>
                                 <Button.Style>
                                     <Style BasedOn="{StaticResource BlueHoverButtonStyle}" TargetType="Button">
@@ -3911,28 +3988,35 @@
                                     ToolTip="Load selected dependencies"
                                     Visibility="Collapsed">
                                     <Button.Style>
-                                        <Style TargetType="Button">
-                                            <Setter Property="Background" Value="{DynamicResource {x:Static SystemColors.ControlBrushKey}}" />
-                                            <Setter Property="BorderBrush" Value="{DynamicResource {x:Static SystemColors.ActiveBorderBrushKey}}" />
-                                            <Setter Property="BorderThickness" Value="1" />
+                                        <Style BasedOn="{StaticResource BlueHoverButtonStyle}" TargetType="Button">
                                             <Setter Property="Template">
                                                 <Setter.Value>
                                                     <ControlTemplate TargetType="Button">
-                                                        <Border
-                                                            Background="{TemplateBinding Background}"
-                                                            BorderBrush="{TemplateBinding BorderBrush}"
-                                                            BorderThickness="{TemplateBinding BorderThickness}"
-                                                            CornerRadius="3">
-                                                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
-                                                        </Border>
+                                                        <Grid>
+                                                            <Grid.ColumnDefinitions>
+                                                                <ColumnDefinition Width="6" />
+                                                                <ColumnDefinition Width="*" />
+                                                            </Grid.ColumnDefinitions>
+                                                            <!--  Left Status Bar (Green for Load)  -->
+                                                            <Border
+                                                                Grid.Column="0"
+                                                                Margin="0,0,0,0"
+                                                                Background="#FF4CAF50"
+                                                                CornerRadius="3,0,0,3" />
+                                                            <!--  Button Content  -->
+                                                            <Border
+                                                                Grid.Column="1"
+                                                                Background="{TemplateBinding Background}"
+                                                                BorderBrush="{TemplateBinding BorderBrush}"
+                                                                BorderThickness="{TemplateBinding BorderThickness}"
+                                                                CornerRadius="0,3,3,0">
+                                                                <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                                            </Border>
+                                                        </Grid>
                                                     </ControlTemplate>
                                                 </Setter.Value>
                                             </Setter>
                                             <Style.Triggers>
-                                                <Trigger Property="IsMouseOver" Value="True">
-                                                    <Setter Property="BorderBrush" Value="#FF0078D7" />
-                                                    <Setter Property="BorderThickness" Value="1" />
-                                                </Trigger>
                                                 <Trigger Property="Visibility" Value="Visible">
                                                     <Trigger.EnterActions>
                                                         <BeginStoryboard>
@@ -3968,28 +4052,35 @@
                                     ToolTip="Unload selected dependencies"
                                     Visibility="Collapsed">
                                     <Button.Style>
-                                        <Style TargetType="Button">
-                                            <Setter Property="Background" Value="{DynamicResource {x:Static SystemColors.ControlBrushKey}}" />
-                                            <Setter Property="BorderBrush" Value="{DynamicResource {x:Static SystemColors.ActiveBorderBrushKey}}" />
-                                            <Setter Property="BorderThickness" Value="1" />
+                                        <Style BasedOn="{StaticResource BlueHoverButtonStyle}" TargetType="Button">
                                             <Setter Property="Template">
                                                 <Setter.Value>
                                                     <ControlTemplate TargetType="Button">
-                                                        <Border
-                                                            Background="{TemplateBinding Background}"
-                                                            BorderBrush="{TemplateBinding BorderBrush}"
-                                                            BorderThickness="{TemplateBinding BorderThickness}"
-                                                            CornerRadius="3">
-                                                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
-                                                        </Border>
+                                                        <Grid>
+                                                            <Grid.ColumnDefinitions>
+                                                                <ColumnDefinition Width="6" />
+                                                                <ColumnDefinition Width="*" />
+                                                            </Grid.ColumnDefinitions>
+                                                            <!--  Left Status Bar (Blue for Unload)  -->
+                                                            <Border
+                                                                Grid.Column="0"
+                                                                Margin="0,0,0,0"
+                                                                Background="#FF2196F3"
+                                                                CornerRadius="3,0,0,3" />
+                                                            <!--  Button Content  -->
+                                                            <Border
+                                                                Grid.Column="1"
+                                                                Background="{TemplateBinding Background}"
+                                                                BorderBrush="{TemplateBinding BorderBrush}"
+                                                                BorderThickness="{TemplateBinding BorderThickness}"
+                                                                CornerRadius="0,3,3,0">
+                                                                <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                                            </Border>
+                                                        </Grid>
                                                     </ControlTemplate>
                                                 </Setter.Value>
                                             </Setter>
                                             <Style.Triggers>
-                                                <Trigger Property="IsMouseOver" Value="True">
-                                                    <Setter Property="BorderBrush" Value="#FF0078D7" />
-                                                    <Setter Property="BorderThickness" Value="1" />
-                                                </Trigger>
                                                 <Trigger Property="Visibility" Value="Visible">
                                                     <Trigger.EnterActions>
                                                         <BeginStoryboard>
@@ -4025,28 +4116,35 @@
                                     ToolTip="Optimize selected dependencies"
                                     Visibility="Collapsed">
                                     <Button.Style>
-                                        <Style TargetType="Button">
-                                            <Setter Property="Background" Value="{DynamicResource {x:Static SystemColors.ControlBrushKey}}" />
-                                            <Setter Property="BorderBrush" Value="{DynamicResource {x:Static SystemColors.ActiveBorderBrushKey}}" />
-                                            <Setter Property="BorderThickness" Value="1" />
+                                        <Style BasedOn="{StaticResource BlueHoverButtonStyle}" TargetType="Button">
                                             <Setter Property="Template">
                                                 <Setter.Value>
                                                     <ControlTemplate TargetType="Button">
-                                                        <Border
-                                                            Background="{TemplateBinding Background}"
-                                                            BorderBrush="{TemplateBinding BorderBrush}"
-                                                            BorderThickness="{TemplateBinding BorderThickness}"
-                                                            CornerRadius="3">
-                                                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
-                                                        </Border>
+                                                        <Grid>
+                                                            <Grid.ColumnDefinitions>
+                                                                <ColumnDefinition Width="6" />
+                                                                <ColumnDefinition Width="*" />
+                                                            </Grid.ColumnDefinitions>
+                                                            <!--  Left Status Bar (Purple for Optimize)  -->
+                                                            <Border
+                                                                Grid.Column="0"
+                                                                Margin="0,0,0,0"
+                                                                Background="#FFA501"
+                                                                CornerRadius="3,0,0,3" />
+                                                            <!--  Button Content  -->
+                                                            <Border
+                                                                Grid.Column="1"
+                                                                Background="{TemplateBinding Background}"
+                                                                BorderBrush="{TemplateBinding BorderBrush}"
+                                                                BorderThickness="{TemplateBinding BorderThickness}"
+                                                                CornerRadius="0,3,3,0">
+                                                                <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                                            </Border>
+                                                        </Grid>
                                                     </ControlTemplate>
                                                 </Setter.Value>
                                             </Setter>
                                             <Style.Triggers>
-                                                <Trigger Property="IsMouseOver" Value="True">
-                                                    <Setter Property="BorderBrush" Value="#FF0078D7" />
-                                                    <Setter Property="BorderThickness" Value="1" />
-                                                </Trigger>
                                                 <Trigger Property="Visibility" Value="Visible">
                                                     <Trigger.EnterActions>
                                                         <BeginStoryboard>
@@ -4114,7 +4212,7 @@
                                             </Border>
                                             <ControlTemplate.Triggers>
                                                 <Trigger Property="IsMouseOver" Value="True">
-                                                    <Setter TargetName="Border" Property="BorderBrush" Value="#FF0078D7" />
+                                                    <Setter TargetName="Border" Property="BorderBrush" Value="{StaticResource AccentBrush}" />
                                                     <Setter TargetName="Border" Property="BorderThickness" Value="1,1,1,0" />
                                                 </Trigger>
                                                 <Trigger Property="IsSelected" Value="True">
@@ -4148,7 +4246,7 @@
                                         Grid.Row="1"
                                         VerticalAlignment="Stretch"
                                         Background="{DynamicResource {x:Static SystemColors.WindowBrushKey}}"
-                                        CornerRadius="0,0,4,4">
+                                        CornerRadius="3">
                                         <ContentPresenter
                                             Name="PART_SelectedContentHost"
                                             Margin="{TemplateBinding Padding}"
@@ -4715,7 +4813,7 @@
                                                                                             <ControlTemplate.Triggers>
                                                                                                 <Trigger Property="IsMouseOver" Value="True">
                                                                                                     <Setter TargetName="ButtonBorder" Property="Background" Value="#30FFFFFF" />
-                                                                                                    <Setter TargetName="ButtonBorder" Property="BorderBrush" Value="#FF0078D7" />
+                                                                                                    <Setter TargetName="ButtonBorder" Property="BorderBrush" Value="{StaticResource AccentBrush}" />
                                                                                                 </Trigger>
                                                                                             </ControlTemplate.Triggers>
                                                                                         </ControlTemplate>
@@ -4873,7 +4971,7 @@
                             Panel.ZIndex="10"
                             Background="#CC000000"
                             CornerRadius="9"
-                            Opacity="0.4">
+                            Opacity="0.5">
                             <Border.Style>
                                 <Style TargetType="Border">
                                     <Style.Triggers>
@@ -4894,7 +4992,7 @@
                                 <!--  Image statistics display on the left  -->
                                 <StackPanel
                                     Grid.Column="0"
-                                    Margin="0,0,12,0"
+                                    Margin="4,0,12,0"
                                     VerticalAlignment="Center"
                                     Orientation="Vertical">
                                     <TextBlock
@@ -4919,7 +5017,7 @@
                                     <Button
                                         x:Name="ToggleExtractedFilterButton"
                                         Height="26"
-                                        Margin="0,0,16,0"
+                                        Margin="0,0,8,0"
                                         Padding="0,0"
                                         HorizontalAlignment="Stretch"
                                         Click="ToggleExtractedFilter_Click"
@@ -4928,11 +5026,7 @@
                                         FontWeight="Regular"
                                         ToolTip="Toggle: Show only extracted items (pressed) or all images (released)">
                                         <Button.Style>
-                                            <Style TargetType="Button">
-                                                <Setter Property="Background" Value="#40FFFFFF" />
-                                                <Setter Property="Foreground" Value="White" />
-                                                <Setter Property="BorderThickness" Value="1" />
-                                                <Setter Property="BorderBrush" Value="#60FFFFFF" />
+                                            <Style BasedOn="{StaticResource BlueHoverButtonStyle}" TargetType="Button">
                                                 <Setter Property="Template">
                                                     <Setter.Value>
                                                         <ControlTemplate TargetType="Button">
@@ -4972,7 +5066,7 @@
                                     <Button
                                         x:Name="MatchWidthButton"
                                         Height="26"
-                                        Margin="0,0,16,0"
+                                        Margin="0,0,8,0"
                                         Padding="0,0"
                                         Click="ToggleMatchWidth_Click"
                                         Content="  Adaptive  "
@@ -4980,11 +5074,7 @@
                                         FontWeight="Regular"
                                         ToolTip="Toggle match width (fill last row)">
                                         <Button.Style>
-                                            <Style TargetType="Button">
-                                                <Setter Property="Foreground" Value="White" />
-                                                <Setter Property="BorderThickness" Value="1" />
-                                                <Setter Property="Background" Value="#40FFFFFF" />
-                                                <Setter Property="BorderBrush" Value="#60FFFFFF" />
+                                            <Style BasedOn="{StaticResource BlueHoverButtonStyle}" TargetType="Button">
                                                 <Setter Property="Template">
                                                     <Setter.Value>
                                                         <ControlTemplate TargetType="Button">
@@ -5028,11 +5118,7 @@
                                         FontWeight="Bold"
                                         ToolTip="Decrease columns (Ctrl+-)">
                                         <Button.Style>
-                                            <Style TargetType="Button">
-                                                <Setter Property="Background" Value="#40FFFFFF" />
-                                                <Setter Property="Foreground" Value="White" />
-                                                <Setter Property="BorderThickness" Value="1" />
-                                                <Setter Property="BorderBrush" Value="#60FFFFFF" />
+                                            <Style BasedOn="{StaticResource BlueHoverButtonStyle}" TargetType="Button">
                                                 <Setter Property="Template">
                                                     <Setter.Value>
                                                         <ControlTemplate TargetType="Button">
@@ -5069,11 +5155,7 @@
                                         FontWeight="Bold"
                                         ToolTip="Increase columns (Ctrl++)">
                                         <Button.Style>
-                                            <Style TargetType="Button">
-                                                <Setter Property="Background" Value="#40FFFFFF" />
-                                                <Setter Property="Foreground" Value="White" />
-                                                <Setter Property="BorderThickness" Value="1" />
-                                                <Setter Property="BorderBrush" Value="#60FFFFFF" />
+                                            <Style BasedOn="{StaticResource BlueHoverButtonStyle}" TargetType="Button">
                                                 <Setter Property="Template">
                                                     <Setter.Value>
                                                         <ControlTemplate TargetType="Button">
