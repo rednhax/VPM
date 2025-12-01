@@ -106,6 +106,41 @@ namespace VPM
             return "CustomRange (no bounds)";
         }
 
+        /// <summary>
+        /// Extracts text from a ListBox item (handles ListBoxItem, string, or other types)
+        /// </summary>
+        private static string GetListBoxItemText(object item) => item switch
+        {
+            ListBoxItem lbi => lbi.Content?.ToString() ?? "",
+            string s => s,
+            _ => item?.ToString() ?? ""
+        };
+
+        /// <summary>
+        /// Extracts the filter value from text in "Value (count)" format
+        /// </summary>
+        private static string ExtractFilterValue(string itemText, bool stripCount = true)
+        {
+            if (string.IsNullOrEmpty(itemText)) return "";
+            return stripCount ? itemText.Split('(')[0].Trim() : itemText;
+        }
+
+        /// <summary>
+        /// Collects selected items from a ListBox into a collection, extracting filter values
+        /// </summary>
+        private static void CollectSelectedFilters(ListBox listBox, ICollection<string> collection, bool stripCount = true)
+        {
+            if (listBox?.SelectedItems == null || listBox.SelectedItems.Count == 0) return;
+            
+            foreach (var item in listBox.SelectedItems)
+            {
+                var text = GetListBoxItemText(item);
+                var value = ExtractFilterValue(text, stripCount);
+                if (!string.IsNullOrEmpty(value))
+                    collection.Add(value);
+            }
+        }
+
         private void UpdateFilterManagerFromUI()
         {
             try
@@ -130,199 +165,46 @@ namespace VPM
                     var seenStatuses = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
                     foreach (var item in StatusFilterList.SelectedItems)
                     {
-                        string itemText = "";
-                        if (item is ListBoxItem listBoxItem)
-                        {
-                            itemText = listBoxItem.Content?.ToString() ?? "";
-                        }
-                        else if (item is string stringItem)
-                        {
-                            itemText = stringItem;
-                        }
-                        else
-                        {
-                            itemText = item?.ToString() ?? "";
-                        }
-                        
-                        if (!string.IsNullOrEmpty(itemText))
-                        {
-                            // Extract status from "Status (count)" format
-                            var status = itemText.Split('(')[0].Trim();
-                        
-                        if (status.Equals("Duplicate", StringComparison.OrdinalIgnoreCase) || status.Equals("Duplicates", StringComparison.OrdinalIgnoreCase))
+                        var status = ExtractFilterValue(GetListBoxItemText(item));
+                        if (string.IsNullOrEmpty(status) || seenStatuses.Contains(status))
+                            continue;
+
+                        // Route status to appropriate collection based on type
+                        if (status.Equals("Duplicate", StringComparison.OrdinalIgnoreCase) || 
+                            status.Equals("Duplicates", StringComparison.OrdinalIgnoreCase))
                         {
                             _filterManager.FilterDuplicates = true;
-                            continue;
                         }
-
-                            if (seenStatuses.Contains(status))
-                            {
-                                continue;
-                            }
-
-                            // Check if this is a favorites status
-                            if (status == "Favorites" || status == "Non-Favorites")
-                            {
-                                _filterManager.SelectedFavoriteStatuses.Add(status);
-                            }
-                            // Check if this is an autoinstall status
-                            else if (status == "AutoInstall")
-                            {
-                                _filterManager.SelectedAutoInstallStatuses.Add(status);
-                            }
-                            // Check if this is an optimization status
-                            else if (status == "Optimized" || status == "Unoptimized")
-                            {
-                                _filterManager.SelectedOptimizationStatuses.Add(status);
-                            }
-                            // Check if this is a version status
-                            else if (status == "Latest" || status == "Old")
-                            {
-                                _filterManager.SelectedVersionStatuses.Add(status);
-                            }
-                            else
-                            {
-                                _filterManager.SelectedStatuses.Add(status);
-                                seenStatuses.Add(status);
-                            }
-                        }
-                    }
-                }
-
-                // Update creator filters
-                if (CreatorsList?.SelectedItems != null && CreatorsList.SelectedItems.Count > 0)
-                {
-                    foreach (var item in CreatorsList.SelectedItems)
-                    {
-                        string itemText = "";
-                        if (item is ListBoxItem listBoxItem)
+                        else if (status == "Favorites" || status == "Non-Favorites")
                         {
-                            itemText = listBoxItem.Content?.ToString() ?? "";
+                            _filterManager.SelectedFavoriteStatuses.Add(status);
                         }
-                        else if (item is string stringItem)
+                        else if (status == "AutoInstall")
                         {
-                            itemText = stringItem;
+                            _filterManager.SelectedAutoInstallStatuses.Add(status);
+                        }
+                        else if (status == "Optimized" || status == "Unoptimized")
+                        {
+                            _filterManager.SelectedOptimizationStatuses.Add(status);
+                        }
+                        else if (status == "Latest" || status == "Old")
+                        {
+                            _filterManager.SelectedVersionStatuses.Add(status);
                         }
                         else
                         {
-                            itemText = item?.ToString() ?? "";
-                        }
-                        
-                        if (!string.IsNullOrEmpty(itemText))
-                        {
-                            var creator = itemText.Split('(')[0].Trim();
-                            _filterManager.SelectedCreators.Add(creator);
+                            _filterManager.SelectedStatuses.Add(status);
+                            seenStatuses.Add(status);
                         }
                     }
                 }
 
-                // Update content type filters
-                if (ContentTypesList?.SelectedItems != null && ContentTypesList.SelectedItems.Count > 0)
-                {
-                    foreach (var item in ContentTypesList.SelectedItems)
-                    {
-                        string itemText = "";
-                        if (item is ListBoxItem listBoxItem)
-                        {
-                            itemText = listBoxItem.Content?.ToString() ?? "";
-                        }
-                        else if (item is string stringItem)
-                        {
-                            itemText = stringItem;
-                        }
-                        else
-                        {
-                            itemText = item?.ToString() ?? "";
-                        }
-                        
-                        if (!string.IsNullOrEmpty(itemText))
-                        {
-                            var contentType = itemText.Split('(')[0].Trim();
-                            _filterManager.SelectedCategories.Add(contentType);
-                        }
-                    }
-                }
-
-                // Update license type filters
-                if (LicenseTypeList?.SelectedItems != null && LicenseTypeList.SelectedItems.Count > 0)
-                {
-                    foreach (var item in LicenseTypeList.SelectedItems)
-                    {
-                        string itemText = "";
-                        if (item is ListBoxItem listBoxItem)
-                        {
-                            itemText = listBoxItem.Content?.ToString() ?? "";
-                        }
-                        else if (item is string stringItem)
-                        {
-                            itemText = stringItem;
-                        }
-                        else
-                        {
-                            itemText = item?.ToString() ?? "";
-                        }
-                        
-                        if (!string.IsNullOrEmpty(itemText))
-                        {
-                            var licenseType = itemText.Split('(')[0].Trim();
-                            _filterManager.SelectedLicenseTypes.Add(licenseType);
-                        }
-                    }
-                }
-
-                // Update file size filters
-                if (FileSizeFilterList?.SelectedItems != null && FileSizeFilterList.SelectedItems.Count > 0)
-                {
-                    foreach (var item in FileSizeFilterList.SelectedItems)
-                    {
-                        string itemText = "";
-                        if (item is ListBoxItem listBoxItem)
-                        {
-                            itemText = listBoxItem.Content?.ToString() ?? "";
-                        }
-                        else if (item is string stringItem)
-                        {
-                            itemText = stringItem;
-                        }
-                        else
-                        {
-                            itemText = item?.ToString() ?? "";
-                        }
-                        
-                        if (!string.IsNullOrEmpty(itemText))
-                        {
-                            _filterManager.SelectedFileSizeRanges.Add(itemText);
-                        }
-                    }
-                }
-
-                // Update subfolders filters
-                if (SubfoldersFilterList?.SelectedItems != null && SubfoldersFilterList.SelectedItems.Count > 0)
-                {
-                    foreach (var item in SubfoldersFilterList.SelectedItems)
-                    {
-                        string itemText = "";
-                        if (item is ListBoxItem listBoxItem)
-                        {
-                            itemText = listBoxItem.Content?.ToString() ?? "";
-                        }
-                        else if (item is string stringItem)
-                        {
-                            itemText = stringItem;
-                        }
-                        else
-                        {
-                            itemText = item?.ToString() ?? "";
-                        }
-                        
-                        if (!string.IsNullOrEmpty(itemText))
-                        {
-                            // Extract subfolder name from "Subfolder (count)" format
-                            var subfolder = itemText.Split('(')[0].Trim();
-                            _filterManager.SelectedSubfolders.Add(subfolder);
-                        }
-                    }
-                }
+                // Update simple filter collections using helper
+                CollectSelectedFilters(CreatorsList, _filterManager.SelectedCreators);
+                CollectSelectedFilters(ContentTypesList, _filterManager.SelectedCategories);
+                CollectSelectedFilters(LicenseTypeList, _filterManager.SelectedLicenseTypes);
+                CollectSelectedFilters(FileSizeFilterList, _filterManager.SelectedFileSizeRanges, stripCount: false);
+                CollectSelectedFilters(SubfoldersFilterList, _filterManager.SelectedSubfolders);
 
                 // Update damaged filter
                 if (DamagedFilterList?.SelectedItem != null)
@@ -1046,290 +928,33 @@ namespace VPM
 
         private void UpdateCreatorsListWithCascade(Dictionary<string, VarMetadata> filteredPackages, bool hasActiveCreatorFilter)
         {
-            if (CreatorsList == null) return;
-
-            // Prevent infinite recursion by suppressing selection events
-            _suppressSelectionEvents = true;
-            try
-            {
-                // Store selected creator names (without counts) before clearing
-                var selectedCreators = new List<string>();
-                foreach (var item in CreatorsList.SelectedItems)
-                {
-                    string itemText = "";
-                    if (item is ListBoxItem listBoxItem)
-                    {
-                        itemText = listBoxItem.Content?.ToString() ?? "";
-                    }
-                    else if (item is string stringItem)
-                    {
-                        itemText = stringItem;
-                    }
-                    else
-                    {
-                        itemText = item?.ToString() ?? "";
-                    }
-                    if (!string.IsNullOrEmpty(itemText))
-                    {
-                        // Extract creator name without count
-                        var creatorName = itemText.Split('(')[0].Trim();
-                        selectedCreators.Add(creatorName);
-                    }
-                }
-
-                // In cascade mode, always show only creators that have packages in the filtered set
-                // This provides the "hiding" behavior that users expect
-                CreatorsList.Items.Clear();
-                var creatorCounts = _filterManager.GetCreatorCounts(filteredPackages);
-
-                foreach (var creator in creatorCounts.Where(c => c.Value > 0).OrderBy(c => c.Key))
-                {
-                    var displayText = $"{creator.Key} ({creator.Value})";
-                    CreatorsList.Items.Add(displayText);
-
-                    // Restore selection if this creator was previously selected
-                    if (selectedCreators.Contains(creator.Key))
-                    {
-                        CreatorsList.SelectedItems.Add(displayText);
-                    }
-                }
-            }
-            finally
-            {
-                _suppressSelectionEvents = false;
-            }
+            var creatorCounts = _filterManager.GetCreatorCounts(filteredPackages);
+            UpdateFilterListBox(CreatorsList, creatorCounts);
         }
 
         private void UpdateContentTypesListWithCascade(Dictionary<string, VarMetadata> filteredPackages, bool hasActiveContentTypeFilter)
         {
-            if (ContentTypesList == null) return;
-
-            // Prevent infinite recursion by suppressing selection events
-            _suppressSelectionEvents = true;
-            try
-            {
-                // Store selected content type names (without counts) before clearing
-                var selectedContentTypes = new List<string>();
-                foreach (var item in ContentTypesList.SelectedItems)
-                {
-                    string itemText = "";
-                    if (item is ListBoxItem listBoxItem)
-                    {
-                        itemText = listBoxItem.Content?.ToString() ?? "";
-                    }
-                    else if (item is string stringItem)
-                    {
-                        itemText = stringItem;
-                    }
-                    else
-                    {
-                        itemText = item?.ToString() ?? "";
-                    }
-                    if (!string.IsNullOrEmpty(itemText))
-                    {
-                        // Extract content type name without count
-                        var contentTypeName = itemText.Split('(')[0].Trim();
-                        selectedContentTypes.Add(contentTypeName);
-                    }
-                }
-
-                // In cascade mode, always show only content types that have packages in the filtered set
-                // This provides the "hiding" behavior that users expect
-                ContentTypesList.Items.Clear();
-                var categoryCounts = _filterManager.GetCategoryCounts(filteredPackages);
-
-                foreach (var category in categoryCounts.Where(c => c.Value > 0).OrderBy(c => c.Key))
-                {
-                    var displayText = $"{category.Key} ({category.Value})";
-                    ContentTypesList.Items.Add(displayText);
-
-                    // Restore selection if this content type was previously selected
-                    if (selectedContentTypes.Contains(category.Key))
-                    {
-                        ContentTypesList.SelectedItems.Add(displayText);
-                    }
-                }
-            }
-            finally
-            {
-                _suppressSelectionEvents = false;
-            }
+            var categoryCounts = _filterManager.GetCategoryCounts(filteredPackages);
+            UpdateFilterListBox(ContentTypesList, categoryCounts);
         }
 
         private void UpdateLicenseTypesListWithCascade(Dictionary<string, VarMetadata> filteredPackages, bool hasActiveLicenseTypeFilter)
         {
-            if (LicenseTypeList == null) return;
-
-            // Prevent infinite recursion by suppressing selection events
-            _suppressSelectionEvents = true;
-            try
-            {
-                // Store selected license type names (without counts) before clearing
-                var selectedLicenseTypes = new List<string>();
-                foreach (var item in LicenseTypeList.SelectedItems)
-                {
-                    string itemText = "";
-                    if (item is ListBoxItem listBoxItem)
-                    {
-                        itemText = listBoxItem.Content?.ToString() ?? "";
-                    }
-                    else if (item is string stringItem)
-                    {
-                        itemText = stringItem;
-                    }
-                    else
-                    {
-                        itemText = item?.ToString() ?? "";
-                    }
-                    if (!string.IsNullOrEmpty(itemText))
-                    {
-                        // Extract license type name without count
-                        var licenseTypeName = itemText.Split('(')[0].Trim();
-                        selectedLicenseTypes.Add(licenseTypeName);
-                    }
-                }
-
-                // In cascade mode, always show only license types that have packages in the filtered set
-                // This provides the "hiding" behavior that users expect
-                LicenseTypeList.Items.Clear();
-                var licenseCounts = _filterManager.GetLicenseCounts(filteredPackages);
-
-                foreach (var license in licenseCounts.Where(l => l.Value > 0).OrderBy(l => l.Key))
-                {
-                    var displayText = $"{license.Key} ({license.Value})";
-                    LicenseTypeList.Items.Add(displayText);
-
-                    // Restore selection if this license type was previously selected
-                    if (selectedLicenseTypes.Contains(license.Key))
-                    {
-                        LicenseTypeList.SelectedItems.Add(displayText);
-                    }
-                }
-            }
-            finally
-            {
-                _suppressSelectionEvents = false;
-            }
+            var licenseCounts = _filterManager.GetLicenseCounts(filteredPackages);
+            UpdateFilterListBox(LicenseTypeList, licenseCounts);
         }
 
         private void UpdateFileSizeFilterListWithCascade(Dictionary<string, VarMetadata> filteredPackages, bool hasActiveFileSizeFilter)
         {
-            if (FileSizeFilterList == null) return;
-
-            // Prevent infinite recursion by suppressing selection events
-            _suppressSelectionEvents = true;
-            try
-            {
-                // Store selected file size ranges (without counts) before clearing
-                var selectedFileSizeRanges = new List<string>();
-                foreach (var item in FileSizeFilterList.SelectedItems)
-                {
-                    string itemText = "";
-                    if (item is ListBoxItem listBoxItem)
-                    {
-                        itemText = listBoxItem.Content?.ToString() ?? "";
-                    }
-                    else if (item is string stringItem)
-                    {
-                        itemText = stringItem;
-                    }
-                    else
-                    {
-                        itemText = item?.ToString() ?? "";
-                    }
-                    if (!string.IsNullOrEmpty(itemText))
-                    {
-                        // Extract range name without count
-                        var rangeName = itemText.Split('(')[0].Trim();
-                        selectedFileSizeRanges.Add(rangeName);
-                    }
-                }
-
-                // In cascade mode, show file size ranges with updated counts from filtered packages
-                FileSizeFilterList.Items.Clear();
-                var fileSizeCounts = _filterManager.GetFileSizeCounts(filteredPackages);
-
-                // Add in specific order
-                var orderedRanges = new[] { "Tiny", "Small", "Medium", "Large" };
-                foreach (var range in orderedRanges)
-                {
-                    if (fileSizeCounts.ContainsKey(range) && fileSizeCounts[range] > 0)
-                    {
-                        var displayText = $"{range} ({fileSizeCounts[range]})";
-                        FileSizeFilterList.Items.Add(displayText);
-
-                        // Restore selection if this range was previously selected
-                        if (selectedFileSizeRanges.Contains(range))
-                        {
-                            FileSizeFilterList.SelectedItems.Add(displayText);
-                        }
-                    }
-                }
-            }
-            finally
-            {
-                _suppressSelectionEvents = false;
-            }
+            var fileSizeCounts = _filterManager.GetFileSizeCounts(filteredPackages);
+            var orderedRanges = new[] { "Tiny", "Small", "Medium", "Large" };
+            UpdateFilterListBox(FileSizeFilterList, fileSizeCounts, orderedKeys: orderedRanges);
         }
 
         private void UpdateSubfoldersFilterListWithCascade(Dictionary<string, VarMetadata> filteredPackages, bool hasActiveSubfoldersFilter)
         {
-            if (SubfoldersFilterList == null) return;
-
-            // Prevent infinite recursion by suppressing selection events
-            _suppressSelectionEvents = true;
-            try
-            {
-                // Store selected subfolders (without counts) before clearing
-                var selectedSubfolders = new List<string>();
-                foreach (var item in SubfoldersFilterList.SelectedItems)
-                {
-                    string itemText = "";
-                    if (item is ListBoxItem listBoxItem)
-                    {
-                        itemText = listBoxItem.Content?.ToString() ?? "";
-                    }
-                    else if (item is string stringItem)
-                    {
-                        itemText = stringItem;
-                    }
-                    else
-                    {
-                        itemText = item?.ToString() ?? "";
-                    }
-                    if (!string.IsNullOrEmpty(itemText))
-                    {
-                        // Extract subfolder name without count
-                        var subfolderName = itemText.Split('(')[0].Trim();
-                        selectedSubfolders.Add(subfolderName);
-                    }
-                }
-
-                // In cascade mode, show subfolders with updated counts from filtered packages
-                SubfoldersFilterList.Items.Clear();
-                var subfolderCounts = _filterManager.GetSubfolderCounts(filteredPackages);
-
-                // Sort subfolders alphabetically
-                var sortedSubfolders = subfolderCounts.Keys.OrderBy(k => k).ToList();
-                foreach (var subfolder in sortedSubfolders)
-                {
-                    if (subfolderCounts[subfolder] > 0)
-                    {
-                        var displayText = $"{subfolder} ({subfolderCounts[subfolder]})";
-                        SubfoldersFilterList.Items.Add(displayText);
-
-                        // Restore selection if this subfolder was previously selected
-                        if (selectedSubfolders.Contains(subfolder))
-                        {
-                            SubfoldersFilterList.SelectedItems.Add(displayText);
-                        }
-                    }
-                }
-            }
-            finally
-            {
-                _suppressSelectionEvents = false;
-            }
+            var subfolderCounts = _filterManager.GetSubfolderCounts(filteredPackages);
+            UpdateFilterListBox(SubfoldersFilterList, subfolderCounts);
         }
 
         private void UpdateDateFilterListWithCascade(Dictionary<string, VarMetadata> filteredPackages, bool hasActiveDateFilter)
@@ -1653,48 +1278,12 @@ namespace VPM
 
         private void PopulateCreatorsList()
         {
-            if (CreatorsList == null) return;
+            if (CreatorsList == null || _filterManager == null || _packageManager?.PackageMetadata == null) return;
 
             try
             {
-                // Store current selections before clearing
-                var selectedItems = new List<string>();
-                foreach (var item in CreatorsList.SelectedItems)
-                {
-                    string itemText = "";
-                    if (item is ListBoxItem listBoxItem)
-                    {
-                        itemText = listBoxItem.Content?.ToString() ?? "";
-                    }
-                    else if (item is string stringItem)
-                    {
-                        itemText = stringItem;
-                    }
-                    else
-                    {
-                        itemText = item?.ToString() ?? "";
-                    }
-                    if (!string.IsNullOrEmpty(itemText))
-                    {
-                        selectedItems.Add(itemText);
-                    }
-                }
-                
-                CreatorsList.Items.Clear();
-                
                 var creatorCounts = _filterManager.GetCreatorCounts(_packageManager.PackageMetadata);
-                
-                foreach (var creator in creatorCounts.OrderBy(c => c.Key))
-                {
-                    var displayText = $"{creator.Key} ({creator.Value})";
-                    CreatorsList.Items.Add(displayText);
-                    
-                    // Restore selection if this creator was previously selected
-                    if (selectedItems.Any(item => item.StartsWith(creator.Key)))
-                    {
-                        CreatorsList.SelectedItems.Add(displayText);
-                    }
-                }
+                UpdateFilterListBox(CreatorsList, creatorCounts);
             }
             catch (Exception)
             {
@@ -1703,105 +1292,27 @@ namespace VPM
 
         private void PopulateContentTypesList()
         {
-            if (ContentTypesList == null) return;
+            if (ContentTypesList == null || _filterManager == null || _packageManager?.PackageMetadata == null) return;
 
             try
             {
-                Console.WriteLine("[DEBUG] PopulateContentTypesList: Starting population");
-                
-                // Store current selections before clearing
-                var selectedItems = new List<string>();
-                foreach (var item in ContentTypesList.SelectedItems)
-                {
-                    string itemText = "";
-                    if (item is ListBoxItem listBoxItem)
-                    {
-                        itemText = listBoxItem.Content?.ToString() ?? "";
-                    }
-                    else if (item is string stringItem)
-                    {
-                        itemText = stringItem;
-                    }
-                    else
-                    {
-                        itemText = item?.ToString() ?? "";
-                    }
-                    if (!string.IsNullOrEmpty(itemText))
-                    {
-                        selectedItems.Add(itemText);
-                    }
-                }
-                
-                ContentTypesList.Items.Clear();
-                
                 var categoryCounts = _filterManager.GetCategoryCounts(_packageManager.PackageMetadata);
-                Console.WriteLine($"[DEBUG] PopulateContentTypesList: Got {categoryCounts.Count} category types from FilterManager");
-                
-                foreach (var category in categoryCounts.OrderBy(c => c.Key))
-                {
-                    var displayText = $"{category.Key} ({category.Value})";
-                    ContentTypesList.Items.Add(displayText);
-                    Console.WriteLine($"[DEBUG] PopulateContentTypesList: Added '{displayText}' to ContentTypesList");
-                    
-                    // Restore selection if this content type was previously selected
-                    if (selectedItems.Any(item => item.StartsWith(category.Key)))
-                    {
-                        ContentTypesList.SelectedItems.Add(displayText);
-                    }
-                }
-                
-                Console.WriteLine($"[DEBUG] PopulateContentTypesList: Finished with {ContentTypesList.Items.Count} items in list");
+                UpdateFilterListBox(ContentTypesList, categoryCounts);
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"[DEBUG] PopulateContentTypesList: Exception occurred: {ex.Message}");
+                System.Diagnostics.Debug.WriteLine($"[PopulateContentTypesList] Error: {ex.Message}");
             }
         }
 
         private void PopulateLicenseTypesList()
         {
-            if (LicenseTypeList == null) return;
+            if (LicenseTypeList == null || _filterManager == null || _packageManager?.PackageMetadata == null) return;
 
             try
             {
-                // Store current selections before clearing
-                var selectedItems = new List<string>();
-                foreach (var item in LicenseTypeList.SelectedItems)
-                {
-                    string itemText = "";
-                    if (item is ListBoxItem listBoxItem)
-                    {
-                        itemText = listBoxItem.Content?.ToString() ?? "";
-                    }
-                    else if (item is string stringItem)
-                    {
-                        itemText = stringItem;
-                    }
-                    else
-                    {
-                        itemText = item?.ToString() ?? "";
-                    }
-                    if (!string.IsNullOrEmpty(itemText))
-                    {
-                        selectedItems.Add(itemText);
-                    }
-                }
-                
-                LicenseTypeList.Items.Clear();
-                
                 var licenseCounts = _filterManager.GetLicenseCounts(_packageManager.PackageMetadata);
-                
-                foreach (var license in licenseCounts.OrderBy(l => l.Key))
-                {
-                    var displayText = $"{license.Key} ({license.Value})";
-                    LicenseTypeList.Items.Add(displayText);
-                    
-                    // Restore selection if this license type was previously selected
-                    if (selectedItems.Any(item => item.StartsWith(license.Key)))
-                    {
-                        LicenseTypeList.SelectedItems.Add(displayText);
-                    }
-                }
+                UpdateFilterListBox(LicenseTypeList, licenseCounts);
             }
             catch (Exception)
             {
@@ -1814,121 +1325,28 @@ namespace VPM
 
             try
             {
-                // Store current selections before clearing
-                var selectedItems = new List<string>();
-                foreach (var item in FileSizeFilterList.SelectedItems)
-                {
-                    string itemText = "";
-                    if (item is ListBoxItem listBoxItem)
-                    {
-                        itemText = listBoxItem.Content?.ToString() ?? "";
-                    }
-                    else if (item is string stringItem)
-                    {
-                        itemText = stringItem;
-                    }
-                    else
-                    {
-                        itemText = item?.ToString() ?? "";
-                    }
-                    if (!string.IsNullOrEmpty(itemText))
-                    {
-                        selectedItems.Add(itemText);
-                    }
-                }
-                
-                FileSizeFilterList.Items.Clear();
-                
                 var fileSizeCounts = _filterManager.GetFileSizeCounts(_packageManager.PackageMetadata);
-                
-                // Add in specific order
                 var orderedRanges = new[] { "Tiny", "Small", "Medium", "Large" };
-                foreach (var range in orderedRanges)
-                {
-                    if (fileSizeCounts.ContainsKey(range) && fileSizeCounts[range] > 0)
-                    {
-                        var displayText = $"{range} ({fileSizeCounts[range]})";
-                        FileSizeFilterList.Items.Add(displayText);
-                        
-                        // Restore selection if this range was previously selected
-                        if (selectedItems.Any(item => item.StartsWith(range)))
-                        {
-                            FileSizeFilterList.SelectedItems.Add(displayText);
-                        }
-                    }
-                }
+                UpdateFilterListBox(FileSizeFilterList, fileSizeCounts, orderedKeys: orderedRanges);
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine($"Error populating file size filter: {ex.Message}");
+                System.Diagnostics.Debug.WriteLine($"[PopulateFileSizeFilterList] Error: {ex.Message}");
             }
         }
 
         private void PopulateSubfoldersFilterList()
         {
-            System.Diagnostics.Debug.WriteLine($"[POPULATE_SUBFOLDERS] Called. SubfoldersFilterList={SubfoldersFilterList != null}, FilterManager={_filterManager != null}, Metadata={_packageManager?.PackageMetadata != null}");
-            
-            if (SubfoldersFilterList == null || _filterManager == null || _packageManager?.PackageMetadata == null)
-            {
-                System.Diagnostics.Debug.WriteLine($"[POPULATE_SUBFOLDERS] Early return - one of the required objects is null");
-                return;
-            }
+            if (SubfoldersFilterList == null || _filterManager == null || _packageManager?.PackageMetadata == null) return;
 
             try
             {
-                // Store current selections before clearing
-                var selectedItems = new List<string>();
-                foreach (var item in SubfoldersFilterList.SelectedItems)
-                {
-                    string itemText = "";
-                    if (item is ListBoxItem listBoxItem)
-                    {
-                        itemText = listBoxItem.Content?.ToString() ?? "";
-                    }
-                    else if (item is string stringItem)
-                    {
-                        itemText = stringItem;
-                    }
-                    else
-                    {
-                        itemText = item?.ToString() ?? "";
-                    }
-                    if (!string.IsNullOrEmpty(itemText))
-                    {
-                        selectedItems.Add(itemText);
-                    }
-                }
-                
-                SubfoldersFilterList.Items.Clear();
-                
                 var subfolderCounts = _filterManager.GetSubfolderCounts(_packageManager.PackageMetadata);
-                
-                System.Diagnostics.Debug.WriteLine($"[SUBFOLDERS] Found {subfolderCounts.Count} subfolders");
-                foreach (var kvp in subfolderCounts)
-                {
-                    System.Diagnostics.Debug.WriteLine($"[SUBFOLDERS] {kvp.Key}: {kvp.Value} packages");
-                }
-                
-                // Sort subfolders alphabetically
-                var sortedSubfolders = subfolderCounts.Keys.OrderBy(k => k).ToList();
-                foreach (var subfolder in sortedSubfolders)
-                {
-                    if (subfolderCounts[subfolder] > 0)
-                    {
-                        var displayText = $"{subfolder} ({subfolderCounts[subfolder]})";
-                        SubfoldersFilterList.Items.Add(displayText);
-                        
-                        // Restore selection if this subfolder was previously selected
-                        if (selectedItems.Any(item => item.StartsWith(subfolder)))
-                        {
-                            SubfoldersFilterList.SelectedItems.Add(displayText);
-                        }
-                    }
-                }
+                UpdateFilterListBox(SubfoldersFilterList, subfolderCounts);
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine($"Error populating subfolders filter: {ex.Message}");
+                System.Diagnostics.Debug.WriteLine($"[PopulateSubfoldersFilterList] Error: {ex.Message}");
             }
         }
 
@@ -2154,38 +1572,8 @@ namespace VPM
         /// </summary>
         private void UpdateCreatorsListCounts(Dictionary<string, VarMetadata> filteredPackages)
         {
-            if (CreatorsList == null) return;
-
-            var selectedCreators = GetSelectedItemNames(CreatorsList);
-            var creatorFilterText = GetSearchText(CreatorsFilterBox);
             var creatorCounts = _filterManager.GetCreatorCounts(filteredPackages);
-
-            CreatorsList.Items.Clear();
-
-            // Limit to top 500 creators to prevent UI slowdown
-            var topCreators = creatorCounts
-                .OrderByDescending(c => c.Value)
-                .Take(500)
-                .OrderBy(c => c.Key)
-                .ToList();
-
-            foreach (var creator in topCreators)
-            {
-                // Apply creator filter text if present
-                if (!string.IsNullOrWhiteSpace(creatorFilterText) &&
-                    creator.Key.IndexOf(creatorFilterText, StringComparison.OrdinalIgnoreCase) < 0)
-                {
-                    continue;
-                }
-
-                var displayText = $"{creator.Key} ({creator.Value})";
-                CreatorsList.Items.Add(displayText);
-
-                if (selectedCreators.Contains(creator.Key))
-                {
-                    CreatorsList.SelectedItems.Add(displayText);
-                }
-            }
+            UpdateFilterListBox(CreatorsList, creatorCounts);
         }
 
         /// <summary>
@@ -2193,23 +1581,8 @@ namespace VPM
         /// </summary>
         private void UpdateContentTypesListCounts(Dictionary<string, VarMetadata> filteredPackages)
         {
-            if (ContentTypesList == null) return;
-
-            var selectedContentTypes = GetSelectedItemNames(ContentTypesList);
             var categoryCounts = _filterManager.GetCategoryCounts(filteredPackages);
-
-            ContentTypesList.Items.Clear();
-
-            foreach (var category in categoryCounts.OrderBy(c => c.Key))
-            {
-                var displayText = $"{category.Key} ({category.Value:N0})";
-                ContentTypesList.Items.Add(displayText);
-
-                if (selectedContentTypes.Contains(category.Key))
-                {
-                    ContentTypesList.SelectedItems.Add(displayText);
-                }
-            }
+            UpdateFilterListBox(ContentTypesList, categoryCounts);
         }
 
         /// <summary>
@@ -2217,23 +1590,8 @@ namespace VPM
         /// </summary>
         private void UpdateLicenseTypesListCounts(Dictionary<string, VarMetadata> filteredPackages)
         {
-            if (LicenseTypeList == null) return;
-
-            var selectedLicenseTypes = GetSelectedItemNames(LicenseTypeList);
             var licenseCounts = _filterManager.GetLicenseCounts(filteredPackages);
-
-            LicenseTypeList.Items.Clear();
-
-            foreach (var license in licenseCounts.OrderBy(l => l.Key))
-            {
-                var displayText = $"{license.Key} ({license.Value:N0})";
-                LicenseTypeList.Items.Add(displayText);
-
-                if (selectedLicenseTypes.Contains(license.Key))
-                {
-                    LicenseTypeList.SelectedItems.Add(displayText);
-                }
-            }
+            UpdateFilterListBox(LicenseTypeList, licenseCounts);
         }
 
         /// <summary>
@@ -2241,27 +1599,9 @@ namespace VPM
         /// </summary>
         private void UpdateFileSizeListCounts(Dictionary<string, VarMetadata> filteredPackages)
         {
-            if (FileSizeFilterList == null) return;
-
-            var selectedFileSizeRanges = GetSelectedItemNames(FileSizeFilterList);
             var fileSizeCounts = _filterManager.GetFileSizeCounts(filteredPackages);
-
-            FileSizeFilterList.Items.Clear();
-
             var orderedRanges = new[] { "Tiny", "Small", "Medium", "Large" };
-            foreach (var range in orderedRanges)
-            {
-                if (fileSizeCounts.ContainsKey(range) && fileSizeCounts[range] > 0)
-                {
-                    var displayText = $"{range} ({fileSizeCounts[range]:N0})";
-                    FileSizeFilterList.Items.Add(displayText);
-
-                    if (selectedFileSizeRanges.Contains(range))
-                    {
-                        FileSizeFilterList.SelectedItems.Add(displayText);
-                    }
-                }
-            }
+            UpdateFilterListBox(FileSizeFilterList, fileSizeCounts, orderedKeys: orderedRanges);
         }
 
         /// <summary>
@@ -2272,19 +1612,62 @@ namespace VPM
             var selectedNames = new List<string>();
             foreach (var item in listBox.SelectedItems)
             {
-                string itemText = item?.ToString() ?? "";
-                if (!string.IsNullOrEmpty(itemText))
+                var name = ExtractFilterValue(GetListBoxItemText(item));
+                if (!string.IsNullOrEmpty(name))
                 {
-                    var name = itemText.Split('(')[0].Trim();
                     // Normalize "Duplicates" to "Duplicate"
                     if (name.Equals("Duplicates", StringComparison.OrdinalIgnoreCase))
-                    {
                         name = "Duplicate";
-                    }
                     selectedNames.Add(name);
                 }
             }
             return selectedNames;
+        }
+
+        /// <summary>
+        /// Generic helper to update a filter ListBox with counts, preserving selections.
+        /// Reduces code duplication across all UpdateXxxListWithCascade and PopulateXxxList methods.
+        /// </summary>
+        private void UpdateFilterListBox(
+            ListBox listBox,
+            Dictionary<string, int> counts,
+            Func<string, string> displayNameTransform = null,
+            IEnumerable<string> orderedKeys = null,
+            bool includeZeroCounts = false)
+        {
+            if (listBox == null) return;
+
+            _suppressSelectionEvents = true;
+            try
+            {
+                // Get currently selected item names
+                var selectedNames = GetSelectedItemNames(listBox);
+
+                listBox.Items.Clear();
+
+                // Use ordered keys if provided, otherwise order by key
+                var keysToProcess = orderedKeys ?? counts.Keys.OrderBy(k => k);
+
+                foreach (var key in keysToProcess)
+                {
+                    if (!counts.TryGetValue(key, out int count)) continue;
+                    if (!includeZeroCounts && count <= 0) continue;
+
+                    var displayName = displayNameTransform?.Invoke(key) ?? key;
+                    var displayText = $"{displayName} ({count:N0})";
+                    listBox.Items.Add(displayText);
+
+                    // Restore selection if this item was previously selected
+                    if (selectedNames.Contains(key))
+                    {
+                        listBox.SelectedItems.Add(displayText);
+                    }
+                }
+            }
+            finally
+            {
+                _suppressSelectionEvents = false;
+            }
         }
 
         #endregion

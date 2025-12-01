@@ -114,215 +114,12 @@ namespace VPM.Services
             return SearchHelper.MatchesPackageSearch(packageName, _searchTerms);
         }
 
+        /// <summary>
+        /// Matches filters using current instance state. Delegates to the FilterState-based overload.
+        /// </summary>
         public bool MatchesFilters(VarMetadata metadata, string packageName = null)
         {
-            if (metadata == null)
-                return false;
-
-            // 1. Search text filter (most restrictive, check first)
-            if (!string.IsNullOrEmpty(SearchText))
-            {
-                // Use provided package name or get from metadata/filename
-                if (string.IsNullOrEmpty(packageName))
-                {
-                    packageName = !string.IsNullOrEmpty(metadata.PackageName) 
-                        ? metadata.PackageName 
-                        : Path.GetFileNameWithoutExtension(metadata.Filename);
-                }
-                
-                if (!MatchesSearch(packageName, metadata))
-                    return false;
-            }
-
-            // 2. Hide archived packages (fast boolean check)
-            if (HideArchivedPackages)
-            {
-                // Check if package is archived by status
-                if (metadata.Status != null && metadata.Status.Equals("Archived", StringComparison.OrdinalIgnoreCase))
-                    return false;
-                
-                // Check if package is archived by variant role
-                if (metadata.VariantRole != null && metadata.VariantRole.Equals("Archived", StringComparison.OrdinalIgnoreCase))
-                    return false;
-                
-                // Check if package is archived by filename suffix (backup marker)
-                if (metadata.Filename != null && metadata.Filename.EndsWith("#archived", StringComparison.OrdinalIgnoreCase))
-                    return false;
-                
-                // Check if package is in archive folder (handle both "archive" and "ArchivedPackages")
-                string pathToCheck = !string.IsNullOrEmpty(metadata.FilePath) ? metadata.FilePath : metadata.Filename;
-                if (!string.IsNullOrEmpty(pathToCheck))
-                {
-                    if (pathToCheck.IndexOf("\\archive\\", StringComparison.OrdinalIgnoreCase) >= 0)
-                        return false;
-                    
-                    if (pathToCheck.IndexOf("\\ArchivedPackages\\", StringComparison.OrdinalIgnoreCase) >= 0)
-                    {
-                        if (metadata.Filename != null && metadata.Filename.EndsWith("#archived", StringComparison.OrdinalIgnoreCase))
-                            return false;
-                    }
-                }
-            }
-
-            // 3. Status filter (HashSet lookup O(1))
-            if (!string.IsNullOrEmpty(SelectedStatus) && metadata.Status != SelectedStatus)
-                return false;
-            
-            if (SelectedStatuses.Count > 0 && !SelectedStatuses.Contains(metadata.Status))
-                return false;
-
-            // 4. Optimization status filter
-            if (SelectedOptimizationStatuses.Count > 0)
-            {
-                if (metadata.Status == "Archived")
-                    return false;
-                
-                bool matchesOptimization = false;
-                foreach (var optStatus in SelectedOptimizationStatuses)
-                {
-                    if (optStatus.StartsWith("Optimized") && metadata.IsOptimized)
-                    {
-                        matchesOptimization = true;
-                        break;
-                    }
-                    else if (optStatus.StartsWith("Unoptimized") && !metadata.IsOptimized)
-                    {
-                        matchesOptimization = true;
-                        break;
-                    }
-                }
-                if (!matchesOptimization)
-                    return false;
-            }
-
-            // 5. Version status filter
-            if (SelectedVersionStatuses.Count > 0)
-            {
-                bool matchesVersion = false;
-                foreach (var verStatus in SelectedVersionStatuses)
-                {
-                    if (verStatus.StartsWith("Latest") && !metadata.IsOldVersion)
-                    {
-                        matchesVersion = true;
-                        break;
-                    }
-                    else if (verStatus.StartsWith("Old") && metadata.IsOldVersion)
-                    {
-                        matchesVersion = true;
-                        break;
-                    }
-                }
-                if (!matchesVersion)
-                    return false;
-            }
-
-            // 6. Favorites filter
-            if (SelectedFavoriteStatuses.Count > 0 && FavoritesManager != null)
-            {
-                if (string.IsNullOrEmpty(packageName))
-                {
-                    packageName = !string.IsNullOrEmpty(metadata.PackageName) 
-                        ? metadata.PackageName 
-                        : Path.GetFileNameWithoutExtension(metadata.Filename);
-                }
-                
-                bool isFavorite = FavoritesManager.IsFavorite(packageName);
-                if (!isFavorite)
-                    return false;
-            }
-
-            // 7. AutoInstall filter
-            if (SelectedAutoInstallStatuses.Count > 0 && AutoInstallManager != null)
-            {
-                if (string.IsNullOrEmpty(packageName))
-                {
-                    packageName = !string.IsNullOrEmpty(metadata.PackageName) 
-                        ? metadata.PackageName 
-                        : Path.GetFileNameWithoutExtension(metadata.Filename);
-                }
-                
-                bool isAutoInstall = AutoInstallManager.IsAutoInstall(packageName);
-                if (!isAutoInstall)
-                    return false;
-            }
-
-            // 8. Category filter
-            if (!string.IsNullOrEmpty(SelectedCategory))
-            {
-                if (metadata.Categories == null || !metadata.Categories.Contains(SelectedCategory))
-                    return false;
-            }
-            
-            if (SelectedCategories.Count > 0)
-            {
-                // Use Any + Contains to leverage SelectedCategories' case-insensitive comparer
-                if (metadata.Categories == null || !metadata.Categories.Any(c => SelectedCategories.Contains(c)))
-                    return false;
-            }
-
-            // 9. Creator filter
-            if (!string.IsNullOrEmpty(SelectedCreator) && 
-                !string.Equals(metadata.CreatorName, SelectedCreator, StringComparison.OrdinalIgnoreCase))
-                return false;
-                
-            if (SelectedCreators.Count > 0 && 
-                !SelectedCreators.Contains(metadata.CreatorName))
-                return false;
-
-            // 10. License filter
-            if (!string.IsNullOrEmpty(SelectedLicenseType) && metadata.LicenseType != SelectedLicenseType)
-                return false;
-            
-            if (SelectedLicenseTypes.Count > 0)
-            {
-                var license = string.IsNullOrEmpty(metadata.LicenseType) ? "Unknown" : metadata.LicenseType;
-                if (!SelectedLicenseTypes.Contains(license))
-                    return false;
-            }
-
-            // 11. Duplicate filter
-            if (FilterDuplicates && metadata.DuplicateLocationCount <= 1)
-                return false;
-
-            // 12. Date filter
-            if (DateFilter.FilterType != DateFilterType.AllTime)
-            {
-                var dateToCheck = metadata.ModifiedDate ?? metadata.CreatedDate;
-                if (!DateFilter.MatchesFilter(dateToCheck))
-                    return false;
-            }
-
-            // 13. File size filter
-            if (SelectedFileSizeRanges.Count > 0)
-            {
-                if (!MatchesFileSizeFilter(metadata.FileSize))
-                    return false;
-            }
-
-            // 14. Subfolders filter
-            if (SelectedSubfolders.Count > 0)
-            {
-                var subfolder = ExtractSubfolderFromMetadata(metadata);
-                if (string.IsNullOrEmpty(subfolder) || !SelectedSubfolders.Contains(subfolder))
-                    return false;
-            }
-
-            // 15. Damaged filter
-            if (!string.IsNullOrEmpty(SelectedDamagedFilter))
-            {
-                if (SelectedDamagedFilter.Contains("Damaged"))
-                {
-                    if (!metadata.IsDamaged)
-                        return false;
-                }
-                else if (SelectedDamagedFilter.Contains("Valid"))
-                {
-                    if (metadata.IsDamaged)
-                        return false;
-                }
-            }
-
-            return true;
+            return MatchesFilters(metadata, GetSnapshot(), packageName);
         }
 
         public FilterState GetSnapshot()
@@ -362,23 +159,29 @@ namespace VPM.Services
             };
         }
 
+        /// <summary>
+        /// Resolves the package name from metadata, using provided name if available
+        /// </summary>
+        private static string ResolvePackageName(VarMetadata metadata, string providedName = null)
+        {
+            if (!string.IsNullOrEmpty(providedName))
+                return providedName;
+            if (!string.IsNullOrEmpty(metadata.PackageName))
+                return metadata.PackageName;
+            return Path.GetFileNameWithoutExtension(metadata.Filename);
+        }
+
         public bool MatchesFilters(VarMetadata metadata, FilterState state, string packageName = null)
         {
             if (metadata == null)
                 return false;
 
+            // Resolve package name once for all filters that need it
+            packageName = ResolvePackageName(metadata, packageName);
+
             // 1. Search text filter (most restrictive, check first)
             if (!string.IsNullOrEmpty(state.SearchText))
             {
-                // Use provided package name or get from metadata/filename
-                if (string.IsNullOrEmpty(packageName))
-                {
-                    packageName = !string.IsNullOrEmpty(metadata.PackageName) 
-                        ? metadata.PackageName 
-                        : Path.GetFileNameWithoutExtension(metadata.Filename);
-                }
-                
-                // Use helper with state's search terms
                 if (!SearchHelper.MatchesPackageSearch(packageName, state.SearchTerms))
                     return false;
             }
@@ -468,30 +271,14 @@ namespace VPM.Services
             // 6. Favorites filter
             if (state.SelectedFavoriteStatuses.Count > 0 && state.FavoritesManager != null)
             {
-                if (string.IsNullOrEmpty(packageName))
-                {
-                    packageName = !string.IsNullOrEmpty(metadata.PackageName) 
-                        ? metadata.PackageName 
-                        : Path.GetFileNameWithoutExtension(metadata.Filename);
-                }
-                
-                bool isFavorite = state.FavoritesManager.IsFavorite(packageName);
-                if (!isFavorite)
+                if (!state.FavoritesManager.IsFavorite(packageName))
                     return false;
             }
 
             // 7. AutoInstall filter
             if (state.SelectedAutoInstallStatuses.Count > 0 && state.AutoInstallManager != null)
             {
-                if (string.IsNullOrEmpty(packageName))
-                {
-                    packageName = !string.IsNullOrEmpty(metadata.PackageName) 
-                        ? metadata.PackageName 
-                        : Path.GetFileNameWithoutExtension(metadata.Filename);
-                }
-                
-                bool isAutoInstall = state.AutoInstallManager.IsAutoInstall(packageName);
-                if (!isAutoInstall)
+                if (!state.AutoInstallManager.IsAutoInstall(packageName))
                     return false;
             }
 
@@ -821,33 +608,11 @@ namespace VPM.Services
         }
 
         /// <summary>
-        /// Check if a file size matches any of the selected size ranges
+        /// Check if a file size matches any of the selected size ranges.
+        /// Delegates to the FilterState-based overload for consistency.
         /// </summary>
-        private bool MatchesFileSizeFilter(long fileSizeBytes)
-        {
-            if (SelectedFileSizeRanges.Count == 0)
-                return true;
-
-            // Convert bytes to MB for comparison
-            double fileSizeMB = fileSizeBytes / (1024.0 * 1024.0);
-
-            foreach (var range in SelectedFileSizeRanges)
-            {
-                // Extract the range name without the count (e.g., "Tiny (5)" -> "Tiny")
-                var rangeName = range.Split('(')[0].Trim();
-                
-                if (rangeName == "Tiny" && fileSizeMB < FileSizeTinyMax)
-                    return true;
-                if (rangeName == "Small" && fileSizeMB >= FileSizeTinyMax && fileSizeMB < FileSizeSmallMax)
-                    return true;
-                if (rangeName == "Medium" && fileSizeMB >= FileSizeSmallMax && fileSizeMB < FileSizeMediumMax)
-                    return true;
-                if (rangeName == "Large" && fileSizeMB >= FileSizeMediumMax)
-                    return true;
-            }
-
-            return false;
-        }
+        private bool MatchesFileSizeFilter(long fileSizeBytes) 
+            => MatchesFileSizeFilter(fileSizeBytes, GetSnapshot());
 
         /// <summary>
         /// Get file size range counts from packages

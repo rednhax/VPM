@@ -65,14 +65,7 @@ namespace VPM.Services
                 set => _originalHeight = value;
             }
             
-            public string OriginalFileSizeFormatted
-            {
-                get
-                {
-                    if (OriginalFileSize == 0) return "-";
-                    return $"{OriginalFileSize / (1024.0 * 1024.0):F2} MB";
-                }
-            }
+            public string OriginalFileSizeFormatted => TextureUtils.FormatFileSize(OriginalFileSize);
             
             public string CompressionPercentage
             {
@@ -128,94 +121,43 @@ namespace VPM.Services
                 }
             }
 
-            // Conversion target selection
-            private bool _convertTo8K;
-            private bool _convertTo4K;
-            private bool _convertTo2K;
-            private bool _keepUnchanged;
+            // Conversion target selection - uses enum internally for cleaner state management
+            public enum ConversionTarget { None, Keep, To2K, To4K, To8K }
+            private ConversionTarget _target = ConversionTarget.None;
+
+            private void SetTarget(ConversionTarget newTarget)
+            {
+                if (_target == newTarget) return;
+                _target = newTarget;
+                OnPropertyChanged(nameof(ConvertTo8K));
+                OnPropertyChanged(nameof(ConvertTo4K));
+                OnPropertyChanged(nameof(ConvertTo2K));
+                OnPropertyChanged(nameof(KeepUnchanged));
+                OnPropertyChanged(nameof(HasConversionSelected));
+            }
 
             public bool ConvertTo8K
             {
-                get => _convertTo8K;
-                set 
-                { 
-                    if (_convertTo8K == value) return;
-                    _convertTo8K = value;
-                    if (value)
-                    {
-                        _convertTo4K = false;
-                        _convertTo2K = false;
-                        _keepUnchanged = false;
-                    }
-                    OnPropertyChanged(nameof(ConvertTo8K));
-                    OnPropertyChanged(nameof(ConvertTo4K));
-                    OnPropertyChanged(nameof(ConvertTo2K));
-                    OnPropertyChanged(nameof(KeepUnchanged));
-                    OnPropertyChanged(nameof(HasConversionSelected));
-                }
+                get => _target == ConversionTarget.To8K;
+                set { if (value) SetTarget(ConversionTarget.To8K); else if (_target == ConversionTarget.To8K) SetTarget(ConversionTarget.None); }
             }
 
             public bool ConvertTo4K
             {
-                get => _convertTo4K;
-                set 
-                { 
-                    if (_convertTo4K == value) return;
-                    _convertTo4K = value;
-                    if (value)
-                    {
-                        _convertTo8K = false;
-                        _convertTo2K = false;
-                        _keepUnchanged = false;
-                    }
-                    OnPropertyChanged(nameof(ConvertTo8K));
-                    OnPropertyChanged(nameof(ConvertTo4K));
-                    OnPropertyChanged(nameof(ConvertTo2K));
-                    OnPropertyChanged(nameof(KeepUnchanged));
-                    OnPropertyChanged(nameof(HasConversionSelected));
-                }
+                get => _target == ConversionTarget.To4K;
+                set { if (value) SetTarget(ConversionTarget.To4K); else if (_target == ConversionTarget.To4K) SetTarget(ConversionTarget.None); }
             }
 
             public bool ConvertTo2K
             {
-                get => _convertTo2K;
-                set 
-                { 
-                    if (_convertTo2K == value) return;
-                    _convertTo2K = value;
-                    if (value)
-                    {
-                        _convertTo8K = false;
-                        _convertTo4K = false;
-                        _keepUnchanged = false;
-                    }
-                    OnPropertyChanged(nameof(ConvertTo8K));
-                    OnPropertyChanged(nameof(ConvertTo4K));
-                    OnPropertyChanged(nameof(ConvertTo2K));
-                    OnPropertyChanged(nameof(KeepUnchanged));
-                    OnPropertyChanged(nameof(HasConversionSelected));
-                }
+                get => _target == ConversionTarget.To2K;
+                set { if (value) SetTarget(ConversionTarget.To2K); else if (_target == ConversionTarget.To2K) SetTarget(ConversionTarget.None); }
             }
 
             public bool KeepUnchanged
             {
-                get => _keepUnchanged;
-                set
-                {
-                    if (_keepUnchanged == value) return;
-                    _keepUnchanged = value;
-                    if (value)
-                    {
-                        _convertTo8K = false;
-                        _convertTo4K = false;
-                        _convertTo2K = false;
-                    }
-                    OnPropertyChanged(nameof(ConvertTo8K));
-                    OnPropertyChanged(nameof(ConvertTo4K));
-                    OnPropertyChanged(nameof(ConvertTo2K));
-                    OnPropertyChanged(nameof(KeepUnchanged));
-                    OnPropertyChanged(nameof(HasConversionSelected));
-                }
+                get => _target == ConversionTarget.Keep;
+                set { if (value) SetTarget(ConversionTarget.Keep); else if (_target == ConversionTarget.Keep) SetTarget(ConversionTarget.None); }
             }
 
             public void OnPropertyChanged(string propertyName)
@@ -242,14 +184,7 @@ namespace VPM.Services
                 ? (ArchiveMaxDimension >= 2048) 
                 : GetOriginalMaxDimension() >= 2048;
 
-            public string FileSizeFormatted
-            {
-                get
-                {
-                    if (FileSize == 0) return "-";
-                    return $"{FileSize / (1024.0 * 1024.0):F2} MB";
-                }
-            }
+            public string FileSizeFormatted => TextureUtils.FormatFileSize(FileSize);
 
             private int GetMaxDimension()
             {
@@ -312,29 +247,13 @@ namespace VPM.Services
             public void SetDefaultConversionTarget()
             {
                 // Select the bubble that matches the texture's CURRENT resolution
-                // This shows the user what resolution the texture actually is
-                if (Resolution == "8K")
+                _target = Resolution switch
                 {
-                    _convertTo8K = true;
-                }
-                else if (Resolution == "4K")
-                {
-                    _convertTo4K = true;
-                }
-                else if (Resolution == "2K")
-                {
-                    _convertTo2K = true;
-                }
-                else if (Resolution == "1K")
-                {
-                    // 1K textures - keep unchanged (no upscaling)
-                    _keepUnchanged = true;
-                }
-                else
-                {
-                    // For unknown resolutions, keep unchanged
-                    _keepUnchanged = true;
-                }
+                    "8K" => ConversionTarget.To8K,
+                    "4K" => ConversionTarget.To4K,
+                    "2K" => ConversionTarget.To2K,
+                    _ => ConversionTarget.Keep // 1K or unknown - keep unchanged
+                };
             }
         }
 
@@ -487,8 +406,8 @@ namespace VPM.Services
                     var relativePath = System.IO.Path.GetRelativePath(packagePath, file).Replace("\\", "/").ToLower();
                     allFilePaths.Add(relativePath);
 
-                    var ext = System.IO.Path.GetExtension(file).ToLower();
-                    if (ext == ".png" || ext == ".jpg" || ext == ".jpeg")
+                    var ext = System.IO.Path.GetExtension(file);
+                    if (TextureUtils.IsImageExtension(ext))
                     {
                         allImageFiles.Add((relativePath, file));
                     }
@@ -513,300 +432,146 @@ namespace VPM.Services
 
         /// <summary>
         /// Checks if an image file is orphaned (no companion files in same directory).
-        /// Uses FULL PATHS to handle cases where same filename exists in different directories.
-        /// Only checks for NON-IMAGE companion files - multiple texture variants (D, N, S, G, A) are all textures.
+        /// Delegates to TextureDetector.IsOrphanedImagePath for consistent logic.
         /// </summary>
-        private bool IsOrphanedImageFile(string imagePath, IEnumerable<string> allFilePaths)
+        private static bool IsOrphanedImageFile(string imagePath, IEnumerable<string> allFilePaths) =>
+            TextureDetector.IsOrphanedImagePath(imagePath, allFilePaths);
+
+        /// <summary>
+        /// Creates a TextureInfo object from texture file data. Returns null if texture should be skipped.
+        /// Consolidates common logic from ProcessTextureFile and ProcessTextureFileParallel.
+        /// </summary>
+        private TextureInfo CreateTextureInfo(string packagePath, string texturePath, bool isVarFile,
+            bool hasArchiveSource, Dictionary<string, (int width, int height)> archiveTextureDimensions,
+            Dictionary<string, long> archiveFileSizes, bool enableDebug = false)
         {
-            var ext = System.IO.Path.GetExtension(imagePath).ToLower();
-            var filename = System.IO.Path.GetFileName(imagePath);
-            var stem = System.IO.Path.GetFileNameWithoutExtension(filename).ToLower();
-            var directory = System.IO.Path.GetDirectoryName(imagePath);
+            string fileName = System.IO.Path.GetFileName(texturePath);
 
-            if (string.IsNullOrEmpty(stem))
-                return false;
-
-            // Check if there are companion files with same stem but different extension IN SAME DIRECTORY
-            // IMPORTANT: Only check for NON-IMAGE companion files (e.g., .json, .vap, .vam)
-            // Multiple image variants (D, N, S, G, A) in same directory are all textures, not previews
-            foreach (var filePath in allFilePaths)
+            // Check if file exists
+            bool exists = false;
+            if (isVarFile)
             {
-                if (filePath.Equals(imagePath, StringComparison.OrdinalIgnoreCase))
-                    continue;
-
-                var fileDirectory = System.IO.Path.GetDirectoryName(filePath);
-                
-                // Only check files in the SAME directory
-                if (!fileDirectory.Equals(directory, StringComparison.OrdinalIgnoreCase))
-                    continue;
-
-                var fileFilename = System.IO.Path.GetFileName(filePath);
-                var fileStem = System.IO.Path.GetFileNameWithoutExtension(fileFilename).ToLower();
-                var fileExt = System.IO.Path.GetExtension(fileFilename).ToLower();
-
-                // If found a companion file (same stem, different ext, NOT an image)
-                // then this image is paired (preview), not orphaned (texture)
-                // Skip checking other image files - multiple texture variants are all textures
-                if (fileStem == stem && fileExt != ext && 
-                    fileExt != ".jpg" && fileExt != ".jpeg" && fileExt != ".png")
+                using (var zipFile = ZipArchive.Open(packagePath))
                 {
-                    return false; // NOT orphaned
+                    exists = SharpCompressHelper.FindEntryByPath(zipFile, texturePath) != null;
+                }
+            }
+            else
+            {
+                string fullPath = System.IO.Path.Combine(packagePath, texturePath);
+                exists = File.Exists(fullPath);
+            }
+
+            if (!exists)
+            {
+                if (enableDebug) System.Diagnostics.Debug.WriteLine($"  SKIP (not found): {fileName}");
+                return null;
+            }
+
+            // Get resolution and file size
+            var (resolution, fileSize, width, height) = GetTextureInfo(packagePath, texturePath, isVarFile);
+
+            // Skip if we couldn't read dimensions
+            if (width == 0 || height == 0)
+            {
+                if (enableDebug) System.Diagnostics.Debug.WriteLine($"  SKIP (no dims): {fileName} -> {width}x{height}");
+                return null;
+            }
+
+            // Filter: Only include if max dimension > 512px (textures, not previews)
+            int maxDim = Math.Max(width, height);
+            if (maxDim <= 512)
+            {
+                if (enableDebug) System.Diagnostics.Debug.WriteLine($"  SKIP (too small): {fileName} -> {maxDim}px");
+                return null;
+            }
+
+            // Determine texture type using shared utility
+            string textureType = TextureUtils.GetTextureType(texturePath);
+
+            // Get archive dimensions if available
+            int archiveMaxDim = 0;
+            if (hasArchiveSource && archiveTextureDimensions != null &&
+                archiveTextureDimensions.TryGetValue(texturePath, out var archiveDims))
+            {
+                archiveMaxDim = Math.Max(archiveDims.width, archiveDims.height);
+            }
+
+            if (enableDebug)
+            {
+                System.Diagnostics.Debug.WriteLine($"  ADDED: {fileName} (current={maxDim}px [{width}x{height}], archive={archiveMaxDim}px, {textureType})");
+                if (hasArchiveSource && archiveMaxDim == 0)
+                {
+                    System.Diagnostics.Debug.WriteLine($"    WARNING: No archive dims found!");
                 }
             }
 
-            return true; // Orphaned (texture)
+            var textureInfo = new TextureInfo
+            {
+                TextureType = textureType,
+                ReferencedPath = texturePath,
+                Exists = true,
+                Resolution = resolution,
+                FileSize = fileSize,
+                Width = width,
+                Height = height,
+                OriginalWidth = width,
+                OriginalHeight = height,
+                HasArchiveSource = hasArchiveSource,
+                ArchiveMaxDimension = archiveMaxDim
+            };
+
+            // Set OriginalResolution and OriginalFileSize from archive if available
+            if (hasArchiveSource && archiveMaxDim > 0)
+            {
+                textureInfo.OriginalResolution = TextureUtils.GetResolutionLabel(archiveMaxDim);
+
+                if (archiveFileSizes != null && archiveFileSizes.TryGetValue(texturePath, out long archiveSize))
+                {
+                    textureInfo.OriginalFileSize = archiveSize;
+                }
+            }
+
+            textureInfo.SetDefaultConversionTarget();
+            return textureInfo;
         }
 
         /// <summary>
         /// Processes a single texture file and adds it to the result
         /// </summary>
-        private void ProcessTextureFile(string packagePath, string texturePath, bool isVarFile, ValidationResult result, 
-            bool hasArchiveSource = false, Dictionary<string, (int width, int height)> archiveTextureDimensions = null, Dictionary<string, long> archiveFileSizes = null)
+        private void ProcessTextureFile(string packagePath, string texturePath, bool isVarFile, ValidationResult result,
+            bool hasArchiveSource = false, Dictionary<string, (int width, int height)> archiveTextureDimensions = null, 
+            Dictionary<string, long> archiveFileSizes = null)
         {
             try
             {
-                // Check if file exists
-                bool exists = false;
-                
-                if (isVarFile)
-                {
-                    using (var zipFile = ZipArchive.Open(packagePath))
-                    {
-                        exists = SharpCompressHelper.FindEntryByPath(zipFile, texturePath) != null;
-                    }
-                }
-                else
-                {
-                    string fullPath = System.IO.Path.Combine(packagePath, texturePath);
-                    exists = File.Exists(fullPath);
-                }
-
-                if (!exists)
-                    return; // Skip non-existent files
-
-                // Get resolution and file size (always use thorough scan for accuracy)
-                var (resolution, fileSize, width, height) = GetTextureInfo(packagePath, texturePath, isVarFile);
-                
-                // Skip if we couldn't read dimensions
-                if (width == 0 || height == 0)
-                    return;
-
-                // Filter: Only include if max dimension > 512px (textures, not previews)
-                int maxDim = Math.Max(width, height);
-                if (maxDim <= 512)
-                    return; // Skip preview images
-
-                // Determine texture type based on suffix
-                string fileName = System.IO.Path.GetFileNameWithoutExtension(texturePath);
-                string textureType = "Texture";
-                
-                if (fileName.EndsWith("_D", StringComparison.OrdinalIgnoreCase))
-                    textureType = "Diffuse";
-                else if (fileName.EndsWith("_S", StringComparison.OrdinalIgnoreCase))
-                    textureType = "Specular";
-                else if (fileName.EndsWith("_G", StringComparison.OrdinalIgnoreCase))
-                    textureType = "Gloss";
-                else if (fileName.EndsWith("_N", StringComparison.OrdinalIgnoreCase))
-                    textureType = "Normal";
-                else if (fileName.EndsWith("_A", StringComparison.OrdinalIgnoreCase))
-                    textureType = "Alpha";
-
-                // Get archive dimensions if available
-                int archiveMaxDim = 0;
-                int archiveWidth = 0;
-                int archiveHeight = 0;
-                if (hasArchiveSource && archiveTextureDimensions != null && 
-                    archiveTextureDimensions.TryGetValue(texturePath, out var archiveDims))
-                {
-                    archiveMaxDim = Math.Max(archiveDims.width, archiveDims.height);
-                    archiveWidth = archiveDims.width;
-                    archiveHeight = archiveDims.height;
-                }
-
-                var textureInfo = new TextureInfo
-                {
-                    TextureType = textureType,
-                    ReferencedPath = texturePath,
-                    Exists = true,
-                    Resolution = resolution,
-                    FileSize = fileSize,
-                    Width = width,
-                    Height = height,
-                    OriginalWidth = width,  // Store original dimensions for conversion capability checks
-                    OriginalHeight = height,
-                    HasArchiveSource = hasArchiveSource,
-                    ArchiveMaxDimension = archiveMaxDim
-                };
-                
-                // Set OriginalResolution and OriginalFileSize from archive if available
-                if (hasArchiveSource && archiveMaxDim > 0)
-                {
-                    // Create resolution label from archive dimensions
-                    string archiveResolution = "-";
-                    if (archiveMaxDim >= 7680) archiveResolution = "8K";
-                    else if (archiveMaxDim >= 4096) archiveResolution = "4K";
-                    else if (archiveMaxDim >= 2048) archiveResolution = "2K";
-                    else if (archiveMaxDim >= 1024) archiveResolution = "1K";
-                    else archiveResolution = $"{archiveMaxDim}px";
-                    
-                    textureInfo.OriginalResolution = archiveResolution;
-                    
-                    // Set original file size from archive
-                    if (archiveFileSizes != null && archiveFileSizes.TryGetValue(texturePath, out long archiveSize))
-                    {
-                        textureInfo.OriginalFileSize = archiveSize;
-                    }
-                    
-                    // DO NOT overwrite OriginalWidth/Height with archive dimensions!
-                    // OriginalWidth/Height should reflect CURRENT texture dimensions for accurate conversion
-                    // ArchiveMaxDimension is used separately to enable upscaling capability
-                }
-
-                // Set default conversion target to current resolution
-                textureInfo.SetDefaultConversionTarget();
-
-                result.Textures.Add(textureInfo);
+                var info = CreateTextureInfo(packagePath, texturePath, isVarFile, hasArchiveSource, 
+                    archiveTextureDimensions, archiveFileSizes, false);
+                if (info != null) result.Textures.Add(info);
             }
-            catch { }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[ProcessTextureFile] Error: {ex.Message}");
+            }
         }
 
         /// <summary>
         /// Processes a single texture file for parallel execution (thread-safe version)
-        /// Adds result to thread-safe collection instead of ValidationResult
         /// </summary>
-        private void ProcessTextureFileParallel(string packagePath, string texturePath, bool isVarFile, 
-            bool hasArchiveSource, Dictionary<string, (int width, int height)> archiveTextureDimensions, 
+        private void ProcessTextureFileParallel(string packagePath, string texturePath, bool isVarFile,
+            bool hasArchiveSource, Dictionary<string, (int width, int height)> archiveTextureDimensions,
             Dictionary<string, long> archiveFileSizes, ConcurrentBag<TextureInfo> textureInfos, bool enableDebug = false)
         {
-            string fileName = System.IO.Path.GetFileName(texturePath);
-            
             try
             {
-                // Check if file exists
-                bool exists = false;
-                
-                if (isVarFile)
-                {
-                    using (var zipFile = ZipArchive.Open(packagePath))
-                    {
-                        exists = SharpCompressHelper.FindEntryByPath(zipFile, texturePath) != null;
-                    }
-                }
-                else
-                {
-                    string fullPath = System.IO.Path.Combine(packagePath, texturePath);
-                    exists = File.Exists(fullPath);
-                }
-
-                if (!exists)
-                {
-                    if (enableDebug) System.Diagnostics.Debug.WriteLine($"  SKIP (not found): {fileName}");
-                    return; // Skip non-existent files
-                }
-
-                // Get resolution and file size (always use thorough scan for accuracy)
-                var (resolution, fileSize, width, height) = GetTextureInfo(packagePath, texturePath, isVarFile);
-                
-                // Skip if we couldn't read dimensions
-                if (width == 0 || height == 0)
-                {
-                    if (enableDebug) System.Diagnostics.Debug.WriteLine($"  SKIP (no dims): {fileName} -> {width}x{height}");
-                    return;
-                }
-
-                // Filter: Only include if max dimension > 512px (textures, not previews)
-                int maxDim = Math.Max(width, height);
-                if (maxDim <= 512)
-                {
-                    if (enableDebug) System.Diagnostics.Debug.WriteLine($"  SKIP (too small): {fileName} -> {maxDim}px");
-                    return; // Skip preview images
-                }
-
-                // Determine texture type based on suffix
-                string fileNameWithoutExt = System.IO.Path.GetFileNameWithoutExtension(texturePath);
-                string textureType = "Texture";
-                
-                if (fileNameWithoutExt.EndsWith("_D", StringComparison.OrdinalIgnoreCase))
-                    textureType = "Diffuse";
-                else if (fileNameWithoutExt.EndsWith("_S", StringComparison.OrdinalIgnoreCase))
-                    textureType = "Specular";
-                else if (fileNameWithoutExt.EndsWith("_G", StringComparison.OrdinalIgnoreCase))
-                    textureType = "Gloss";
-                else if (fileNameWithoutExt.EndsWith("_N", StringComparison.OrdinalIgnoreCase))
-                    textureType = "Normal";
-                else if (fileNameWithoutExt.EndsWith("_A", StringComparison.OrdinalIgnoreCase))
-                    textureType = "Alpha";
-                
-                // Get archive dimensions if available
-                int archiveMaxDim = 0;
-                int archiveWidth = 0;
-                int archiveHeight = 0;
-                if (hasArchiveSource && archiveTextureDimensions != null && 
-                    archiveTextureDimensions.TryGetValue(texturePath, out var archiveDims))
-                {
-                    archiveMaxDim = Math.Max(archiveDims.width, archiveDims.height);
-                    archiveWidth = archiveDims.width;
-                    archiveHeight = archiveDims.height;
-                }
-                
-                if (enableDebug) 
-                {
-                    System.Diagnostics.Debug.WriteLine($"  ADDED: {fileName} (current={maxDim}px [{width}x{height}], archive={archiveMaxDim}px, {textureType})");
-                    System.Diagnostics.Debug.WriteLine($"    Disk path: {packagePath}");
-                    System.Diagnostics.Debug.WriteLine($"    Archive path: {texturePath}");
-                    if (hasArchiveSource && archiveMaxDim == 0)
-                    {
-                        System.Diagnostics.Debug.WriteLine($"    WARNING: No archive dims found!");
-                        System.Diagnostics.Debug.WriteLine($"    Archive keys count: {archiveTextureDimensions?.Count ?? 0}");
-                    }
-                }
-
-                var textureInfo = new TextureInfo
-                {
-                    TextureType = textureType,
-                    ReferencedPath = texturePath,
-                    Exists = true,
-                    Resolution = resolution,
-                    FileSize = fileSize,
-                    Width = width,
-                    Height = height,
-                    OriginalWidth = width,  // Store original dimensions for conversion capability checks
-                    OriginalHeight = height,
-                    HasArchiveSource = hasArchiveSource,
-                    ArchiveMaxDimension = archiveMaxDim
-                };
-                
-                // Set OriginalResolution and OriginalFileSize from archive if available
-                if (hasArchiveSource && archiveMaxDim > 0)
-                {
-                    // Create resolution label from archive dimensions
-                    string archiveResolution = "-";
-                    if (archiveMaxDim >= 7680) archiveResolution = "8K";
-                    else if (archiveMaxDim >= 4096) archiveResolution = "4K";
-                    else if (archiveMaxDim >= 2048) archiveResolution = "2K";
-                    else if (archiveMaxDim >= 1024) archiveResolution = "1K";
-                    else archiveResolution = $"{archiveMaxDim}px";
-                    
-                    textureInfo.OriginalResolution = archiveResolution;
-                    
-                    // Set original file size from archive
-                    if (archiveFileSizes != null && archiveFileSizes.TryGetValue(texturePath, out long archiveSize))
-                    {
-                        textureInfo.OriginalFileSize = archiveSize;
-                    }
-                    
-                    // DO NOT overwrite OriginalWidth/Height with archive dimensions!
-                    // OriginalWidth/Height should reflect CURRENT texture dimensions for accurate conversion
-                    // ArchiveMaxDimension is used separately to enable upscaling capability
-                }
-
-                // Set default conversion target to current resolution
-                textureInfo.SetDefaultConversionTarget();
-
-                // Add to thread-safe collection
-                textureInfos.Add(textureInfo);
+                var info = CreateTextureInfo(packagePath, texturePath, isVarFile, hasArchiveSource,
+                    archiveTextureDimensions, archiveFileSizes, enableDebug);
+                if (info != null) textureInfos.Add(info);
             }
-            catch { }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[ProcessTextureFileParallel] Error: {ex.Message}");
+            }
         }
 
         /// <summary>
@@ -988,14 +753,7 @@ namespace VPM.Services
                     var (width, height) = ReadImageDimensionsFromBuffer(headerBuffer, headerBuffer.Length, texturePath);
                     if (width > 0 && height > 0)
                     {
-                        string resolution = "-";
-                        int maxDim = Math.Max(width, height);
-                        if (maxDim >= 7680) resolution = "8K";
-                        else if (maxDim >= 4096) resolution = "4K";
-                        else if (maxDim >= 2048) resolution = "2K";
-                        else if (maxDim >= 1024) resolution = "1K";
-                        else resolution = $"{maxDim}px";
-                        
+                        string resolution = TextureUtils.GetResolutionLabel(width, height);
                         var finalResult = (resolution, fileSize, width, height);
                         _textureCache[cacheKey] = finalResult;
                         return finalResult;
@@ -1068,14 +826,7 @@ namespace VPM.Services
                         
                         if (width > 0 && height > 0)
                         {
-                            string resolution = "-";
-                            int maxDim = Math.Max(width, height);
-                            if (maxDim >= 7680) resolution = "8K";
-                            else if (maxDim >= 4096) resolution = "4K";
-                            else if (maxDim >= 2048) resolution = "2K";
-                            else if (maxDim >= 1024) resolution = "1K";
-                            else resolution = $"{maxDim}px";
-                            
+                            string resolution = TextureUtils.GetResolutionLabel(width, height);
                             return (resolution, fileSize, width, height);
                         }
                     }
@@ -1204,16 +955,9 @@ namespace VPM.Services
                     }
                 }
 
-                string resolution = "-";
-                if (width > 0 && height > 0)
-                {
-                    int maxDim = Math.Max(width, height);
-                    if (maxDim >= 7680) resolution = "8K";
-                    else if (maxDim >= 4096) resolution = "4K";
-                    else if (maxDim >= 2048) resolution = "2K";
-                    else if (maxDim >= 1024) resolution = "1K";
-                    else resolution = $"{maxDim}px";
-                }
+                string resolution = (width > 0 && height > 0) 
+                    ? TextureUtils.GetResolutionLabel(width, height) 
+                    : "-";
 
                 return (resolution, fileSize, width, height);
             }

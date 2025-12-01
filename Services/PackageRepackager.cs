@@ -1662,86 +1662,37 @@ namespace VPM.Services
         }
 
         /// <summary>
-        /// Recursively writes VAP JSON elements, reducing density values if needed
+        /// Recursively writes VAP JSON elements, reducing density values if needed.
+        /// Uses WriteJsonElementWithHandler with a density reduction property handler.
         /// </summary>
         private void WriteVapElementWithDensityReduction(
             VamJsonWriter writer,
             JsonElement element,
             int maxTargetDensity)
         {
-            switch (element.ValueKind)
+            // Property handler for density reduction
+            bool HandleDensityProperty(JsonProperty property, JsonElement parent)
             {
-                case JsonValueKind.Object:
-                    writer.WriteStartObject();
-                    
-                    foreach (var property in element.EnumerateObject())
+                // Check if this is curveDensity or hairMultiplier
+                if ((property.Name == "curveDensity" || property.Name == "hairMultiplier") && 
+                    property.Value.ValueKind == JsonValueKind.String)
+                {
+                    if (int.TryParse(property.Value.GetString(), out int currentValue) && currentValue > maxTargetDensity)
                     {
-                        // Check if this is curveDensity or hairMultiplier
-                        if ((property.Name == "curveDensity" || property.Name == "hairMultiplier") && 
-                            property.Value.ValueKind == JsonValueKind.String)
-                        {
-                            // Parse the value
-                            if (int.TryParse(property.Value.GetString(), out int currentValue))
-                            {
-                                // If current value is higher than target, reduce it
-                                if (currentValue > maxTargetDensity)
-                                {
-                                    writer.WritePropertyName(property.Name);
-                                    writer.WriteStringValue(maxTargetDensity.ToString());
-                                    continue;
-                                }
-                            }
-                        }
-                        
                         writer.WritePropertyName(property.Name);
-                        WriteVapElementWithDensityReduction(writer, property.Value, maxTargetDensity);
+                        writer.WriteStringValue(maxTargetDensity.ToString());
+                        return true; // Handled
                     }
-                    
-                    writer.WriteEndObject();
-                    break;
-                    
-                case JsonValueKind.Array:
-                    writer.WriteStartArray();
-                    foreach (var item in element.EnumerateArray())
-                    {
-                        WriteVapElementWithDensityReduction(writer, item, maxTargetDensity);
-                    }
-                    writer.WriteEndArray();
-                    break;
-                    
-                case JsonValueKind.String:
-                    var stringValue = element.GetString();
-                    if (stringValue is not null)
-                        writer.WriteStringValue(stringValue);
-                    else
-                        writer.WriteNullValue();
-                    break;
-                    
-                case JsonValueKind.Number:
-                    if (element.TryGetInt32(out int intValue))
-                        writer.WriteNumberValue(intValue);
-                    else if (element.TryGetInt64(out long longValue))
-                        writer.WriteNumberValue(longValue);
-                    else
-                        writer.WriteNumberValue(element.GetDouble());
-                    break;
-                    
-                case JsonValueKind.True:
-                    writer.WriteBooleanValue(true);
-                    break;
-                    
-                case JsonValueKind.False:
-                    writer.WriteBooleanValue(false);
-                    break;
-                    
-                case JsonValueKind.Null:
-                    writer.WriteNullValue();
-                    break;
+                }
+                return false; // Not handled, use default
             }
+
+            WriteJsonElementWithHandler(writer, element, HandleDensityProperty);
         }
 
         /// <summary>
-        /// Recursively writes JSON elements with hair and light modifications
+        /// Recursively writes JSON elements with hair and light modifications.
+        /// Uses WriteJsonElementWithHandler for non-object types, with custom object handling for scene modifications.
         /// </summary>
         private void WriteElementWithSceneModifications(
             VamJsonWriter writer, 
@@ -1751,182 +1702,115 @@ namespace VPM.Services
             ConcurrentDictionary<string, string> conversionDetails,
             bool disableMirrors = false)
         {
-            switch (element.ValueKind)
+            // For non-objects, delegate to base handler with recursive callback
+            if (element.ValueKind != JsonValueKind.Object)
             {
-                case JsonValueKind.Object:
-                    writer.WriteStartObject();
-                    
-                    // Check if this is a hair sim storable
-                    bool isHairSim = false;
-                    string storableId = null;
-                    
-                    // Check if this is a light (InvisibleLight or SpotLight)
-                    bool isLight = false;
-                    string atomId = null;
-                    if (element.TryGetProperty("type", out var typeProp))
-                    {
-                        string atomType = typeProp.GetString();
-                        isLight = atomType == "InvisibleLight" || atomType == "SpotLight";
-                    }
-                    
-                    // Check if this is a ReflectiveSlate (mirror)
-                    bool isReflectiveSlate = false;
-                    if (element.TryGetProperty("type", out var typeProperty) && typeProperty.GetString() == "ReflectiveSlate")
-                    {
-                        isReflectiveSlate = true;
-                    }
-                    
-                    if (element.TryGetProperty("id", out var idProp))
-                    {
-                        storableId = idProp.GetString();
-                        atomId = storableId;
-                        isHairSim = storableId?.EndsWith("Sim", StringComparison.OrdinalIgnoreCase) == true;
-                    }
-                    
-                    // Check if we need to modify this storable
-                    var matchingMod = isHairSim ? hairMods.FirstOrDefault(m => m.Value.hairId == storableId) : default;
-                    bool shouldModify = matchingMod.Key != null;
-                    
-                    // Check if this is a light that needs modification
-                    var matchingLightMod = isLight ? lightMods.FirstOrDefault(m => m.Value.lightId == atomId) : default;
-                    bool shouldModifyLight = matchingLightMod.Key != null;
-                    bool hasCurveDensity = element.TryGetProperty("curveDensity", out _);
-                    bool hasHairMultiplier = element.TryGetProperty("hairMultiplier", out _);
-                    bool densityWritten = false;
-                    
-                    // Collect all properties first to handle insertion properly
-                    var properties = element.EnumerateObject().ToList();
-                    
-                    // Check if this is a Light storable (we need to check parent context)
-                    bool isLightStorable = storableId == "Light";
-                    
-                    // For light shadow modifications, we need to find the matching light by checking storables
-                    KeyValuePair<string, (string sceneFile, string lightId, bool castShadows, int shadowResolution)> lightModForStorable = default;
-                    if (isLightStorable)
-                    {
-                        // We're in a storable, need to find which light atom this belongs to
-                        // This will be handled by checking if any light mod matches
-                        lightModForStorable = lightMods.FirstOrDefault();
-                    }
-                    
-                    for (int i = 0; i < properties.Count; i++)
-                    {
-                        var property = properties[i];
-                        
-                        // Skip curveDensity and hairMultiplier if we're modifying - we'll write them before rootColor
-                        if (shouldModify && (property.Name == "curveDensity" || property.Name == "hairMultiplier"))
-                        {
-                            continue;
-                        }
-                        
-                        // If this is a Light storable and we have light modifications, apply them
-                        if (isLightStorable && lightModForStorable.Key != null && (property.Name == "shadowsOn" || property.Name == "shadowResolution"))
-                        {
-                            if (property.Name == "shadowsOn")
-                            {
-                                writer.WritePropertyName("shadowsOn");
-                                writer.WriteStringValue(lightModForStorable.Value.castShadows ? "true" : "false");
-                            }
-                            else if (property.Name == "shadowResolution")
-                            {
-                                // Convert numeric resolution back to VAM's text format
-                                string resolutionText = lightModForStorable.Value.shadowResolution switch
-                                {
-                                    2048 => "VeryHigh",
-                                    1024 => "High",
-                                    512 => "Medium",
-                                    256 => "Low",
-                                    _ => "Off"
-                                };
-                                writer.WritePropertyName("shadowResolution");
-                                writer.WriteStringValue(resolutionText);
-                            }
-                            continue;
-                        }
-                        
-                        // If this is a mirror and we're disabling mirrors, set "on" to "false"
-                        if (isReflectiveSlate && disableMirrors && property.Name == "on")
-                        {
-                            writer.WritePropertyName("on");
-                            writer.WriteStringValue("false");
-                            continue;
-                        }
-                        
-                        // Insert curveDensity and hairMultiplier right before rootColor
-                        if (shouldModify && !densityWritten && property.Name == "rootColor")
-                        {
-                            writer.WritePropertyName("curveDensity");
-                            writer.WriteStringValue(matchingMod.Value.targetDensity.ToString());
-                            writer.WritePropertyName("hairMultiplier");
-                            writer.WriteStringValue(matchingMod.Value.targetDensity.ToString());
-                            densityWritten = true;
-                            
-                            // Track conversion details
-                            var detailText = hasCurveDensity
-                                ? $"  • {matchingMod.Key}: curveDensity & hairMultiplier Modified †’ {matchingMod.Value.targetDensity}"
-                                : $"  • {matchingMod.Key}: curveDensity & hairMultiplier Added †’ {matchingMod.Value.targetDensity}";
-                            conversionDetails.TryAdd(matchingMod.Key, detailText);
-                        }
-                        
-                        writer.WritePropertyName(property.Name);
-                        WriteElementWithSceneModifications(writer, property.Value, hairMods, lightMods, conversionDetails, disableMirrors);
-                    }
-                    
-                    // If we need to modify hair density but haven't written it yet (no rootColor found), write it at the end
-                    if (shouldModify && !densityWritten)
-                    {
-                        writer.WritePropertyName("curveDensity");
-                        writer.WriteStringValue(matchingMod.Value.targetDensity.ToString());
-                        writer.WritePropertyName("hairMultiplier");
-                        writer.WriteStringValue(matchingMod.Value.targetDensity.ToString());
-                        densityWritten = true;
-                        
-                        // Track conversion details
-                        var detailText = hasCurveDensity
-                            ? $"  • {matchingMod.Key}: curveDensity & hairMultiplier Modified †’ {matchingMod.Value.targetDensity}"
-                            : $"  • {matchingMod.Key}: curveDensity & hairMultiplier Added †’ {matchingMod.Value.targetDensity}";
-                        conversionDetails.TryAdd(matchingMod.Key, detailText);
-                    }
-                    
-                    writer.WriteEndObject();
-                    break;
-                    
-                case JsonValueKind.Array:
+                if (element.ValueKind == JsonValueKind.Array)
+                {
                     writer.WriteStartArray();
                     foreach (var item in element.EnumerateArray())
-                    {
                         WriteElementWithSceneModifications(writer, item, hairMods, lightMods, conversionDetails, disableMirrors);
-                    }
                     writer.WriteEndArray();
-                    break;
-                    
-                case JsonValueKind.String:
-                    var stringValue = element.GetString();
-                    if (stringValue is not null)
-                        writer.WriteStringValue(stringValue);
-                    else
-                        writer.WriteNullValue();
-                    break;
-                    
-                case JsonValueKind.Number:
-                    if (element.TryGetInt64(out long longValue))
-                        writer.WriteNumberValue(longValue);
-                    else
-                        writer.WriteNumberValue(element.GetDouble());
-                    break;
-                    
-                case JsonValueKind.True:
-                    writer.WriteBooleanValue(true);
-                    break;
-                    
-                case JsonValueKind.False:
-                    writer.WriteBooleanValue(false);
-                    break;
-                    
-                case JsonValueKind.Null:
-                    writer.WriteNullValue();
-                    break;
+                }
+                else
+                {
+                    WriteJsonElementWithHandler(writer, element);
+                }
+                return;
             }
+
+            // Object handling with scene modifications
+            writer.WriteStartObject();
+            
+            // Detect object type from properties
+            string storableId = element.TryGetProperty("id", out var idProp) ? idProp.GetString() : null;
+            string atomType = element.TryGetProperty("type", out var typeProp) ? typeProp.GetString() : null;
+            
+            bool isHairSim = storableId?.EndsWith("Sim", StringComparison.OrdinalIgnoreCase) == true;
+            bool isReflectiveSlate = atomType == "ReflectiveSlate";
+            bool isLightStorable = storableId == "Light";
+            
+            // Find matching modifications
+            var hairMod = isHairSim ? hairMods.FirstOrDefault(m => m.Value.hairId == storableId) : default;
+            var lightMod = isLightStorable ? lightMods.FirstOrDefault() : default;
+            
+            bool shouldModifyHair = hairMod.Key != null;
+            bool hasCurveDensity = element.TryGetProperty("curveDensity", out _);
+            bool densityWritten = false;
+            
+            foreach (var property in element.EnumerateObject())
+            {
+                // Skip density properties if modifying hair - will be inserted before rootColor
+                if (shouldModifyHair && (property.Name == "curveDensity" || property.Name == "hairMultiplier"))
+                    continue;
+                
+                // Handle light shadow modifications
+                if (isLightStorable && lightMod.Key != null)
+                {
+                    if (property.Name == "shadowsOn")
+                    {
+                        writer.WritePropertyName("shadowsOn");
+                        writer.WriteStringValue(lightMod.Value.castShadows ? "true" : "false");
+                        continue;
+                    }
+                    if (property.Name == "shadowResolution")
+                    {
+                        writer.WritePropertyName("shadowResolution");
+                        writer.WriteStringValue(GetShadowResolutionText(lightMod.Value.shadowResolution));
+                        continue;
+                    }
+                }
+                
+                // Handle mirror disabling
+                if (isReflectiveSlate && disableMirrors && property.Name == "on")
+                {
+                    writer.WritePropertyName("on");
+                    writer.WriteStringValue("false");
+                    continue;
+                }
+                
+                // Insert hair density before rootColor
+                if (shouldModifyHair && !densityWritten && property.Name == "rootColor")
+                {
+                    WriteHairDensityProperties(writer, hairMod, hasCurveDensity, conversionDetails);
+                    densityWritten = true;
+                }
+                
+                writer.WritePropertyName(property.Name);
+                WriteElementWithSceneModifications(writer, property.Value, hairMods, lightMods, conversionDetails, disableMirrors);
+            }
+            
+            // Write hair density at end if rootColor wasn't found
+            if (shouldModifyHair && !densityWritten)
+                WriteHairDensityProperties(writer, hairMod, hasCurveDensity, conversionDetails);
+            
+            writer.WriteEndObject();
+        }
+
+        private static string GetShadowResolutionText(int resolution) => resolution switch
+        {
+            2048 => "VeryHigh",
+            1024 => "High",
+            512 => "Medium",
+            256 => "Low",
+            _ => "Off"
+        };
+
+        private void WriteHairDensityProperties(
+            VamJsonWriter writer,
+            KeyValuePair<string, (string sceneFile, string hairId, int targetDensity, bool hadOriginalDensity)> hairMod,
+            bool hasCurveDensity,
+            ConcurrentDictionary<string, string> conversionDetails)
+        {
+            writer.WritePropertyName("curveDensity");
+            writer.WriteStringValue(hairMod.Value.targetDensity.ToString());
+            writer.WritePropertyName("hairMultiplier");
+            writer.WriteStringValue(hairMod.Value.targetDensity.ToString());
+            
+            var detailText = hasCurveDensity
+                ? $"  • {hairMod.Key}: curveDensity & hairMultiplier Modified †' {hairMod.Value.targetDensity}"
+                : $"  • {hairMod.Key}: curveDensity & hairMultiplier Added †' {hairMod.Value.targetDensity}";
+            conversionDetails.TryAdd(hairMod.Key, detailText);
         }
 
         /// <summary>
@@ -2563,37 +2447,30 @@ namespace VPM.Services
         }
         
         /// <summary>
-        /// Escapes a string for use in JSON
+        /// Escapes a string for use in JSON using System.Text.Json
         /// </summary>
-        private string EscapeJsonString(string value)
+        private static string EscapeJsonString(string value)
         {
             if (string.IsNullOrEmpty(value))
                 return "";
             
-            var sb = new StringBuilder();
-            foreach (char c in value)
-            {
-                switch (c)
-                {
-                    case '\\': sb.Append("\\\\"); break;
-                    case '"': sb.Append("\\\""); break;
-                    case '\n': sb.Append("\\n"); break;
-                    case '\r': sb.Append("\\r"); break;
-                    case '\t': sb.Append("\\t"); break;
-                    case '\b': sb.Append("\\b"); break;
-                    case '\f': sb.Append("\\f"); break;
-                    default:
-                        if (char.IsControl(c))
-                            sb.Append($"\\u{(int)c:X4}");
-                        else
-                            sb.Append(c);
-                        break;
-                }
-            }
-            return sb.ToString();
+            // Use System.Text.Json for proper escaping - serialize and strip quotes
+            var escaped = JsonSerializer.Serialize(value);
+            return escaped.Substring(1, escaped.Length - 2);
         }
 
-        private void WriteJsonElement(VamJsonWriter writer, JsonElement element)
+        /// <summary>
+        /// Writes a JSON element to the VamJsonWriter. Base method for all JSON writing operations.
+        /// </summary>
+        /// <param name="writer">The VamJsonWriter to write to</param>
+        /// <param name="element">The JSON element to write</param>
+        /// <param name="propertyHandler">Optional callback to handle/modify properties. Return true to skip default handling.</param>
+        /// <param name="beforeEndObject">Optional callback invoked before closing an object (for inserting new properties)</param>
+        private void WriteJsonElementWithHandler(
+            VamJsonWriter writer, 
+            JsonElement element,
+            Func<JsonProperty, JsonElement, bool> propertyHandler = null,
+            Action<JsonElement> beforeEndObject = null)
         {
             switch (element.ValueKind)
             {
@@ -2601,9 +2478,14 @@ namespace VPM.Services
                     writer.WriteStartObject();
                     foreach (var property in element.EnumerateObject())
                     {
+                        // If handler returns true, it handled the property - skip default
+                        if (propertyHandler?.Invoke(property, element) == true)
+                            continue;
+                        
                         writer.WritePropertyName(property.Name);
-                        WriteJsonElement(writer, property.Value);
+                        WriteJsonElementWithHandler(writer, property.Value, propertyHandler, beforeEndObject);
                     }
+                    beforeEndObject?.Invoke(element);
                     writer.WriteEndObject();
                     break;
 
@@ -2611,17 +2493,13 @@ namespace VPM.Services
                     writer.WriteStartArray();
                     foreach (var item in element.EnumerateArray())
                     {
-                        WriteJsonElement(writer, item);
+                        WriteJsonElementWithHandler(writer, item, propertyHandler, beforeEndObject);
                     }
                     writer.WriteEndArray();
                     break;
 
                 case JsonValueKind.String:
-                    var stringValue = element.GetString();
-                    if (stringValue is not null)
-                        writer.WriteStringValue(stringValue);
-                    else
-                        writer.WriteNullValue();
+                    writer.WriteStringValue(element.GetString() ?? "");
                     break;
 
                 case JsonValueKind.Number:
@@ -2648,24 +2526,23 @@ namespace VPM.Services
             }
         }
 
-        private string GetResolutionString(int width, int height)
+        /// <summary>
+        /// Simple JSON element copy (no modifications)
+        /// </summary>
+        private void WriteJsonElement(VamJsonWriter writer, JsonElement element) =>
+            WriteJsonElementWithHandler(writer, element);
+
+        private static string GetResolutionStringFromDimension(int maxDim) => maxDim switch
         {
-            int maxDim = Math.Max(width, height);
-            if (maxDim >= 7680) return "8K";
-            if (maxDim >= 4096) return "4K";
-            if (maxDim >= 2048) return "2K";
-            if (maxDim >= 1024) return "1K";
-            return $"{width}x{height}";
-        }
-        
-        private string GetResolutionStringFromDimension(int maxDim)
-        {
-            if (maxDim >= 7680) return "8K";
-            if (maxDim >= 4096) return "4K";
-            if (maxDim >= 2048) return "2K";
-            if (maxDim >= 1024) return "1K";
-            return $"{maxDim}px";
-        }
+            >= 7680 => "8K",
+            >= 4096 => "4K",
+            >= 2048 => "2K",
+            >= 1024 => "1K",
+            _ => $"{maxDim}px"
+        };
+
+        private static string GetResolutionString(int width, int height) => 
+            GetResolutionStringFromDimension(Math.Max(width, height));
 
         private sealed class VamJsonWriter : IDisposable
         {

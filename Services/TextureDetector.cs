@@ -25,10 +25,6 @@ namespace VPM.Services
     /// </summary>
     public static class TextureDetector
     {
-        private static readonly HashSet<string> ImageExtensions = new(StringComparer.OrdinalIgnoreCase) 
-        { 
-            ".jpg", ".jpeg", ".png" 
-        };
 
         /// <summary>
         /// Detects textures in an archive by finding orphaned images (no companion files).
@@ -65,8 +61,8 @@ namespace VPM.Services
                 {
                     if (entry.Key.EndsWith("/")) continue;
 
-                    var ext = System.IO.Path.GetExtension(entry.Key).ToLower();
-                    if (ImageExtensions.Contains(ext))
+                    var ext = System.IO.Path.GetExtension(entry.Key);
+                    if (TextureUtils.IsImageExtension(ext))
                     {
                         imageEntries.Add(entry);
                     }
@@ -82,8 +78,8 @@ namespace VPM.Services
                     var filesByDir = allFilePaths.GroupBy(p => System.IO.Path.GetDirectoryName(p) ?? "").ToList();
                     foreach (var dirGroup in filesByDir)
                     {
-                        var nonImageFiles = dirGroup.Where(p => !ImageExtensions.Contains(System.IO.Path.GetExtension(p).ToLower())).ToList();
-                        var imageFiles = dirGroup.Where(p => ImageExtensions.Contains(System.IO.Path.GetExtension(p).ToLower())).ToList();
+                        var nonImageFiles = dirGroup.Where(p => !TextureUtils.IsImageExtension(System.IO.Path.GetExtension(p))).ToList();
+                        var imageFiles = dirGroup.Where(p => TextureUtils.IsImageExtension(System.IO.Path.GetExtension(p))).ToList();
                         
                         if (imageFiles.Count > 0)
                         {
@@ -110,7 +106,7 @@ namespace VPM.Services
                 // This is the INVERSE of preview detection
                 foreach (var entry in imageEntries)
                 {
-                    bool isOrphaned = IsOrphanedImage(entry, allFilePaths, enableDebug);
+                    bool isOrphaned = TextureUtils.IsOrphanedImage(entry.Key, allFilePaths, enableDebug);
                     if (isOrphaned)
                     {
                         textures.Add(entry.Key);
@@ -140,78 +136,17 @@ namespace VPM.Services
 
         /// <summary>
         /// Determines if an image is a TEXTURE (orphaned, no companion file).
-        /// This is the INVERSE of PreviewImageValidator.IsPreviewImage().
-        /// 
-        /// An image is a texture if:
-        /// - It's an image file (.jpg, .jpeg, .png)
-        /// - It has NO companion file with the same stem but different extension IN THE SAME DIRECTORY
-        /// 
-        /// Examples of TEXTURES (orphaned):
-        /// - Skin_D.png (no Skin_D.json, Skin_D.vap, etc. in same directory)
-        /// - Hair_N.jpg (no Hair_N.json, Hair_N.vap, etc. in same directory)
-        /// 
-        /// Examples of NON-TEXTURES (paired, previews):
-        /// - Amelie.jpg + Amelie.json → NOT a texture (it's a preview)
-        /// - nico_boot_L2.jpg + nico_boot_L2.vam → NOT a texture (it's a preview)
+        /// Delegates to TextureUtils.IsOrphanedImage for shared implementation.
         /// </summary>
         public static bool IsOrphanedImage(IArchiveEntry imageEntry, IEnumerable<string> allFilePaths, bool enableDebug = false)
-        {
-            if (imageEntry == null || allFilePaths == null)
-                return false;
+            => imageEntry != null && TextureUtils.IsOrphanedImage(imageEntry.Key, allFilePaths, enableDebug);
 
-            var imagePath = imageEntry.Key.ToLower();
-            var filename = System.IO.Path.GetFileName(imagePath);
-            var ext = System.IO.Path.GetExtension(filename).ToLower();
-            var directory = System.IO.Path.GetDirectoryName(imagePath);
-
-            // Must be an image file
-            if (!ImageExtensions.Contains(ext))
-                return false;
-
-            // Get the stem (filename without extension)
-            var stem = System.IO.Path.GetFileNameWithoutExtension(filename).ToLower();
-
-            if (string.IsNullOrEmpty(stem))
-                return false;
-
-            // INVERSE LOGIC: Check if there are OTHER files with the same stem but different extension
-            // IN THE SAME DIRECTORY
-            // If NO companion file exists → it's an orphaned image (TEXTURE)
-            // If companion file exists → it's a paired image (PREVIEW)
-            // 
-            // IMPORTANT: Only check for NON-IMAGE companion files (e.g., .json, .vap, .vam)
-            // Multiple image variants (D, N, S, G, A) in same directory are all textures, not previews
-            foreach (var filePath in allFilePaths)
-            {
-                if (string.IsNullOrEmpty(filePath) || filePath.Equals(imagePath, StringComparison.OrdinalIgnoreCase))
-                    continue;
-
-                var fileDirectory = System.IO.Path.GetDirectoryName(filePath);
-                
-                // Only check files in the SAME directory
-                if (!fileDirectory.Equals(directory, StringComparison.OrdinalIgnoreCase))
-                    continue;
-
-                var fileFilename = System.IO.Path.GetFileName(filePath);
-                var fileStem = System.IO.Path.GetFileNameWithoutExtension(fileFilename).ToLower();
-                var fileExt = System.IO.Path.GetExtension(fileFilename).ToLower();
-
-                // If we find a file with same stem but different extension (and it's NOT an image)
-                // then this image is PAIRED (preview), not orphaned (texture)
-                // Skip checking other image files - multiple texture variants (D, N, S, G, A) are all textures
-                if (fileStem == stem && fileExt != ext && !ImageExtensions.Contains(fileExt))
-                {
-                    if (enableDebug)
-                    {
-                        System.Diagnostics.Debug.WriteLine($"    PAIRED: {filename} matches {fileFilename} (stem={stem})");
-                    }
-                    return false; // NOT orphaned, it's a preview
-                }
-            }
-
-            // No companion file found in same directory → it's orphaned (TEXTURE)
-            return true;
-        }
+        /// <summary>
+        /// String-based overload for checking if an image path is orphaned.
+        /// Delegates to TextureUtils.IsOrphanedImage for shared implementation.
+        /// </summary>
+        public static bool IsOrphanedImagePath(string imagePath, IEnumerable<string> allFilePaths)
+            => TextureUtils.IsOrphanedImage(imagePath, allFilePaths, false);
 
         /// <summary>
         /// Overload: Detects textures from a VAR file path.
@@ -257,13 +192,9 @@ namespace VPM.Services
             public string Resolution { get; set; }
             public string TextureType { get; set; }
 
-            public string FileSizeFormatted => FileSize > 0 
-                ? $"{FileSize / (1024.0 * 1024.0):F2} MB" 
-                : "-";
+            public string FileSizeFormatted => TextureUtils.FormatFileSize(FileSize);
 
-            public string DimensionsFormatted => Width > 0 && Height > 0
-                ? $"{Width}×{Height}"
-                : "-";
+            public string DimensionsFormatted => TextureUtils.FormatDimensions(Width, Height);
         }
 
         /// <summary>
@@ -294,24 +225,10 @@ namespace VPM.Services
                             continue;
 
                         // Determine resolution classification
-                        int maxDim = Math.Max(width, height);
-                        string resolution = maxDim switch
-                        {
-                            >= 7680 => "8K",
-                            >= 4096 => "4K",
-                            >= 2048 => "2K",
-                            >= 1024 => "1K",
-                            _ => $"{maxDim}px"
-                        };
+                        string resolution = TextureUtils.GetResolutionLabel(width, height);
 
                         // Determine texture type from suffix
-                        var filename = System.IO.Path.GetFileNameWithoutExtension(texturePath);
-                        string textureType = filename.EndsWith("_D", StringComparison.OrdinalIgnoreCase) ? "Diffuse"
-                            : filename.EndsWith("_S", StringComparison.OrdinalIgnoreCase) ? "Specular"
-                            : filename.EndsWith("_G", StringComparison.OrdinalIgnoreCase) ? "Gloss"
-                            : filename.EndsWith("_N", StringComparison.OrdinalIgnoreCase) ? "Normal"
-                            : filename.EndsWith("_A", StringComparison.OrdinalIgnoreCase) ? "Alpha"
-                            : "Texture";
+                        string textureType = TextureUtils.GetTextureType(texturePath);
 
                         textureInfos.Add(new TextureInfo
                         {
@@ -348,7 +265,7 @@ namespace VPM.Services
             public Dictionary<string, int> TexturesByType { get; set; } = new();
 
             public string TotalSizeFormatted => TotalTextureSize > 0
-                ? $"{TotalTextureSize / (1024.0 * 1024.0):F2} MB"
+                ? TextureUtils.FormatFileSize(TotalTextureSize)
                 : "0 MB";
         }
 
