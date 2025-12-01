@@ -368,6 +368,26 @@
                         </MenuItem>
                     </MenuItem>
 
+                    <!--  Hub Section  -->
+                    <Separator />
+                    <MenuItem Header="🌐 _Hub">
+                        <MenuItem
+                            x:Name="HubBrowserMenuItem"
+                            Click="HubBrowser_Click"
+                            Header="🔍 Browse Hub"
+                            ToolTip="Browse and download packages from VaM Hub" />
+                        <MenuItem
+                            x:Name="HubCheckUpdatesMenuItem"
+                            Click="HubCheckUpdates_Click"
+                            Header="📡 Check for Updates"
+                            ToolTip="Check Hub for package updates" />
+                        <MenuItem
+                            x:Name="HubMissingDepsMenuItem"
+                            Click="HubMissingDeps_Click"
+                            Header="📥 Find Missing Dependencies"
+                            ToolTip="Find and download missing dependencies from Hub" />
+                    </MenuItem>
+
                     <!--  Tools Section  -->
                     <Separator />
                     <MenuItem Header="🛠️ _Tools">

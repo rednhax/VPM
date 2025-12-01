@@ -5,6 +5,7 @@ obj/
 
 # Visual Studio
 .vs/
+.vb/
 *.user
 *.suo
 *.sln.docstates
