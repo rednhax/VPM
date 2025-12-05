@@ -84,12 +84,8 @@ namespace VPM.Services
                 request["searchall"] = "true";
             }
 
-            // If only downloadable is checked, force Free category
-            if (searchParams.OnlyDownloadable)
-            {
-                request["category"] = "Free";
-            }
-            else if (searchParams.PayType != "All")
+            // Set category based on PayType filter
+            if (searchParams.PayType != "All")
             {
                 request["category"] = searchParams.PayType;
             }
@@ -105,7 +101,10 @@ namespace VPM.Services
 
             request["sort"] = searchParams.Sort;
 
-            var response = await PostRequestAsync<HubSearchResponse>(request.ToJsonString(), cancellationToken);
+            var requestJson = request.ToJsonString();
+            Debug.WriteLine($"[HubService] API Request: {requestJson}");
+            
+            var response = await PostRequestAsync<HubSearchResponse>(requestJson, cancellationToken);
             return response;
         }
 
@@ -315,6 +314,31 @@ namespace VPM.Services
         public int GetPackageCount()
         {
             return _packageIdToResourceId?.Count ?? 0;
+        }
+        
+        /// <summary>
+        /// Get all unique creator names from the packages index
+        /// </summary>
+        /// <returns>Sorted list of unique creator names</returns>
+        public List<string> GetAllCreators()
+        {
+            if (_packageIdToResourceId == null || _packageIdToResourceId.Count == 0)
+                return new List<string>();
+            
+            var creators = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            
+            foreach (var packageName in _packageIdToResourceId.Keys)
+            {
+                // Package format: Creator.PackageName.Version
+                var firstDot = packageName.IndexOf('.');
+                if (firstDot > 0)
+                {
+                    var creator = packageName.Substring(0, firstDot);
+                    creators.Add(creator);
+                }
+            }
+            
+            return creators.OrderBy(c => c, StringComparer.OrdinalIgnoreCase).ToList();
         }
 
         #endregion

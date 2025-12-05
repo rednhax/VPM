@@ -6,14 +6,17 @@ using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices;
+using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
+using Microsoft.Web.WebView2.Core;
 using VPM.Models;
 using VPM.Services;
 
@@ -42,11 +45,29 @@ namespace VPM.Windows
         
         // Side panel state
         private bool _isPanelExpanded = false;
-        private const double PanelWidth = 380;
+        private const double PanelWidth = 480;  // Wider panel for WebView
         private HubResourceDetail _currentDetail;
         private HubResource _currentResource;  // Track the resource being viewed
         private ObservableCollection<HubFileViewModel> _currentFiles;
         private ObservableCollection<HubFileViewModel> _currentDependencies;
+        
+        // WebView2 state
+        private bool _webViewInitialized = false;
+        private string _currentWebViewUrl = null;
+        private string _currentResourceId = null;
+        
+        // Overview panel state
+        private bool _isOverviewPanelVisible = false;
+        private const double DefaultOverviewPanelWidth = 500;
+        private double _lastOverviewPanelWidth = DefaultOverviewPanelWidth;  // Remember user-set width
+        
+        // Creator filter state
+        private List<string> _allCreators = new List<string>();
+        private string _selectedCreator = "All";
+        private bool _isCreatorFilterUpdating = false;
+        
+        // Maps normalized creator names (no spaces, lowercase) to Hub API names (with spaces)
+        private Dictionary<string, string> _creatorNameMap = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
         public HubBrowserWindow(string destinationFolder, Dictionary<string, string> localPackagePaths = null)
         {
@@ -70,6 +91,8 @@ namespace VPM.Windows
             SourceInitialized += HubBrowserWindow_SourceInitialized;
             Loaded += HubBrowserWindow_Loaded;
             Closed += HubBrowserWindow_Closed;
+            
+            // Creator filter will be populated after packages.json loads
         }
 
         private void HubBrowserWindow_SourceInitialized(object sender, EventArgs e)
@@ -102,6 +125,9 @@ namespace VPM.Windows
             // Load packages.json for version checking
             await _hubService.LoadPackagesJsonAsync();
             
+            // Load creator list from packages.json (fast, has all creators)
+            LoadCreatorListFromPackages();
+            
             // Initial search
             await SearchAsync();
         }
@@ -110,7 +136,248 @@ namespace VPM.Windows
         {
             _searchCts?.Cancel();
             _hubService?.Dispose();
+            
+            // Dispose WebView2
+            if (OverviewWebView != null)
+            {
+                OverviewWebView.Dispose();
+            }
         }
+        
+        /// <summary>
+        /// Initialize WebView2 asynchronously
+        /// </summary>
+        private async Task InitializeWebViewAsync()
+        {
+            if (_webViewInitialized) return;
+            
+            try
+            {
+                // Create a user data folder in temp for WebView2
+                var userDataFolder = Path.Combine(Path.GetTempPath(), "VPM_WebView2");
+                var env = await CoreWebView2Environment.CreateAsync(null, userDataFolder);
+                await OverviewWebView.EnsureCoreWebView2Async(env);
+                
+                // Configure WebView2 settings for dark theme and Hub compatibility
+                var settings = OverviewWebView.CoreWebView2.Settings;
+                settings.IsStatusBarEnabled = false;
+                settings.AreDefaultContextMenusEnabled = true;
+                settings.IsZoomControlEnabled = true;
+                settings.AreDevToolsEnabled = false;
+                
+                // Set dark theme preference
+                OverviewWebView.CoreWebView2.Profile.PreferredColorScheme = CoreWebView2PreferredColorScheme.Dark;
+                
+                // Add Hub consent cookie
+                var cookieManager = OverviewWebView.CoreWebView2.CookieManager;
+                var cookie = cookieManager.CreateCookie("vamhubconsent", "1", ".virtamate.com", "/");
+                cookie.IsSecure = true;
+                cookieManager.AddOrUpdateCookie(cookie);
+                
+                // Handle navigation events
+                OverviewWebView.NavigationStarting += WebView_NavigationStarting;
+                OverviewWebView.NavigationCompleted += WebView_NavigationCompleted;
+                
+                _webViewInitialized = true;
+                Debug.WriteLine("[HubBrowser] WebView2 initialized successfully");
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[HubBrowser] WebView2 initialization failed: {ex.Message}");
+                _webViewInitialized = false;
+                ShowWebViewError($"WebView2 initialization failed: {ex.Message}");
+            }
+        }
+        
+        private void WebView_NavigationStarting(object sender, CoreWebView2NavigationStartingEventArgs e)
+        {
+            WebViewLoadingOverlay.Visibility = Visibility.Visible;
+            WebViewErrorPanel.Visibility = Visibility.Collapsed;
+        }
+        
+        private void WebView_NavigationCompleted(object sender, CoreWebView2NavigationCompletedEventArgs e)
+        {
+            WebViewLoadingOverlay.Visibility = Visibility.Collapsed;
+            
+            if (!e.IsSuccess)
+            {
+                Debug.WriteLine($"[HubBrowser] Navigation failed: {e.WebErrorStatus}");
+                ShowWebViewError($"Failed to load page: {e.WebErrorStatus}");
+            }
+            else
+            {
+                WebViewErrorPanel.Visibility = Visibility.Collapsed;
+                
+                // Inject CSS to improve dark theme appearance
+                InjectDarkThemeStyles();
+            }
+        }
+        
+        private async void InjectDarkThemeStyles()
+        {
+            try
+            {
+                // Inject custom CSS to enhance dark theme for Hub pages
+                var css = @"
+                    body { background-color: #1E1E1E !important; }
+                    .p-body { background-color: #1E1E1E !important; }
+                    .p-body-inner { background-color: #1E1E1E !important; }
+                    .block { background-color: #2D2D2D !important; border-color: #3F3F3F !important; }
+                    .block-container { background-color: #2D2D2D !important; }
+                    .message { background-color: #2D2D2D !important; }
+                    .message-inner { background-color: #2D2D2D !important; }
+                ";
+                
+                var script = $@"
+                    (function() {{
+                        var style = document.createElement('style');
+                        style.textContent = `{css}`;
+                        document.head.appendChild(style);
+                    }})();
+                ";
+                
+                await OverviewWebView.CoreWebView2.ExecuteScriptAsync(script);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[HubBrowser] Failed to inject dark theme: {ex.Message}");
+            }
+        }
+        
+        private void ShowWebViewError(string message)
+        {
+            WebViewErrorText.Text = message;
+            WebViewErrorPanel.Visibility = Visibility.Visible;
+        }
+        
+        private void OpenInBrowser_Click(object sender, RoutedEventArgs e)
+        {
+            if (!string.IsNullOrEmpty(_currentWebViewUrl))
+            {
+                try
+                {
+                    // Convert panel URL to regular URL
+                    var url = _currentWebViewUrl.Replace("-panel", "");
+                    Process.Start(new ProcessStartInfo(url) { UseShellExecute = true });
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine($"[HubBrowser] Failed to open browser: {ex.Message}");
+                }
+            }
+        }
+        
+        #region Overview Panel
+        
+        /// <summary>
+        /// Toggle the Overview panel visibility
+        /// </summary>
+        private void ToggleOverviewPanel_Click(object sender, RoutedEventArgs e)
+        {
+            if (_isOverviewPanelVisible)
+            {
+                CollapseOverviewPanel();
+            }
+            else if (!string.IsNullOrEmpty(_currentResourceId))
+            {
+                _ = ExpandOverviewPanelAsync();
+            }
+        }
+        
+        private async Task ExpandOverviewPanelAsync()
+        {
+            if (string.IsNullOrEmpty(_currentResourceId))
+                return;
+            
+            // Show the panel with remembered width
+            OverviewPanelColumn.Width = new GridLength(_lastOverviewPanelWidth);
+            OverviewPanelColumn.MinWidth = 300;
+            OverviewSplitter.Visibility = Visibility.Visible;
+            _isOverviewPanelVisible = true;
+            
+            // Navigate to overview
+            await NavigateToHubPage("TabOverview");
+        }
+        
+        private void CollapseOverviewPanel()
+        {
+            // Save current width before collapsing
+            if (OverviewPanelColumn.Width.Value > 0)
+            {
+                _lastOverviewPanelWidth = OverviewPanelColumn.Width.Value;
+            }
+            
+            OverviewPanelColumn.Width = new GridLength(0);
+            OverviewPanelColumn.MinWidth = 0;
+            OverviewSplitter.Visibility = Visibility.Collapsed;
+            _isOverviewPanelVisible = false;
+        }
+        
+        /// <summary>
+        /// Handle Overview tab navigation clicks
+        /// </summary>
+        private async void OverviewTab_Click(object sender, RoutedEventArgs e)
+        {
+            if (sender is not RadioButton tab || string.IsNullOrEmpty(_currentResourceId))
+                return;
+            
+            await NavigateToHubPage(tab.Name);
+        }
+        
+        #endregion
+        
+        #region Adaptive Grid
+        
+        private const double MinCardWidth = 200;
+        private const double MaxCardWidth = 280;
+        private const double CardMargin = 8; // 4px margin on each side
+        
+        private void ResourcesItemsControl_SizeChanged(object sender, SizeChangedEventArgs e)
+        {
+            UpdateGridColumns(e.NewSize.Width);
+        }
+        
+        private void UpdateGridColumns(double availableWidth)
+        {
+            if (availableWidth <= 0)
+                return;
+            
+            // Calculate optimal number of columns
+            // Each card needs MinCardWidth + margins
+            int maxColumns = Math.Max(1, (int)(availableWidth / (MinCardWidth + CardMargin)));
+            int minColumns = Math.Max(1, (int)(availableWidth / (MaxCardWidth + CardMargin)));
+            
+            // Use a column count that gives us cards between min and max width
+            int columns = Math.Max(minColumns, Math.Min(maxColumns, 6)); // Cap at 6 columns
+            
+            // Find the UniformGrid and update columns
+            if (ResourcesItemsControl.ItemsPanel?.LoadContent() is UniformGrid templateGrid)
+            {
+                // We need to find the actual panel, not the template
+                var panel = FindVisualChild<UniformGrid>(ResourcesItemsControl);
+                if (panel != null)
+                {
+                    panel.Columns = columns;
+                }
+            }
+        }
+        
+        private static T FindVisualChild<T>(DependencyObject parent) where T : DependencyObject
+        {
+            for (int i = 0; i < VisualTreeHelper.GetChildrenCount(parent); i++)
+            {
+                var child = VisualTreeHelper.GetChild(parent, i);
+                if (child is T typedChild)
+                    return typedChild;
+                
+                var result = FindVisualChild<T>(child);
+                if (result != null)
+                    return result;
+            }
+            return null;
+        }
+        
+        #endregion
 
         #region Search & Filtering
 
@@ -141,6 +408,9 @@ namespace VPM.Windows
                     ResourcesItemsControl.ItemsSource = response.Resources;
                     UpdatePaginationUI();
                     
+                    // Learn Hub API creator names from results (for name mapping)
+                    LearnCreatorNamesFromResults(response.Resources);
+                    
                     StatusText.Text = $"Found {_totalResources} resources";
                 }
                 else
@@ -167,14 +437,21 @@ namespace VPM.Windows
 
         private HubSearchParams BuildSearchParams()
         {
+            var sort = (SortFilter.SelectedItem as ComboBoxItem)?.Content?.ToString() ?? "Last Update";
+            var payType = (PayTypeFilter.SelectedItem as ComboBoxItem)?.Content?.ToString() ?? "Free";
+            var category = (CategoryFilter.SelectedItem as ComboBoxItem)?.Content?.ToString() ?? "All";
+            
+            Debug.WriteLine($"[HubBrowser] BuildSearchParams - Sort: {sort}, PayType: {payType}, Category: {category}");
+            
             return new HubSearchParams
             {
                 Page = _currentPage,
                 PerPage = 48,
                 Search = SearchBox.Text?.Trim(),
-                Category = (CategoryFilter.SelectedItem as ComboBoxItem)?.Content?.ToString() ?? "All",
-                PayType = (PayTypeFilter.SelectedItem as ComboBoxItem)?.Content?.ToString() ?? "Free",
-                Sort = (SortFilter.SelectedItem as ComboBoxItem)?.Content?.ToString() ?? "Latest Update",
+                Category = category,
+                Creator = _selectedCreator ?? "All",
+                PayType = payType,
+                Sort = sort,
                 OnlyDownloadable = OnlyDownloadableCheck.IsChecked == true
             };
         }
@@ -327,17 +604,284 @@ namespace VPM.Windows
             }
         }
 
-        private async void Filter_SelectionChanged(object sender, RoutedEventArgs e)
+        private async void Filter_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (!IsLoaded) return;
+            
+            try
+            {
+                var senderName = (sender as FrameworkElement)?.Name ?? "unknown";
+                var selectedItem = (sender as ComboBox)?.SelectedItem as ComboBoxItem;
+                var selectedValue = selectedItem?.Content?.ToString() ?? "null";
+                
+                Debug.WriteLine($"[HubBrowser] Filter_SelectionChanged - Sender: {senderName}, Selected: {selectedValue}");
+                
+                _currentPage = 1;
+                await SearchAsync();
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[HubBrowser] Filter_SelectionChanged error: {ex.Message}");
+                StatusText.Text = $"Error: {ex.Message}";
+            }
+        }
+        
+        private async void CheckBox_Changed(object sender, RoutedEventArgs e)
         {
             if (!IsLoaded) return;
             
             _currentPage = 1;
             await SearchAsync();
         }
+        
+        #region Creator Filter
+        
+        /// <summary>
+        /// Load creator list from packages.json (instant, complete list)
+        /// </summary>
+        private void LoadCreatorListFromPackages()
+        {
+            var creators = _hubService.GetAllCreators();
+            
+            _allCreators = new List<string> { "All" };
+            _allCreators.AddRange(creators);
+            
+            CreatorCountText.Text = $"{creators.Count} creators";
+        }
+        
+        /// <summary>
+        /// Learn Hub API creator names from search results and cache the mapping
+        /// </summary>
+        private void LearnCreatorNamesFromResults(IEnumerable<HubResource> resources)
+        {
+            if (resources == null) return;
+            
+            foreach (var resource in resources)
+            {
+                if (!string.IsNullOrEmpty(resource.Creator))
+                {
+                    // Normalize: remove spaces and lowercase for matching
+                    var normalized = resource.Creator.Replace(" ", "").ToLowerInvariant();
+                    
+                    // Store the Hub API name (with proper spacing)
+                    if (!_creatorNameMap.ContainsKey(normalized))
+                    {
+                        _creatorNameMap[normalized] = resource.Creator;
+                    }
+                }
+            }
+        }
+        
+        /// <summary>
+        /// Get the Hub API creator name for a given creator (resolves name mapping)
+        /// Uses partial search to find the correct Hub API name with spaces
+        /// </summary>
+        private async Task<string> ResolveCreatorNameAsync(string creator)
+        {
+            if (creator == "All") return "All";
+            
+            // Normalize the selected creator name
+            var normalized = creator.Replace(" ", "").ToLowerInvariant();
+            
+            // Check if we already know the Hub API name
+            if (_creatorNameMap.TryGetValue(normalized, out var hubName))
+            {
+                return hubName;
+            }
+            
+            // Search using first 3-4 characters to find packages by this creator
+            // This works because "Aci" will match "Acid Bubbles" packages
+            try
+            {
+                // Use first few characters for search (handles CamelCase like "AcidBubble")
+                var searchPrefix = GetSearchPrefix(creator);
+                
+                var searchParams = new HubSearchParams
+                {
+                    Page = 1,
+                    PerPage = 48,
+                    Search = searchPrefix,
+                    PayType = "Free",
+                    OnlyDownloadable = true
+                };
+                
+                var response = await _hubService.SearchResourcesAsync(searchParams);
+                
+                if (response?.IsSuccess == true && response.Resources != null)
+                {
+                    // Find the creator whose normalized name matches ours
+                    foreach (var resource in response.Resources)
+                    {
+                        if (!string.IsNullOrEmpty(resource.Creator))
+                        {
+                            var resourceNormalized = resource.Creator.Replace(" ", "").ToLowerInvariant();
+                            if (resourceNormalized == normalized)
+                            {
+                                // Found it! Cache and return
+                                _creatorNameMap[normalized] = resource.Creator;
+                                Debug.WriteLine($"[HubBrowser] Resolved '{creator}' -> '{resource.Creator}'");
+                                return resource.Creator;
+                            }
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[HubBrowser] Error resolving creator name: {ex.Message}");
+            }
+            
+            // Fallback to original name
+            return creator;
+        }
+        
+        /// <summary>
+        /// Get a search prefix from a creator name (first word or first few chars)
+        /// "AcidBubble" -> "Acid", "MacGruber" -> "MacG"
+        /// </summary>
+        private string GetSearchPrefix(string creator)
+        {
+            if (string.IsNullOrEmpty(creator)) return "";
+            
+            // Try to split on CamelCase boundaries
+            var result = new StringBuilder();
+            bool foundUpper = false;
+            
+            foreach (char c in creator)
+            {
+                if (result.Length > 0 && char.IsUpper(c))
+                {
+                    // Found second capital letter, we have first word
+                    foundUpper = true;
+                    break;
+                }
+                result.Append(c);
+            }
+            
+            // If we found a CamelCase split and have at least 3 chars, use it
+            if (foundUpper && result.Length >= 3)
+            {
+                return result.ToString();
+            }
+            
+            // Otherwise use first 4 characters minimum
+            return creator.Substring(0, Math.Min(4, creator.Length));
+        }
+        
+        private void CreatorFilterToggle_Checked(object sender, RoutedEventArgs e)
+        {
+            // Clear search and show all when opening
+            CreatorSearchBox.Text = "";
+            FilterCreatorList("");
+            
+            // Focus the search box
+            Dispatcher.BeginInvoke(new Action(() => 
+            {
+                CreatorSearchBox.Focus();
+            }), System.Windows.Threading.DispatcherPriority.Input);
+        }
+        
+        private void CreatorFilterToggle_Unchecked(object sender, RoutedEventArgs e)
+        {
+            // Nothing special needed when closing
+        }
+        
+        private void CreatorSearchBox_TextChanged(object sender, TextChangedEventArgs e)
+        {
+            var searchText = CreatorSearchBox.Text?.Trim() ?? "";
+            FilterCreatorList(searchText);
+            
+            // Update placeholder visibility
+            CreatorSearchPlaceholder.Visibility = string.IsNullOrEmpty(CreatorSearchBox.Text) 
+                ? Visibility.Visible 
+                : Visibility.Collapsed;
+        }
+        
+        private void FilterCreatorList(string searchText)
+        {
+            if (_isCreatorFilterUpdating) return;
+            
+            _isCreatorFilterUpdating = true;
+            try
+            {
+                IEnumerable<string> filtered;
+                
+                if (string.IsNullOrEmpty(searchText))
+                {
+                    filtered = _allCreators;
+                }
+                else
+                {
+                    filtered = _allCreators.Where(c => 
+                        c.IndexOf(searchText, StringComparison.OrdinalIgnoreCase) >= 0);
+                }
+                
+                // Limit to 100 items for performance
+                var items = filtered.Take(100).ToList();
+                
+                CreatorListBox.ItemsSource = items;
+                
+                // Update count
+                var totalMatching = filtered.Count();
+                CreatorCountText.Text = totalMatching > 100 
+                    ? $"Showing 100 of {totalMatching} creators" 
+                    : $"{totalMatching} creators";
+            }
+            finally
+            {
+                _isCreatorFilterUpdating = false;
+            }
+        }
+        
+        private async void CreatorListBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (!IsLoaded || _isCreatorFilterUpdating) return;
+            
+            var selected = CreatorListBox.SelectedItem?.ToString();
+            if (string.IsNullOrEmpty(selected)) return;
+            
+            // Close the popup
+            CreatorFilterToggle.IsChecked = false;
+            
+            // Resolve the Hub API name (handles "AcidBubble" -> "Acid Bubbles" mapping)
+            var resolvedName = await ResolveCreatorNameAsync(selected);
+            _selectedCreator = resolvedName;
+            
+            // Update UI with resolved name
+            UpdateCreatorFilterUI();
+            
+            _currentPage = 1;
+            await SearchAsync();
+        }
+        
+        private async void ClearCreatorFilter_Click(object sender, RoutedEventArgs e)
+        {
+            e.Handled = true; // Prevent toggle from opening
+            
+            _selectedCreator = "All";
+            UpdateCreatorFilterUI();
+            
+            _currentPage = 1;
+            await SearchAsync();
+        }
+        
+        private void UpdateCreatorFilterUI()
+        {
+            // Update the displayed text
+            SelectedCreatorText.Text = _selectedCreator;
+            
+            // Update clear button visibility
+            ClearCreatorButton.Visibility = _selectedCreator != "All" 
+                ? Visibility.Visible 
+                : Visibility.Collapsed;
+        }
+        
+        #endregion
 
         private async void RefreshButton_Click(object sender, RoutedEventArgs e)
         {
             await _hubService.LoadPackagesJsonAsync(forceRefresh: true);
+            LoadCreatorListFromPackages();
             await SearchAsync();
         }
 
@@ -470,8 +1014,24 @@ namespace VPM.Windows
                 {
                     _currentDetail = detail;
                     _currentResource = resource;  // Store the resource for later updates
+                    _currentResourceId = resource.ResourceId;  // Store for WebView navigation
+                    
                     PopulateDetailPanel(detail);
                     ExpandPanel();
+                    
+                    // Open Overview panel if not already visible, or just navigate to new content
+                    TabOverview.IsChecked = true;
+                    if (_isOverviewPanelVisible)
+                    {
+                        // Just navigate to new resource, keep current width
+                        await NavigateToHubPage("TabOverview");
+                    }
+                    else
+                    {
+                        // First time opening, use default or last width
+                        await ExpandOverviewPanelAsync();
+                    }
+                    
                     StatusText.Text = "Ready";
                 }
             }
@@ -487,7 +1047,7 @@ namespace VPM.Windows
         {
             // Set basic info
             DetailTitle.Text = detail.Title ?? "";
-            DetailCreator.Text = detail.Creator ?? "";
+            DetailCreator.Text = $"by {detail.Creator ?? "Unknown"}";
             DetailDownloads.Text = $"⬇ {detail.DownloadCount}";
             DetailRating.Text = $"⭐ {detail.RatingAvg:F1}";
             DetailType.Text = detail.Type ?? detail.Category ?? "";
@@ -855,6 +1415,76 @@ namespace VPM.Windows
             {
                 ExpandPanel();
             }
+        }
+        
+        /// <summary>
+        /// Navigate WebView2 to the appropriate Hub page
+        /// </summary>
+        private async Task NavigateToHubPage(string tabName)
+        {
+            if (string.IsNullOrEmpty(_currentResourceId))
+                return;
+            
+            // Initialize WebView2 if needed
+            if (!_webViewInitialized)
+            {
+                WebViewLoadingOverlay.Visibility = Visibility.Visible;
+                await InitializeWebViewAsync();
+                
+                if (!_webViewInitialized)
+                {
+                    ShowWebViewError("WebView2 is not available. Please install the WebView2 Runtime.");
+                    return;
+                }
+            }
+            
+            // Build the URL based on tab
+            string url = tabName switch
+            {
+                "TabOverview" => $"https://hub.virtamate.com/resources/{_currentResourceId}/overview-panel",
+                "TabUpdates" => $"https://hub.virtamate.com/resources/{_currentResourceId}/updates-panel",
+                "TabReviews" => $"https://hub.virtamate.com/resources/{_currentResourceId}/review-panel",
+                "TabDiscussion" => GetDiscussionUrl(),
+                _ => null
+            };
+            
+            if (string.IsNullOrEmpty(url))
+            {
+                ShowWebViewError("Unable to determine page URL");
+                return;
+            }
+            
+            _currentWebViewUrl = url;
+            
+            try
+            {
+                // Hide placeholder, show loading
+                OverviewPlaceholder.Visibility = Visibility.Collapsed;
+                WebViewLoadingOverlay.Visibility = Visibility.Visible;
+                WebViewErrorPanel.Visibility = Visibility.Collapsed;
+                OverviewWebView.CoreWebView2.Navigate(url);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[HubBrowser] Navigation error: {ex.Message}");
+                ShowWebViewError($"Navigation failed: {ex.Message}");
+            }
+        }
+        
+        /// <summary>
+        /// Get the discussion thread URL for the current resource
+        /// </summary>
+        private string GetDiscussionUrl()
+        {
+            // Discussion uses thread ID, not resource ID
+            // For now, use the resource page which has a link to discussion
+            if (!string.IsNullOrEmpty(_currentDetail?.DiscussionThreadId))
+            {
+                return $"https://hub.virtamate.com/threads/{_currentDetail.DiscussionThreadId}/discussion-panel";
+            }
+            
+            // Fallback to resource overview
+            return $"https://hub.virtamate.com/resources/{_currentResourceId}/overview-panel";
         }
 
         private async void DownloadFile_Click(object sender, RoutedEventArgs e)

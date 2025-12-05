@@ -5071,13 +5071,250 @@ namespace VPM
                 }
                 
                 // Open the folder in explorer
-                System.Diagnostics.Process.Start("explorer.exe", $"\"{discardedFolder}\"");
+                var psi = new System.Diagnostics.ProcessStartInfo
+                {
+                    FileName = "explorer.exe",
+                    Arguments = $"\"{discardedFolder}\"",
+                    UseShellExecute = true
+                };
+                System.Diagnostics.Process.Start(psi);
             }
             catch (Exception ex)
             {
                 DarkMessageBox.Show($"Error opening discard location: {ex.Message}", "Error",
                     MessageBoxButton.OK, MessageBoxImage.Error);
                 System.Diagnostics.Debug.WriteLine($"Error opening discard location: {ex}");
+            }
+        }
+        
+        private void PackageContextMenu_Opened(object sender, RoutedEventArgs e)
+        {
+            // Hide dependency graph and open in explorer when more than 1 package is selected
+            // Keep discard location visible for all selections
+            var selectedCount = PackageDataGrid?.SelectedItems?.Count ?? 0;
+            
+            if (sender is ContextMenu contextMenu)
+            {
+                // Get menu items from the context menu's items collection
+                MenuItem showDependencyItem = null;
+                MenuItem openInExplorerItem = null;
+                
+                foreach (var item in contextMenu.Items)
+                {
+                    if (item is MenuItem menuItem)
+                    {
+                        if (menuItem.Header?.ToString() == "📊 Show Dependency Graph")
+                            showDependencyItem = menuItem;
+                        else if (menuItem.Header?.ToString() == "📁 Open in Explorer")
+                            openInExplorerItem = menuItem;
+                    }
+                }
+                
+                if (showDependencyItem != null)
+                    showDependencyItem.Visibility = selectedCount == 1 ? System.Windows.Visibility.Visible : System.Windows.Visibility.Collapsed;
+                
+                if (openInExplorerItem != null)
+                    openInExplorerItem.Visibility = selectedCount == 1 ? System.Windows.Visibility.Visible : System.Windows.Visibility.Collapsed;
+            }
+        }
+        
+        private void DependenciesContextMenu_Opened(object sender, RoutedEventArgs e)
+        {
+            // Hide dependency graph and open in explorer when more than 1 dependency is selected
+            // Keep discard location visible for all selections
+            var selectedCount = DependenciesDataGrid?.SelectedItems?.Count ?? 0;
+            
+            if (sender is ContextMenu contextMenu)
+            {
+                // Get menu items from the context menu's items collection
+                MenuItem showDependencyItem = null;
+                MenuItem openInExplorerItem = null;
+                
+                foreach (var item in contextMenu.Items)
+                {
+                    if (item is MenuItem menuItem)
+                    {
+                        if (menuItem.Header?.ToString() == "📊 Show Dependency Graph")
+                            showDependencyItem = menuItem;
+                        else if (menuItem.Header?.ToString() == "📁 Open in Explorer")
+                            openInExplorerItem = menuItem;
+                    }
+                }
+                
+                if (showDependencyItem != null)
+                    showDependencyItem.Visibility = selectedCount == 1 ? System.Windows.Visibility.Visible : System.Windows.Visibility.Collapsed;
+                
+                if (openInExplorerItem != null)
+                    openInExplorerItem.Visibility = selectedCount == 1 ? System.Windows.Visibility.Visible : System.Windows.Visibility.Collapsed;
+            }
+        }
+        
+        private void ShowDependencyGraphDeps_Click(object sender, RoutedEventArgs e)
+        {
+            var selectedDeps = DependenciesDataGrid?.SelectedItems?.Cast<DependencyItem>().ToList();
+            if (selectedDeps == null || selectedDeps.Count == 0)
+                return;
+            
+            // Only handle single selection
+            if (selectedDeps.Count != 1)
+            {
+                DarkMessageBox.Show("Please select only one dependency to view its dependency graph.", "Multiple Selection",
+                    MessageBoxButton.OK, MessageBoxImage.Information);
+                return;
+            }
+            
+            var depItem = selectedDeps[0];
+            
+            // Strip .latest if present
+            string depName = depItem.Name;
+            if (depName.EndsWith(".latest", StringComparison.OrdinalIgnoreCase))
+            {
+                depName = depName.Substring(0, depName.Length - 7);
+            }
+            
+            // Find the package metadata by searching for matching base name with version
+            VarMetadata metadata = null;
+            
+            // Search for keys that start with depName followed by a dot (for version)
+            var matchingKeys = _packageManager?.PackageMetadata?.Keys
+                .Where(k => k.StartsWith(depName + ".", StringComparison.OrdinalIgnoreCase))
+                .ToList() ?? new List<string>();
+            
+            if (matchingKeys.Count > 0)
+            {
+                // Get the first matching key
+                var key = matchingKeys.FirstOrDefault();
+                if (key != null && _packageManager.PackageMetadata.TryGetValue(key, out metadata))
+                {
+                    // Found it
+                }
+            }
+            
+            if (metadata != null)
+            {
+                var graphWindow = new Windows.DependencyGraphWindow(_packageManager, _packageFileManager, _imageManager, metadata)
+                {
+                    Owner = this
+                };
+                graphWindow.Show();
+            }
+        }
+        
+        private void OpenInExplorerDeps_Click(object sender, RoutedEventArgs e)
+        {
+            var selectedDeps = DependenciesDataGrid?.SelectedItems?.Cast<DependencyItem>().ToList();
+            if (selectedDeps == null || selectedDeps.Count == 0)
+                return;
+            
+            // Only handle single selection
+            if (selectedDeps.Count != 1)
+            {
+                DarkMessageBox.Show("Please select only one dependency to open in Explorer.", "Multiple Selection",
+                    MessageBoxButton.OK, MessageBoxImage.Information);
+                return;
+            }
+            
+            var depItem = selectedDeps[0];
+            
+            // Strip .latest if present
+            string depName = depItem.Name;
+            if (depName.EndsWith(".latest", StringComparison.OrdinalIgnoreCase))
+            {
+                depName = depName.Substring(0, depName.Length - 7);
+            }
+            
+            // Find the package metadata by searching for matching base name with version
+            VarMetadata metadata = null;
+            
+            // Search for keys that start with depName followed by a dot (for version)
+            var matchingKeys = _packageManager?.PackageMetadata?.Keys
+                .Where(k => k.StartsWith(depName + ".", StringComparison.OrdinalIgnoreCase))
+                .ToList() ?? new List<string>();
+            
+            if (matchingKeys.Count > 0)
+            {
+                // Get the first matching key
+                var key = matchingKeys.FirstOrDefault();
+                if (key != null && _packageManager.PackageMetadata.TryGetValue(key, out metadata))
+                {
+                    // Found it
+                }
+            }
+            
+            if (metadata != null && !string.IsNullOrEmpty(metadata.FilePath))
+            {
+                string folderPath = Path.GetDirectoryName(metadata.FilePath);
+                if (!string.IsNullOrEmpty(folderPath) && Directory.Exists(folderPath))
+                {
+                    System.Diagnostics.Process.Start("explorer.exe", $"/select, \"{metadata.FilePath}\"");
+                }
+            }
+        }
+        
+        private void CopyPackageNameDeps_Click(object sender, RoutedEventArgs e)
+        {
+            var selectedDeps = DependenciesDataGrid?.SelectedItems?.Cast<DependencyItem>().ToList();
+            if (selectedDeps == null || selectedDeps.Count == 0)
+                return;
+            
+            var names = new List<string>();
+            
+            foreach (var depItem in selectedDeps)
+            {
+                // Strip .latest if present
+                string depName = depItem.Name;
+                if (depName.EndsWith(".latest", StringComparison.OrdinalIgnoreCase))
+                {
+                    depName = depName.Substring(0, depName.Length - 7);
+                }
+                
+                // Find the package metadata to get the version
+                VarMetadata metadata = null;
+                
+                // Search for keys that start with depName followed by a dot (for version)
+                var matchingKeys = _packageManager?.PackageMetadata?.Keys
+                    .Where(k => k.StartsWith(depName + ".", StringComparison.OrdinalIgnoreCase))
+                    .ToList() ?? new List<string>();
+                
+                if (matchingKeys.Count > 0)
+                {
+                    // Get the first matching key
+                    var key = matchingKeys.FirstOrDefault();
+                    if (key != null && _packageManager.PackageMetadata.TryGetValue(key, out metadata))
+                    {
+                        // Found it - use the metadata to get the version
+                        if (metadata != null && metadata.Version > 0)
+                        {
+                            names.Add($"{depName}.{metadata.Version}");
+                        }
+                        else
+                        {
+                            // Fallback if version is not available
+                            names.Add(depName);
+                        }
+                    }
+                    else
+                    {
+                        // Couldn't get metadata, use base name
+                        names.Add(depName);
+                    }
+                }
+                else
+                {
+                    // No matching metadata found, use base name
+                    names.Add(depName);
+                }
+            }
+            
+            var text = string.Join(Environment.NewLine, names);
+            
+            try
+            {
+                Clipboard.SetText(text);
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Failed to copy to clipboard: {ex.Message}");
             }
         }
         
@@ -5136,9 +5373,30 @@ namespace VPM
                                 // Continue even if handle release fails
                             }
                             
-                            // Move the file
-                            File.Move(sceneItem.FilePath, destinationPath, overwrite: false);
-                            successCount++;
+                            // Move the file with retry logic for file lock issues
+                            int moveRetries = 3;
+                            bool fileMoved = false;
+                            while (moveRetries > 0 && !fileMoved)
+                            {
+                                try
+                                {
+                                    File.Move(sceneItem.FilePath, destinationPath, overwrite: false);
+                                    fileMoved = true;
+                                    successCount++;
+                                }
+                                catch (IOException) when (moveRetries > 1)
+                                {
+                                    moveRetries--;
+                                    System.Diagnostics.Debug.WriteLine($"File lock still active for scene {sceneItem.DisplayName}, retrying... ({moveRetries} retries left)");
+                                    await Task.Delay(300); // Wait longer before retry
+                                }
+                            }
+                            
+                            if (!fileMoved)
+                            {
+                                failureCount++;
+                                failedScenes.Add(sceneItem.DisplayName);
+                            }
                         }
                         else
                         {
@@ -5237,9 +5495,30 @@ namespace VPM
                                 // Continue even if handle release fails
                             }
                             
-                            // Move the file
-                            File.Move(customAtomItem.FilePath, destinationPath, overwrite: false);
-                            successCount++;
+                            // Move the file with retry logic for file lock issues
+                            int moveRetries = 3;
+                            bool fileMoved = false;
+                            while (moveRetries > 0 && !fileMoved)
+                            {
+                                try
+                                {
+                                    File.Move(customAtomItem.FilePath, destinationPath, overwrite: false);
+                                    fileMoved = true;
+                                    successCount++;
+                                }
+                                catch (IOException) when (moveRetries > 1)
+                                {
+                                    moveRetries--;
+                                    System.Diagnostics.Debug.WriteLine($"File lock still active for custom atom {customAtomItem.DisplayName}, retrying... ({moveRetries} retries left)");
+                                    await Task.Delay(300); // Wait longer before retry
+                                }
+                            }
+                            
+                            if (!fileMoved)
+                            {
+                                failureCount++;
+                                failedCustomAtoms.Add(customAtomItem.DisplayName);
+                            }
                         }
                         else
                         {
@@ -5287,7 +5566,11 @@ namespace VPM
         {
             var selectedDependencies = DependenciesDataGrid?.SelectedItems?.Cast<DependencyItem>().ToList();
             if (selectedDependencies == null || selectedDependencies.Count == 0)
+            {
+                DarkMessageBox.Show("No dependencies selected.", "No Selection",
+                    MessageBoxButton.OK, MessageBoxImage.Information);
                 return;
+            }
             
             try
             {
@@ -5306,53 +5589,114 @@ namespace VPM
                 int successCount = 0;
                 int failureCount = 0;
                 var failedDependencies = new List<string>();
+                var processedDependencies = new HashSet<DependencyItem>();
                 
                 foreach (var depItem in selectedDependencies)
                 {
                     try
                     {
-                        // Get package metadata to find the file path
-                        if (_packageManager?.PackageMetadata?.TryGetValue(depItem.Name, out var metadata) == true)
+                        // Strip .latest if present
+                        string depName = depItem.Name;
+                        if (depName.EndsWith(".latest", StringComparison.OrdinalIgnoreCase))
                         {
-                            if (metadata != null && !string.IsNullOrEmpty(metadata.FilePath) && File.Exists(metadata.FilePath))
+                            depName = depName.Substring(0, depName.Length - 7);
+                        }
+                        
+                        // Find the package metadata by searching for matching base name with version
+                        // Keys are in format: "creator.package.version" or "creator.package.version#available" or "creator.package.version#archived"
+                        VarMetadata metadata = null;
+                        
+                        // Search for keys that start with depName followed by a dot (for version)
+                        var matchingKeys = _packageManager?.PackageMetadata?.Keys
+                            .Where(k => k.StartsWith(depName + ".", StringComparison.OrdinalIgnoreCase))
+                            .ToList() ?? new List<string>();
+                        
+                        if (matchingKeys.Count > 0)
+                        {
+                            // Get the first matching key (they should all be the same package, just different versions/variants)
+                            var key = matchingKeys.FirstOrDefault();
+                            if (key != null && _packageManager.PackageMetadata.TryGetValue(key, out metadata))
                             {
-                                string fileName = Path.GetFileName(metadata.FilePath);
-                                string destinationPath = Path.Combine(discardedFolder, fileName);
-                                
-                                // Handle file name conflicts by appending a number
-                                int counter = 1;
-                                string baseFileName = Path.GetFileNameWithoutExtension(fileName);
-                                string extension = Path.GetExtension(fileName);
-                                while (File.Exists(destinationPath))
+                                // Found it
+                            }
+                        }
+                        
+                        System.Diagnostics.Debug.WriteLine($"Discard dependency: depName={depName}, found metadata={metadata != null}, filePath={metadata?.FilePath}, exists={metadata != null && File.Exists(metadata.FilePath)}");
+                        
+                        if (metadata != null && !string.IsNullOrEmpty(metadata.FilePath) && File.Exists(metadata.FilePath))
+                        {
+                            string fileName = Path.GetFileName(metadata.FilePath);
+                            string destinationPath = Path.Combine(discardedFolder, fileName);
+                            
+                            // Handle file name conflicts by appending a number
+                            int counter = 1;
+                            string baseFileName = Path.GetFileNameWithoutExtension(fileName);
+                            string extension = Path.GetExtension(fileName);
+                            while (File.Exists(destinationPath))
+                            {
+                                destinationPath = Path.Combine(discardedFolder, $"{baseFileName}_{counter}{extension}");
+                                counter++;
+                            }
+                            
+                            // Release file handles and cancel preview loading before moving
+                            try
+                            {
+                                if (_imageManager != null)
                                 {
-                                    destinationPath = Path.Combine(discardedFolder, $"{baseFileName}_{counter}{extension}");
-                                    counter++;
+                                    // Cancel all pending preview operations and release file locks for this file
+                                    await _imageManager.CloseFileHandlesAsync(metadata.FilePath);
+                                    await Task.Delay(100); // Brief delay to ensure handles are fully released
                                 }
-                                
-                                // Release file handles before moving
+                            }
+                            catch (Exception ex)
+                            {
+                                System.Diagnostics.Debug.WriteLine($"Error releasing file locks: {ex.Message}");
+                                // Continue even if handle release fails
+                            }
+                            
+                            // Move the file with retry logic for file lock issues
+                            int moveRetries = 3;
+                            bool fileMoved = false;
+                            while (moveRetries > 0 && !fileMoved)
+                            {
                                 try
                                 {
-                                    if (_imageManager != null)
-                                        await _imageManager.CloseFileHandlesAsync(metadata.FilePath);
-                                    await Task.Delay(100); // Brief delay to ensure handles are released
+                                    File.Move(metadata.FilePath, destinationPath, overwrite: false);
+                                    fileMoved = true;
+                                    System.Diagnostics.Debug.WriteLine($"Successfully discarded: {depItem.Name}");
+                                    successCount++;
+                                    processedDependencies.Add(depItem);
                                 }
-                                catch (Exception)
+                                catch (IOException) when (moveRetries > 1)
                                 {
-                                    // Continue even if handle release fails
+                                    moveRetries--;
+                                    System.Diagnostics.Debug.WriteLine($"File lock still active for {depItem.Name}, retrying... ({moveRetries} retries left)");
+                                    await Task.Delay(300); // Wait longer before retry
                                 }
-                                
-                                // Move the file
-                                File.Move(metadata.FilePath, destinationPath, overwrite: false);
-                                successCount++;
                             }
-                            else
+                            
+                            if (!fileMoved)
                             {
                                 failureCount++;
                                 failedDependencies.Add(depItem.Name);
                             }
                         }
+                        else if (metadata == null)
+                        {
+                            // Ignore missing dependencies - they're not installed
+                            System.Diagnostics.Debug.WriteLine($"Dependency not found (missing), will be removed from UI: {depItem.Name}");
+                            processedDependencies.Add(depItem);
+                        }
+                        else if (string.IsNullOrEmpty(metadata.FilePath))
+                        {
+                            // Metadata exists but no file path
+                            System.Diagnostics.Debug.WriteLine($"Metadata found but no file path: {depItem.Name}");
+                            processedDependencies.Add(depItem);
+                        }
                         else
                         {
+                            // File doesn't exist or metadata is invalid
+                            System.Diagnostics.Debug.WriteLine($"File not found on disk: {depItem.Name}, path={metadata.FilePath}");
                             failureCount++;
                             failedDependencies.Add(depItem.Name);
                         }
@@ -5365,26 +5709,23 @@ namespace VPM
                     }
                 }
                 
-                // Remove successfully discarded dependencies from the UI
-                if (successCount > 0)
+                // Remove processed dependencies from the UI (both successfully discarded and missing ones)
+                if (processedDependencies.Count > 0)
                 {
-                    var depsToRemove = selectedDependencies.Where(d => 
-                    {
-                        if (_packageManager?.PackageMetadata?.TryGetValue(d.Name, out var metadata) == true)
-                        {
-                            return metadata != null && !string.IsNullOrEmpty(metadata.FilePath) && !File.Exists(metadata.FilePath);
-                        }
-                        return false;
-                    }).ToList();
-                    
-                    foreach (var dep in depsToRemove)
+                    foreach (var dep in processedDependencies)
                     {
                         Dependencies.Remove(dep);
                     }
                 }
                 
-                // Show error message only if there were failures
-                if (failureCount > 0)
+                // Show feedback based on results
+                if (successCount == 0 && failureCount == 0)
+                {
+                    // All selected dependencies were missing (not installed)
+                    DarkMessageBox.Show("All selected dependencies are missing (not installed). Nothing to discard.",
+                        "No Packages Found", MessageBoxButton.OK, MessageBoxImage.Information);
+                }
+                else if (failureCount > 0)
                 {
                     DarkMessageBox.Show($"Failed to discard {failureCount} package(s):\n\n{string.Join("\n", failedDependencies)}",
                         "Discard Error", MessageBoxButton.OK, MessageBoxImage.Error);
@@ -5456,9 +5797,30 @@ namespace VPM
                                     // Continue even if handle release fails
                                 }
                                 
-                                // Move the file
-                                File.Move(metadata.FilePath, destinationPath, overwrite: false);
-                                successCount++;
+                                // Move the file with retry logic for file lock issues
+                                int moveRetries = 3;
+                                bool fileMoved = false;
+                                while (moveRetries > 0 && !fileMoved)
+                                {
+                                    try
+                                    {
+                                        File.Move(metadata.FilePath, destinationPath, overwrite: false);
+                                        fileMoved = true;
+                                        successCount++;
+                                    }
+                                    catch (IOException) when (moveRetries > 1)
+                                    {
+                                        moveRetries--;
+                                        System.Diagnostics.Debug.WriteLine($"File lock still active for package {packageItem.DisplayName}, retrying... ({moveRetries} retries left)");
+                                        await Task.Delay(300); // Wait longer before retry
+                                    }
+                                }
+                                
+                                if (!fileMoved)
+                                {
+                                    failureCount++;
+                                    failedPackages.Add(packageItem.DisplayName);
+                                }
                             }
                             else
                             {

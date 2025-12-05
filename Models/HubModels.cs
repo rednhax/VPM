@@ -193,7 +193,7 @@ namespace VPM.Models
         public string Category { get; set; } = "All";  // "All", "Scenes", "Looks", "Assets", etc.
         public string Creator { get; set; } = "All";
         public string Tags { get; set; } = "All";
-        public string Sort { get; set; } = "Latest Update";
+        public string Sort { get; set; } = "Last Update";
         public bool OnlyDownloadable { get; set; } = true;
     }
 

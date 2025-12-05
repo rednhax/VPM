@@ -486,4 +486,26 @@ namespace VPM
             return new object[targetTypes.Length];
         }
     }
+
+    /// <summary>
+    /// Converts a collection count to visibility - shows only if count equals 1
+    /// </summary>
+    public class SingleSelectionVisibilityConverter : IValueConverter
+    {
+        public static readonly SingleSelectionVisibilityConverter Instance = new SingleSelectionVisibilityConverter();
+
+        public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
+        {
+            if (value is ICollection collection)
+            {
+                return collection.Count == 1 ? Visibility.Visible : Visibility.Collapsed;
+            }
+            return Visibility.Collapsed;
+        }
+
+        public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
+        {
+            return null;
+        }
+    }
 }

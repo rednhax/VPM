@@ -2411,7 +2411,7 @@
                             VirtualizingPanel.VirtualizationMode="Recycling">
 
                             <DataGrid.ContextMenu>
-                                <ContextMenu>
+                                <ContextMenu Opened="PackageContextMenu_Opened">
                                     <MenuItem Click="ShowDependencyGraph_Click" Header="📊 Show Dependency Graph" />
                                     <MenuItem Click="OpenInExplorer_Click" Header="📁 Open in Explorer" />
                                     <MenuItem Click="CopyPackageName_Click" Header="📋 Copy Package Name" />
@@ -3883,7 +3883,11 @@
                                 VirtualizingPanel.ScrollUnit="Item"
                                 VirtualizingPanel.VirtualizationMode="Recycling">
                                 <DataGrid.ContextMenu>
-                                    <ContextMenu>
+                                    <ContextMenu Opened="DependenciesContextMenu_Opened">
+                                        <MenuItem Click="ShowDependencyGraphDeps_Click" Header="📊 Show Dependency Graph" />
+                                        <MenuItem Click="OpenInExplorerDeps_Click" Header="📁 Open in Explorer" />
+                                        <MenuItem Click="CopyPackageNameDeps_Click" Header="📋 Copy Package Name" />
+                                        <Separator />
                                         <MenuItem Click="DiscardSelectedDependencies_Click" Header="🗑️ Discard Selected" />
                                         <MenuItem Click="OpenDiscardLocation_Click" Header="📂 Open Discard Location" />
                                     </ContextMenu>

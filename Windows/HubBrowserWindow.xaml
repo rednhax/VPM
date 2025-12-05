@@ -4,9 +4,10 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    xmlns:wv2="clr-namespace:Microsoft.Web.WebView2.Wpf;assembly=Microsoft.Web.WebView2.Wpf"
     Title="VPM - Hub Browser"
-    Width="1200"
-    Height="800"
+    Width="1400"
+    Height="900"
     Background="#FF202020"
     WindowStartupLocation="CenterOwner"
     mc:Ignorable="d">
@@ -194,16 +195,224 @@
             <Setter Property="Foreground" Value="#FF4A90D9" />
             <Setter Property="BorderBrush" Value="{StaticResource DarkBorder}" />
         </Style>
+        
+        <!-- Detail Tab Style for navigation tabs -->
+        <Style x:Key="DetailTabStyle" TargetType="RadioButton">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="Foreground" Value="{StaticResource DarkTextSecondary}" />
+            <Setter Property="BorderBrush" Value="Transparent" />
+            <Setter Property="Padding" Value="12,8" />
+            <Setter Property="Margin" Value="0,0,4,0" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="RadioButton">
+                        <Border
+                            x:Name="border"
+                            Background="{TemplateBinding Background}"
+                            BorderBrush="{TemplateBinding BorderBrush}"
+                            BorderThickness="0,0,0,2"
+                            Padding="{TemplateBinding Padding}"
+                            CornerRadius="4,4,0,0">
+                            <ContentPresenter
+                                HorizontalAlignment="Center"
+                                VerticalAlignment="Center"
+                                TextBlock.Foreground="{TemplateBinding Foreground}" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter Property="Background" Value="#353535" />
+                                <Setter Property="Foreground" Value="{StaticResource DarkText}" />
+                            </Trigger>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter Property="Background" Value="#404040" />
+                                <Setter Property="Foreground" Value="{StaticResource DarkText}" />
+                                <Setter TargetName="border" Property="BorderBrush" Value="#4A90D9" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
     </Window.Resources>
 
     <Grid>
         <Grid.ColumnDefinitions>
+            <!-- Overview Panel (Left) -->
+            <ColumnDefinition x:Name="OverviewPanelColumn" Width="0" MinWidth="0" />
+            <!-- Splitter -->
+            <ColumnDefinition Width="Auto" />
+            <!-- Main Content + Detail Panel -->
             <ColumnDefinition Width="*" />
-            <ColumnDefinition x:Name="DetailPanelColumn" Width="0" />
         </Grid.ColumnDefinitions>
         
-        <!-- Main Content Area -->
-        <Grid Grid.Column="0" Margin="8">
+        <!-- Overview Panel (Left Side - WebView2) -->
+        <Grid x:Name="OverviewPanel" Grid.Column="0" Background="#1A1A1A">
+            <!-- Toggle Tab Button - positioned on right edge -->
+            <Button
+                x:Name="ToggleOverviewPanelButton"
+                Width="20"
+                Height="60"
+                Margin="0,0,-10,0"
+                Padding="0"
+                HorizontalAlignment="Right"
+                VerticalAlignment="Center"
+                Background="#404040"
+                BorderBrush="{StaticResource DarkBorder}"
+                BorderThickness="0,1,1,1"
+                Click="ToggleOverviewPanel_Click"
+                Content="◀"
+                FontSize="10"
+                ToolTip="Hide overview panel"
+                Panel.ZIndex="100">
+                <Button.Resources>
+                    <Style TargetType="Border">
+                        <Setter Property="CornerRadius" Value="0,4,4,0" />
+                    </Style>
+                </Button.Resources>
+            </Button>
+            
+            <Grid Margin="0,0,12,0">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="*" />
+                </Grid.RowDefinitions>
+                
+                <!-- Overview Header -->
+                <Border Grid.Row="0" Background="#252525" BorderBrush="{StaticResource DarkBorder}" BorderThickness="0,0,0,1" Padding="8">
+                    <!-- Tab Navigation -->
+                    <StackPanel Orientation="Horizontal">
+                        <RadioButton
+                            x:Name="TabOverview"
+                            Content="📄 Overview"
+                            GroupName="OverviewTabs"
+                            IsChecked="True"
+                            Click="OverviewTab_Click"
+                            Style="{StaticResource DetailTabStyle}" />
+                        <RadioButton
+                            x:Name="TabUpdates"
+                            Content="🔄 Updates"
+                            GroupName="OverviewTabs"
+                            Click="OverviewTab_Click"
+                            Style="{StaticResource DetailTabStyle}" />
+                        <RadioButton
+                            x:Name="TabReviews"
+                            Content="⭐ Reviews"
+                            GroupName="OverviewTabs"
+                            Click="OverviewTab_Click"
+                            Style="{StaticResource DetailTabStyle}" />
+                        <RadioButton
+                            x:Name="TabDiscussion"
+                            Content="💬 Discussion"
+                            GroupName="OverviewTabs"
+                            Click="OverviewTab_Click"
+                            Style="{StaticResource DetailTabStyle}" />
+                    </StackPanel>
+                </Border>
+            
+            <!-- WebView2 Content -->
+            <Grid Grid.Row="1">
+                <!-- Loading Overlay -->
+                <Border
+                    x:Name="WebViewLoadingOverlay"
+                    Background="#CC1E1E1E"
+                    Panel.ZIndex="10"
+                    Visibility="Collapsed">
+                    <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
+                        <TextBlock
+                            HorizontalAlignment="Center"
+                            FontSize="14"
+                            Foreground="{StaticResource DarkText}"
+                            Text="Loading..." />
+                        <ProgressBar
+                            Width="200"
+                            Height="4"
+                            Margin="0,12,0,0"
+                            IsIndeterminate="True"
+                            Background="#333333"
+                            Foreground="#4A90D9" />
+                    </StackPanel>
+                </Border>
+                
+                <!-- WebView2 Browser -->
+                <wv2:WebView2
+                    x:Name="OverviewWebView"
+                    DefaultBackgroundColor="#1E1E1E" />
+                
+                <!-- Placeholder when no resource selected -->
+                <Border
+                    x:Name="OverviewPlaceholder"
+                    Background="{StaticResource DarkCardBackground}"
+                    Visibility="Visible">
+                    <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Margin="20">
+                        <TextBlock
+                            HorizontalAlignment="Center"
+                            FontSize="48"
+                            Foreground="{StaticResource DarkTextSecondary}"
+                            Text="📄" />
+                        <TextBlock
+                            Margin="0,12,0,0"
+                            HorizontalAlignment="Center"
+                            FontSize="14"
+                            Foreground="{StaticResource DarkTextSecondary}"
+                            Text="Select a resource to view its overview"
+                            TextWrapping="Wrap"
+                            TextAlignment="Center" />
+                    </StackPanel>
+                </Border>
+                
+                <!-- Error Panel -->
+                <Border
+                    x:Name="WebViewErrorPanel"
+                    Background="{StaticResource DarkCardBackground}"
+                    Visibility="Collapsed">
+                    <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Margin="20">
+                        <TextBlock
+                            HorizontalAlignment="Center"
+                            FontSize="48"
+                            Foreground="{StaticResource DarkTextSecondary}"
+                            Text="🌐" />
+                        <TextBlock
+                            x:Name="WebViewErrorText"
+                            Margin="0,12,0,0"
+                            HorizontalAlignment="Center"
+                            FontSize="14"
+                            Foreground="{StaticResource DarkText}"
+                            Text="Unable to load content"
+                            TextWrapping="Wrap"
+                            TextAlignment="Center" />
+                        <Button
+                            x:Name="OpenInBrowserButton"
+                            Margin="0,16,0,0"
+                            Padding="16,8"
+                            Click="OpenInBrowser_Click"
+                            Content="🔗 Open in Browser" />
+                    </StackPanel>
+                </Border>
+            </Grid>
+            </Grid>
+        </Grid>
+        
+        <!-- Resizable Splitter -->
+        <GridSplitter
+            x:Name="OverviewSplitter"
+            Grid.Column="1"
+            Width="5"
+            HorizontalAlignment="Center"
+            VerticalAlignment="Stretch"
+            Background="#3F3F3F"
+            Visibility="Collapsed"
+            Cursor="SizeWE" />
+        
+        <!-- Main Content + Detail Panel Area -->
+        <Grid Grid.Column="2">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition x:Name="DetailPanelColumn" Width="0" />
+            </Grid.ColumnDefinitions>
+            
+            <!-- Main Content Area -->
+            <Grid Grid.Column="0" Margin="8">
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="Auto" />
@@ -257,7 +466,7 @@
             </Grid.ColumnDefinitions>
 
             <!-- Category Filter -->
-            <StackPanel Grid.Column="0" Margin="0,0,16,0" Orientation="Horizontal">
+            <StackPanel Grid.Column="0" Margin="0,0,12,0" Orientation="Horizontal">
                 <TextBlock
                     Margin="0,0,4,0"
                     VerticalAlignment="Center"
@@ -265,7 +474,7 @@
                     Text="Category:" />
                 <ComboBox
                     x:Name="CategoryFilter"
-                    Width="120"
+                    Width="110"
                     SelectionChanged="Filter_SelectionChanged">
                     <ComboBoxItem Content="All" IsSelected="True" />
                     <ComboBoxItem Content="Scenes" />
@@ -280,8 +489,195 @@
                 </ComboBox>
             </StackPanel>
 
+            <!-- Creator Filter with Searchable Popup -->
+            <StackPanel Grid.Column="1" Margin="0,0,12,0" Orientation="Horizontal">
+                <TextBlock
+                    Margin="0,0,4,0"
+                    VerticalAlignment="Center"
+                    Foreground="{StaticResource DarkText}"
+                    Text="Creator:" />
+                <Grid>
+                    <!-- Creator filter button with overlaid content -->
+                    <Border
+                        x:Name="CreatorFilterBorder"
+                        Width="160"
+                        Height="26"
+                        Background="{StaticResource DarkControlBackground}"
+                        BorderBrush="{StaticResource DarkBorder}"
+                        BorderThickness="1"
+                        CornerRadius="3">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="20" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock
+                                x:Name="SelectedCreatorText"
+                                Grid.Column="0"
+                                Margin="6,0,0,0"
+                                VerticalAlignment="Center"
+                                Foreground="{StaticResource DarkText}"
+                                Text="All"
+                                TextTrimming="CharacterEllipsis" />
+                            <Path
+                                Grid.Column="1"
+                                HorizontalAlignment="Center"
+                                VerticalAlignment="Center"
+                                Data="M 0 0 L 4 4 L 8 0 Z"
+                                Fill="{StaticResource DarkText}" />
+                        </Grid>
+                    </Border>
+                    
+                    <!-- Invisible toggle button overlay -->
+                    <ToggleButton
+                        x:Name="CreatorFilterToggle"
+                        Width="160"
+                        Height="26"
+                        Opacity="0"
+                        Checked="CreatorFilterToggle_Checked"
+                        Unchecked="CreatorFilterToggle_Unchecked" />
+                    
+                    <!-- Popup with search and list -->
+                    <Popup
+                        x:Name="CreatorFilterPopup"
+                        AllowsTransparency="True"
+                        IsOpen="{Binding IsChecked, ElementName=CreatorFilterToggle}"
+                        Placement="Bottom"
+                        PlacementTarget="{Binding ElementName=CreatorFilterToggle}"
+                        StaysOpen="False"
+                        PopupAnimation="Slide">
+                        <Border
+                            Width="220"
+                            MaxHeight="350"
+                            Background="#FF2B2B2B"
+                            BorderBrush="{StaticResource DarkBorder}"
+                            BorderThickness="1"
+                            CornerRadius="4">
+                            <Grid>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="*" />
+                                    <RowDefinition Height="Auto" />
+                                </Grid.RowDefinitions>
+                                
+                                <!-- Search TextBox -->
+                                <Grid Grid.Row="0" Margin="6">
+                                    <TextBox
+                                        x:Name="CreatorSearchBox"
+                                        Height="26"
+                                        Padding="6,4,24,4"
+                                        VerticalContentAlignment="Center"
+                                        Background="{StaticResource DarkControlBackground}"
+                                        BorderBrush="{StaticResource DarkBorder}"
+                                        Foreground="{StaticResource DarkText}"
+                                        CaretBrush="{StaticResource DarkText}"
+                                        TextChanged="CreatorSearchBox_TextChanged" />
+                                    <TextBlock
+                                        x:Name="CreatorSearchPlaceholder"
+                                        Margin="8,0,0,0"
+                                        VerticalAlignment="Center"
+                                        Foreground="{StaticResource DarkTextSecondary}"
+                                        IsHitTestVisible="False"
+                                        Text="🔍 Search creators..."
+                                        Visibility="{Binding Text.Length, ElementName=CreatorSearchBox, Converter={StaticResource BoolToVis}, ConverterParameter=Inverse}" />
+                                </Grid>
+                                
+                                <!-- Creator List -->
+                                <ListBox
+                                    x:Name="CreatorListBox"
+                                    Grid.Row="1"
+                                    MaxHeight="260"
+                                    Margin="4,0,4,4"
+                                    Background="Transparent"
+                                    BorderThickness="0"
+                                    ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                                    SelectionChanged="CreatorListBox_SelectionChanged">
+                                    <ListBox.ItemContainerStyle>
+                                        <Style TargetType="ListBoxItem">
+                                            <Setter Property="Foreground" Value="{StaticResource DarkText}" />
+                                            <Setter Property="Padding" Value="8,6" />
+                                            <Setter Property="Cursor" Value="Hand" />
+                                            <Setter Property="Template">
+                                                <Setter.Value>
+                                                    <ControlTemplate TargetType="ListBoxItem">
+                                                        <Border
+                                                            x:Name="Bd"
+                                                            Padding="{TemplateBinding Padding}"
+                                                            Background="Transparent"
+                                                            CornerRadius="3">
+                                                            <ContentPresenter />
+                                                        </Border>
+                                                        <ControlTemplate.Triggers>
+                                                            <Trigger Property="IsMouseOver" Value="True">
+                                                                <Setter TargetName="Bd" Property="Background" Value="#FF404040" />
+                                                            </Trigger>
+                                                            <Trigger Property="IsSelected" Value="True">
+                                                                <Setter TargetName="Bd" Property="Background" Value="#FF4A90D9" />
+                                                            </Trigger>
+                                                        </ControlTemplate.Triggers>
+                                                    </ControlTemplate>
+                                                </Setter.Value>
+                                            </Setter>
+                                        </Style>
+                                    </ListBox.ItemContainerStyle>
+                                </ListBox>
+                                
+                                <!-- Creator count -->
+                                <TextBlock
+                                    x:Name="CreatorCountText"
+                                    Grid.Row="2"
+                                    Margin="8,4,8,6"
+                                    FontSize="10"
+                                    Foreground="{StaticResource DarkTextSecondary}"
+                                    Text="0 creators" />
+                            </Grid>
+                        </Border>
+                    </Popup>
+                </Grid>
+                
+                <!-- Clear creator button (outside the dropdown) -->
+                <Button
+                    x:Name="ClearCreatorButton"
+                    Width="20"
+                    Height="20"
+                    Margin="4,0,0,0"
+                    Padding="0"
+                    VerticalAlignment="Center"
+                    Background="Transparent"
+                    BorderThickness="0"
+                    Click="ClearCreatorFilter_Click"
+                    Content="✕"
+                    FontSize="11"
+                    Foreground="{StaticResource DarkTextSecondary}"
+                    ToolTip="Clear creator filter"
+                    Visibility="Collapsed">
+                    <Button.Style>
+                        <Style TargetType="Button">
+                            <Setter Property="Template">
+                                <Setter.Value>
+                                    <ControlTemplate TargetType="Button">
+                                        <Border
+                                            x:Name="bd"
+                                            Background="{TemplateBinding Background}"
+                                            CornerRadius="10">
+                                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                        </Border>
+                                        <ControlTemplate.Triggers>
+                                            <Trigger Property="IsMouseOver" Value="True">
+                                                <Setter TargetName="bd" Property="Background" Value="#FF555555" />
+                                                <Setter Property="Foreground" Value="White" />
+                                            </Trigger>
+                                        </ControlTemplate.Triggers>
+                                    </ControlTemplate>
+                                </Setter.Value>
+                            </Setter>
+                        </Style>
+                    </Button.Style>
+                </Button>
+            </StackPanel>
+
             <!-- Pay Type Filter -->
-            <StackPanel Grid.Column="1" Margin="0,0,16,0" Orientation="Horizontal">
+            <StackPanel Grid.Column="2" Margin="0,0,12,0" Orientation="Horizontal">
                 <TextBlock
                     Margin="0,0,4,0"
                     VerticalAlignment="Center"
@@ -289,7 +685,7 @@
                     Text="Type:" />
                 <ComboBox
                     x:Name="PayTypeFilter"
-                    Width="80"
+                    Width="75"
                     SelectionChanged="Filter_SelectionChanged">
                     <ComboBoxItem Content="Free" IsSelected="True" />
                     <ComboBoxItem Content="All" />
@@ -298,7 +694,7 @@
             </StackPanel>
 
             <!-- Sort -->
-            <StackPanel Grid.Column="2" Margin="0,0,16,0" Orientation="Horizontal">
+            <StackPanel Grid.Column="3" Margin="0,0,12,0" Orientation="Horizontal">
                 <TextBlock
                     Margin="0,0,4,0"
                     VerticalAlignment="Center"
@@ -306,26 +702,25 @@
                     Text="Sort:" />
                 <ComboBox
                     x:Name="SortFilter"
-                    Width="130"
+                    Width="140"
                     SelectionChanged="Filter_SelectionChanged">
-                    <ComboBoxItem Content="Latest Update" IsSelected="True" />
-                    <ComboBoxItem Content="Most Downloaded" />
-                    <ComboBoxItem Content="Highest Rated" />
-                    <ComboBoxItem Content="Title" />
+                    <ComboBoxItem Content="Last Update" IsSelected="True" />
+                    <ComboBoxItem Content="Downloads" />
+                    <ComboBoxItem Content="Rating" />
                 </ComboBox>
             </StackPanel>
 
-            <!-- Only Downloadable -->
+            <!-- Only Downloadable (disabled) -->
             <CheckBox
                 x:Name="OnlyDownloadableCheck"
-                Grid.Column="3"
-                Margin="0,0,16,0"
+                Grid.Column="4"
+                Margin="0,0,12,0"
                 VerticalAlignment="Center"
-                Checked="Filter_SelectionChanged"
                 Content="Only Downloadable"
                 Foreground="{StaticResource DarkText}"
-                IsChecked="True"
-                Unchecked="Filter_SelectionChanged" />
+                IsChecked="False"
+                IsEnabled="False"
+                Visibility="Collapsed" />
 
             <!-- Refresh Button -->
             <Button
@@ -368,16 +763,17 @@
                     HorizontalScrollBarVisibility="Disabled"
                     VerticalScrollBarVisibility="Auto"
                     PreviewMouseWheel="ResourcesScrollViewer_PreviewMouseWheel">
-                    <ItemsControl x:Name="ResourcesItemsControl">
+                    <ItemsControl x:Name="ResourcesItemsControl" SizeChanged="ResourcesItemsControl_SizeChanged">
                         <ItemsControl.ItemsPanel>
                             <ItemsPanelTemplate>
-                                <WrapPanel Orientation="Horizontal" />
+                                <UniformGrid x:Name="ResourcesUniformGrid" Columns="4" />
                             </ItemsPanelTemplate>
                         </ItemsControl.ItemsPanel>
                         <ItemsControl.ItemTemplate>
                             <DataTemplate>
                                 <Border
-                                    Width="220"
+                                    MinWidth="180"
+                                    MaxWidth="320"
                                     Margin="4"
                                     Background="{StaticResource DarkControlBackground}"
                                     BorderBrush="{StaticResource DarkBorder}"
@@ -563,7 +959,7 @@
         </Grid>
         </Grid>
         
-        <!-- Detail Side Panel -->
+        <!-- Detail Side Panel (Files Only) -->
         <Grid x:Name="DetailPanel" Grid.Column="1" Background="{StaticResource DarkCardBackground}">
             <!-- Toggle Tab Button - positioned on left edge -->
             <Button
@@ -580,7 +976,8 @@
                 Click="TogglePanel_Click"
                 Content="▶"
                 FontSize="10"
-                ToolTip="Hide details panel">
+                ToolTip="Hide details panel"
+                Panel.ZIndex="100">
                 <Button.Resources>
                     <Style TargetType="Border">
                         <Setter Property="CornerRadius" Value="4,0,0,4" />
@@ -588,14 +985,30 @@
                 </Button.Resources>
             </Button>
             
-            <!-- Detail Content -->
+            <!-- Detail Panel Content -->
             <ScrollViewer
                 Margin="12,0,0,0"
                 HorizontalScrollBarVisibility="Disabled"
                 VerticalScrollBarVisibility="Auto">
                 <StackPanel x:Name="DetailContent" Margin="8,12,12,12">
-                    <!-- Resource Image - full image with frame, constrained height -->
+                    <!-- Resource Header -->
+                    <TextBlock
+                        x:Name="DetailTitle"
+                        FontSize="16"
+                        FontWeight="Bold"
+                        Foreground="{StaticResource DarkText}"
+                        Text=""
+                        TextWrapping="Wrap" />
+                    <TextBlock
+                        x:Name="DetailCreator"
+                        Margin="0,2,0,0"
+                        FontSize="12"
+                        Foreground="{StaticResource DarkTextSecondary}"
+                        Text="" />
+                    
+                    <!-- Resource Image -->
                     <Border
+                        Margin="0,10,0,0"
                         Background="#FF1A1A1A"
                         BorderBrush="#FF4A4A4A"
                         BorderThickness="1"
@@ -605,7 +1018,7 @@
                         VerticalAlignment="Top">
                         <Image
                             x:Name="DetailImage"
-                            MaxHeight="400"
+                            MaxHeight="250"
                             HorizontalAlignment="Center"
                             VerticalAlignment="Top"
                             RenderOptions.BitmapScalingMode="HighQuality"
@@ -613,44 +1026,22 @@
                             StretchDirection="DownOnly" />
                     </Border>
                     
-                    <!-- Resource Title -->
-                    <TextBlock
-                        x:Name="DetailTitle"
-                        Margin="0,10,0,0"
-                        FontSize="16"
-                        FontWeight="Bold"
-                        Foreground="{StaticResource DarkText}"
-                        Text=""
-                        TextWrapping="Wrap" />
-                    
-                    <!-- Creator -->
-                    <TextBlock
-                        x:Name="DetailCreator"
-                        Margin="0,2,0,0"
-                        FontSize="12"
-                        Foreground="{StaticResource DarkTextSecondary}"
-                        Text="" />
-                    
-                    <!-- Stats -->
-                    <StackPanel Margin="0,6,0,0" Orientation="Horizontal">
+                    <!-- Stats Row -->
+                    <StackPanel Margin="0,10,0,0" Orientation="Horizontal" HorizontalAlignment="Center">
                         <TextBlock
                             x:Name="DetailDownloads"
-                            Margin="0,0,12,0"
-                            FontSize="11"
+                            Margin="0,0,16,0"
+                            FontSize="12"
                             Foreground="{StaticResource DarkTextSecondary}"
                             Text="" />
                         <TextBlock
                             x:Name="DetailRating"
-                            Margin="0,0,12,0"
-                            FontSize="11"
+                            Margin="0,0,16,0"
+                            FontSize="12"
                             Foreground="{StaticResource DarkTextSecondary}"
                             Text="" />
-                    </StackPanel>
-                    
-                    <!-- Category/Type Badge -->
-                    <StackPanel Margin="0,6,0,0" Orientation="Horizontal">
                         <Border
-                            Padding="6,3"
+                            Padding="8,3"
                             Background="#2196F3"
                             CornerRadius="3">
                             <TextBlock
@@ -890,6 +1281,7 @@
                     </ItemsControl>
                 </StackPanel>
             </ScrollViewer>
+        </Grid>
         </Grid>
     </Grid>
 </Window>
