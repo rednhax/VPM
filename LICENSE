@@ -22,7 +22,7 @@ This project makes use of third-party libraries. Their licenses apply to their r
 
 - **WPF (.NET 10)** — Licensed under the [MIT License](https://github.com/dotnet/runtime/blob/main/LICENSE.TXT)  
 - **NetVips** — Licensed under the [MIT License](https://github.com/kleisauke/net-vips/blob/master/LICENSE)  
-- **SharpCompress** — Licensed under the [MIT License](https://github.com/adamhathcock/sharpcompress/blob/master/LICENSE)  
+- **SharpCompress** — Licensed under the [MIT License](https://github.com/adamhathcock/sharpcompress/blob/master/LICENSE.txt)  
 - **ImageListView** — Licensed under the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0)
 
 ---
