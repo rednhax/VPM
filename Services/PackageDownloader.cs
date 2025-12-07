@@ -471,21 +471,24 @@ namespace VPM.Services
         }
 
         /// <summary>
-        /// Resolves .latest package names to the highest available version
+        /// Resolves .latest and .min[NUMBER] package names to the best available version.
+        /// For .latest: returns the highest available version.
+        /// For .min[NUMBER]: returns the smallest version >= minimum, or highest if none meet minimum.
         /// </summary>
-        /// <param name="packageName">Package name (may contain .latest)</param>
+        /// <param name="packageName">Package name (may contain .latest or .min[NUMBER])</param>
         /// <returns>Resolved package name with actual version</returns>
-        private string ResolveLatestVersion(string packageName)
+        private string ResolveVersionReference(string packageName)
         {
             if (string.IsNullOrWhiteSpace(packageName) || _packageUrlCache == null)
                 return packageName;
 
-            // Check if package name ends with .latest
-            if (!packageName.EndsWith(".latest", StringComparison.OrdinalIgnoreCase))
+            var depInfo = DependencyVersionInfo.Parse(packageName);
+            
+            // Only process .latest and .min[NUMBER] references
+            if (depInfo.VersionType == DependencyVersionType.Exact)
                 return packageName;
 
-            // Extract base name (everything before .latest)
-            var baseName = packageName.Substring(0, packageName.Length - 7); // Remove ".latest"
+            var baseName = depInfo.BaseName;
 
             // Find all versions of this package - must be baseName.{version} where version is numeric
             var versions = _packageUrlCache.Keys
@@ -499,28 +502,40 @@ namespace VPM.Services
                         suffix = suffix.Substring(0, suffix.Length - 4);
                     return int.TryParse(suffix, out _);
                 })
-                .ToList();
-
-            if (versions.Count == 0)
-                return packageName; // Return original if no versions found
-
-            // Extract version numbers and find highest
-            var highestVersion = versions
                 .Select(v => new
                 {
                     Name = v,
                     Version = ExtractVersion(v)
                 })
                 .Where(v => v.Version >= 0)
-                .OrderByDescending(v => v.Version)
-                .FirstOrDefault();
+                .OrderBy(v => v.Version)
+                .ToList();
 
-            if (highestVersion != null)
+            if (versions.Count == 0)
+                return packageName; // Return original if no versions found
+
+            // Use DependencyVersionInfo to find the best match
+            var availableVersionNumbers = versions.Select(v => v.Version).ToList();
+            var bestVersion = depInfo.FindBestMatch(availableVersionNumbers, preferLatest: true);
+            
+            if (bestVersion.HasValue)
             {
-                return highestVersion.Name;
+                var match = versions.FirstOrDefault(v => v.Version == bestVersion.Value);
+                if (match != null)
+                {
+                    return match.Name;
+                }
             }
 
             return packageName;
+        }
+        
+        /// <summary>
+        /// Resolves .latest package names to the highest available version (legacy method for compatibility)
+        /// </summary>
+        private string ResolveLatestVersion(string packageName)
+        {
+            return ResolveVersionReference(packageName);
         }
 
         /// <summary>

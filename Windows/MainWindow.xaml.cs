@@ -65,6 +65,7 @@ namespace VPM
         private PackageFileManager _packageFileManager;
         private SceneScanner _sceneScanner;
         private UnifiedCustomContentScanner _unifiedCustomContentScanner;
+        private IncrementalPackageRefresh _incrementalRefresh;
 
         private string _cacheFolder;
         
@@ -158,6 +159,11 @@ namespace VPM
 
             _filterManager = new FilterManager();
             _reactiveFilterManager = new ReactiveFilterManager(_filterManager);
+            
+            // Initialize incremental package refresh
+            _incrementalRefresh = new IncrementalPackageRefresh(_packageManager);
+            _incrementalRefresh.PackagesUpdated += OnIncrementalPackagesUpdated;
+            _incrementalRefresh.FullRefreshRecommended += OnFullRefreshRecommended;
             
             // Sync file size filter settings from AppSettings to FilterManager
             _filterManager.FileSizeTinyMax = _settingsManager.Settings.FileSizeTinyMax;

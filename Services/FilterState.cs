@@ -33,5 +33,15 @@ namespace VPM.Services
         public double FileSizeTinyMax { get; set; }
         public double FileSizeSmallMax { get; set; }
         public double FileSizeMediumMax { get; set; }
+        
+        // Content tag filtering (clothing and hair)
+        public HashSet<string> SelectedClothingTags { get; set; } = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        public HashSet<string> SelectedHairTags { get; set; } = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        
+        /// <summary>
+        /// If true, package must match ALL selected tags (AND logic).
+        /// If false, package must match ANY selected tag (OR logic).
+        /// </summary>
+        public bool RequireAllTags { get; set; } = false;
     }
 }

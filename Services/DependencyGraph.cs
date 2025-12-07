@@ -96,40 +96,69 @@ namespace VPM.Services
         
         /// <summary>
         /// Resolves a dependency string to actual package name(s)
+        /// Handles .latest, .min[NUMBER], and exact version references
         /// </summary>
         private IEnumerable<string> ResolveDependency(string dep)
         {
-            // Handle .latest references
-            if (dep.EndsWith(".latest", StringComparison.OrdinalIgnoreCase))
+            var depInfo = DependencyVersionInfo.Parse(dep);
+            
+            // Try to find packages matching the base name
+            if (_packagesByBaseName.TryGetValue(depInfo.BaseName, out var versions))
             {
-                var baseName = dep.Substring(0, dep.Length - 7);
-                if (_packagesByBaseName.TryGetValue(baseName, out var versions))
+                switch (depInfo.VersionType)
                 {
-                    return versions;
+                    case DependencyVersionType.Latest:
+                        // Return all versions for .latest (any version satisfies)
+                        return versions;
+                    
+                    case DependencyVersionType.Minimum:
+                        // Return versions that meet the minimum requirement
+                        var minVersion = depInfo.VersionNumber ?? 0;
+                        var matchingVersions = versions.Where(v =>
+                        {
+                            var versionNum = ExtractVersionNumber(v);
+                            return versionNum >= minVersion;
+                        }).ToList();
+                        
+                        // If no versions meet minimum, return all versions (fallback)
+                        return matchingVersions.Count > 0 ? matchingVersions : versions;
+                    
+                    case DependencyVersionType.Exact:
+                        // Check if exact version exists
+                        if (_allPackages.Contains(dep))
+                        {
+                            return new[] { dep };
+                        }
+                        // Fallback to all versions if exact not found
+                        return versions;
                 }
-                // Return the .latest reference as-is if no versions found
-                return new[] { dep };
             }
             
-            // Check if exact package exists
+            // Check if exact package exists (for exact version references)
             if (_allPackages.Contains(dep))
             {
                 return new[] { dep };
             }
             
-            // Try to match by base name (for version flexibility)
-            var lastDot = dep.LastIndexOf('.');
-            if (lastDot > 0)
-            {
-                var baseName = dep.Substring(0, lastDot);
-                if (_packagesByBaseName.TryGetValue(baseName, out var versions))
-                {
-                    return versions;
-                }
-            }
-            
             // Return as-is (missing dependency)
             return new[] { dep };
+        }
+        
+        /// <summary>
+        /// Extracts the version number from a full package name (Creator.Package.Version)
+        /// </summary>
+        private static int ExtractVersionNumber(string packageName)
+        {
+            var lastDot = packageName.LastIndexOf('.');
+            if (lastDot > 0)
+            {
+                var versionStr = packageName.Substring(lastDot + 1);
+                if (int.TryParse(versionStr, out var version))
+                {
+                    return version;
+                }
+            }
+            return 0;
         }
         
         /// <summary>
@@ -370,24 +399,8 @@ namespace VPM.Services
         
         private static string GetBaseName(string packageName)
         {
-            // Handle .latest suffix
-            if (packageName.EndsWith(".latest", StringComparison.OrdinalIgnoreCase))
-            {
-                return packageName.Substring(0, packageName.Length - 7);
-            }
-            
-            // Try to extract Creator.Package from Creator.Package.Version
-            var lastDot = packageName.LastIndexOf('.');
-            if (lastDot > 0)
-            {
-                var potentialVersion = packageName.Substring(lastDot + 1);
-                if (int.TryParse(potentialVersion, out _))
-                {
-                    return packageName.Substring(0, lastDot);
-                }
-            }
-            
-            return packageName;
+            // Use the centralized DependencyVersionInfo parser
+            return DependencyVersionInfo.GetBaseName(packageName);
         }
     }
     

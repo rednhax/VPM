@@ -347,29 +347,110 @@ namespace VPM.Services
         }
 
         /// <summary>
-        /// Resolves a dependency name (which may end with .latest) to an actual file path
+        /// Resolves a dependency name (which may end with .latest or .min[NUMBER]) to an actual file path.
+        /// Handles .latest, .min[NUMBER], and exact version references.
         /// </summary>
         public string ResolveDependencyToFilePath(string dependencyName)
         {
-            // Remove .latest suffix if present
-            var baseName = dependencyName;
-            if (baseName.EndsWith(".latest", StringComparison.OrdinalIgnoreCase))
-            {
-                baseName = baseName[..^7]; // Remove ".latest"
-            }
+            var depInfo = DependencyVersionInfo.Parse(dependencyName);
+            var baseName = depInfo.BaseName;
 
             // Search in all available locations
             var searchDirectories = new[] { _addonPackagesFolder, _allPackagesFolder };
             
-            // First try to find the latest version
-            var latestFile = FindLatestPackageVersion(baseName, searchDirectories);
-            if (!string.IsNullOrEmpty(latestFile))
+            switch (depInfo.VersionType)
             {
-                return latestFile;
+                case DependencyVersionType.Latest:
+                    // Find the latest version
+                    var latestFile = FindLatestPackageVersion(baseName, searchDirectories);
+                    if (!string.IsNullOrEmpty(latestFile))
+                        return latestFile;
+                    break;
+                    
+                case DependencyVersionType.Minimum:
+                    // Find a version that meets the minimum requirement
+                    var minFile = FindMinimumVersionPackage(baseName, depInfo.VersionNumber ?? 0, searchDirectories);
+                    if (!string.IsNullOrEmpty(minFile))
+                        return minFile;
+                    // Fallback to latest if no version meets minimum
+                    var fallbackFile = FindLatestPackageVersion(baseName, searchDirectories);
+                    if (!string.IsNullOrEmpty(fallbackFile))
+                        return fallbackFile;
+                    break;
+                    
+                case DependencyVersionType.Exact:
+                    // Try exact version first
+                    var exactFile = FindExactPackagePath(dependencyName, searchDirectories);
+                    if (!string.IsNullOrEmpty(exactFile))
+                        return exactFile;
+                    // Fallback to latest version
+                    var exactFallback = FindLatestPackageVersion(baseName, searchDirectories);
+                    if (!string.IsNullOrEmpty(exactFallback))
+                        return exactFallback;
+                    break;
             }
 
-            // Fallback: attempt direct lookup for exact filename without versioning
+            // Final fallback: attempt direct lookup for exact filename without versioning
             return FindExactPackagePath(baseName, searchDirectories);
+        }
+        
+        /// <summary>
+        /// Finds a package version that meets or exceeds the minimum version requirement.
+        /// Returns the smallest version >= minVersion, or the latest if none meet the requirement.
+        /// </summary>
+        private string FindMinimumVersionPackage(string packageBaseName, int minVersion, params string[] searchDirectories)
+        {
+            if (string.IsNullOrWhiteSpace(packageBaseName))
+                return string.Empty;
+
+            EnsurePackageIndex(searchDirectories);
+
+            _packageIndexLock.EnterReadLock();
+            try
+            {
+                if (_packageIndex.TryGetValue(packageBaseName, out var entry))
+                {
+                    // Check if we have version info in the entry
+                    if (entry.VersionPaths != null && entry.VersionPaths.Count > 0)
+                    {
+                        // Find the smallest version >= minVersion
+                        var matchingVersion = entry.VersionPaths
+                            .Where(kvp => kvp.Key >= minVersion)
+                            .OrderBy(kvp => kvp.Key)
+                            .FirstOrDefault();
+                        
+                        if (!string.IsNullOrEmpty(matchingVersion.Value))
+                            return matchingVersion.Value;
+                    }
+                    
+                    // Fallback to latest if no version meets minimum
+                    return entry.LatestPath ?? string.Empty;
+                }
+
+                // Try normalized key
+                var normalized = NormalizePackageBase(packageBaseName);
+                if (!string.IsNullOrEmpty(normalized) && _packageIndex.TryGetValue(normalized, out entry))
+                {
+                    if (entry.VersionPaths != null && entry.VersionPaths.Count > 0)
+                    {
+                        var matchingVersion = entry.VersionPaths
+                            .Where(kvp => kvp.Key >= minVersion)
+                            .OrderBy(kvp => kvp.Key)
+                            .FirstOrDefault();
+                        
+                        if (!string.IsNullOrEmpty(matchingVersion.Value))
+                            return matchingVersion.Value;
+                    }
+                    
+                    return entry.LatestPath ?? string.Empty;
+                }
+            }
+            finally
+            {
+                _packageIndexLock.ExitReadLock();
+            }
+
+            return string.Empty;
         }
 
         private string FindExactPackagePath(string packageBaseName, string[] searchDirectories)
@@ -596,7 +677,8 @@ namespace VPM.Services
         }
 
         /// <summary>
-        /// Loads a package by moving it from AllPackages to AddonPackages with enhanced error handling
+        /// Loads a package by moving it from AllPackages to AddonPackages with enhanced error handling.
+        /// Handles .latest, .min[NUMBER], and exact version references.
         /// </summary>
         public async Task<(bool success, string error)> LoadPackageAsync(string packageName)
         {
@@ -629,8 +711,47 @@ namespace VPM.Services
             {
                 RecordOperation(operationKey);
                 
-                // Find the package file in available locations (excluding ArchivedPackages)
-                var sourceFile = FindLatestPackageVersion(packageName, _allPackagesFolder);
+                // Parse the package name to get base name for lookup
+                // This handles .latest, .min[NUMBER], and exact version references
+                var depInfo = DependencyVersionInfo.Parse(packageName);
+                var baseName = depInfo.BaseName;
+                
+                // First, check if already loaded (in AddonPackages)
+                var loadedFile = FindMinimumVersionPackage(baseName, depInfo.VersionNumber ?? 0, _addonPackagesFolder);
+                if (string.IsNullOrEmpty(loadedFile))
+                {
+                    loadedFile = FindLatestPackageVersion(baseName, _addonPackagesFolder);
+                }
+                
+                if (!string.IsNullOrEmpty(loadedFile))
+                {
+                    // Package is already loaded
+                    OperationCompleted?.Invoke(this, new PackageOperationEventArgs
+                    {
+                        PackageName = packageName,
+                        Operation = "Load",
+                        Success = true,
+                        ErrorMessage = ""
+                    });
+                    return (true, "");
+                }
+                
+                // Find the package in AllPackages (available but not loaded)
+                string sourceFile;
+                if (depInfo.VersionType == DependencyVersionType.Minimum)
+                {
+                    sourceFile = FindMinimumVersionPackage(baseName, depInfo.VersionNumber ?? 0, _allPackagesFolder);
+                }
+                else
+                {
+                    sourceFile = FindLatestPackageVersion(baseName, _allPackagesFolder);
+                }
+                
+                // Fallback: try the original package name
+                if (string.IsNullOrEmpty(sourceFile))
+                {
+                    sourceFile = FindLatestPackageVersion(packageName, _allPackagesFolder);
+                }
 
                 if (string.IsNullOrEmpty(sourceFile))
                 {
@@ -651,7 +772,7 @@ namespace VPM.Services
                 var relativePath = Path.GetRelativePath(_allPackagesFolder, sourceFile);
                 var destinationFile = Path.Combine(_addonPackagesFolder, relativePath);
 
-                // Check if already loaded
+                // Double-check if already loaded (race condition protection)
                 if (File.Exists(destinationFile))
                 {
                     OperationCompleted?.Invoke(this, new PackageOperationEventArgs
@@ -721,7 +842,8 @@ namespace VPM.Services
         }
 
         /// <summary>
-        /// Unloads a package by moving it from AddonPackages to AllPackages
+        /// Unloads a package by moving it from AddonPackages to AllPackages.
+        /// Handles .latest, .min[NUMBER], and exact version references.
         /// </summary>
         public async Task<(bool success, string error)> UnloadPackageAsync(string packageName)
         {
@@ -751,8 +873,19 @@ namespace VPM.Services
             {
                 RecordOperation(operationKey);
 
-                // Find the package file in AddonPackages
-                var sourceFile = FindLatestPackageVersion(packageName, _addonPackagesFolder);
+                // Parse the package name to get base name for lookup
+                // This handles .latest, .min[NUMBER], and exact version references
+                var depInfo = DependencyVersionInfo.Parse(packageName);
+                var baseName = depInfo.BaseName;
+
+                // Find the package file in AddonPackages using base name
+                var sourceFile = FindLatestPackageVersion(baseName, _addonPackagesFolder);
+                
+                // If not found by base name, try the original package name
+                if (string.IsNullOrEmpty(sourceFile))
+                {
+                    sourceFile = FindLatestPackageVersion(packageName, _addonPackagesFolder);
+                }
 
                 if (string.IsNullOrEmpty(sourceFile))
                 {
@@ -982,7 +1115,8 @@ namespace VPM.Services
         }
 
         /// <summary>
-        /// Gets the current status of a package (Loaded, Available, Missing) from pre-built index
+        /// Gets the current status of a package (Loaded, Available, Missing) from pre-built index.
+        /// Handles .latest, .min[NUMBER], and exact version references.
         /// </summary>
         public string GetPackageStatus(string packageName)
         {
@@ -1004,19 +1138,16 @@ namespace VPM.Services
                 return status;
             }
             
-            // If packageName includes version (e.g., "Creator.Package.5"), extract base name and try again
-            var lastDotIndex = packageName.LastIndexOf('.');
-            if (lastDotIndex > 0)
+            // Parse the dependency to handle .latest, .min[NUMBER], and exact versions
+            var depInfo = DependencyVersionInfo.Parse(packageName);
+            var baseName = depInfo.BaseName;
+            
+            // Try base name lookup
+            if (_packageStatusIndex.TryGetValue(baseName, out status))
             {
-                var potentialVersion = packageName.Substring(lastDotIndex + 1);
-                if (int.TryParse(potentialVersion, out _))
-                {
-                    var baseName = packageName.Substring(0, lastDotIndex);
-                    if (_packageStatusIndex.TryGetValue(baseName, out status))
-                    {
-                        return status;
-                    }
-                }
+                // For .latest and .min[NUMBER], any version on disk satisfies the dependency
+                // For exact versions, we still return the status if the base package exists
+                return status;
             }
             
             return "Missing";

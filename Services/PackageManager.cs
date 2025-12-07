@@ -27,6 +27,7 @@ namespace VPM.Services
         private bool _statusIndexBuilt = false;
         private readonly object _statusIndexLock = new object();
         private readonly VarIntegrityScanner _integrityScanner = new();
+        private readonly ContentTagScanner _contentTagScanner = new();
         
         public Dictionary<string, VarMetadata> PackageMetadata { get; private set; } = new Dictionary<string, VarMetadata>(StringComparer.OrdinalIgnoreCase);
         private ConcurrentDictionary<string, List<ImageLocation>> _previewImageIndex;
@@ -694,6 +695,23 @@ namespace VPM.Services
 
                 // Detect categories and apply fallbacks
                 ApplyCategoryDetectionAndFallbacks(metadata, filename);
+                
+                // Scan for clothing and hair tags from .vam files
+                // Only scan if package has clothing or hair content
+                if (metadata.Categories.Contains("Clothing") || metadata.Categories.Contains("Hair") ||
+                    metadata.ClothingCount > 0 || metadata.HairCount > 0)
+                {
+                    try
+                    {
+                        var tagResult = _contentTagScanner.ScanForTags(archive.Archive, contentList);
+                        metadata.ClothingTags = tagResult.ClothingTags;
+                        metadata.HairTags = tagResult.HairTags;
+                    }
+                    catch
+                    {
+                        // Ignore tag scanning errors - tags are optional
+                    }
+                }
                 
                 // Date priority:
                 // 1. vpmOriginalDate (if package was optimized) - already set in ParseMetaJsonContent
@@ -1390,14 +1408,17 @@ namespace VPM.Services
 
         /// <summary>
         /// Detects missing dependencies for all packages.
-        /// A dependency is considered missing if no package with that name (or any version for .latest) exists.
+        /// A dependency is considered missing if no package with that name (or any version for .latest/.min) exists.
+        /// Handles .latest, .min[NUMBER], and exact version references.
         /// </summary>
         public void DetectMissingDependencies()
         {
             // Build a set of all known package names for fast lookup
-            // Include both exact names and base names (for .latest resolution)
+            // Include both exact names and base names (for .latest/.min resolution)
             var knownPackages = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var knownPackageBases = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            // Track versions per base name for minimum version checking
+            var packageVersions = new Dictionary<string, List<int>>(StringComparer.OrdinalIgnoreCase);
             
             foreach (var kvp in PackageMetadata)
             {
@@ -1409,9 +1430,17 @@ namespace VPM.Services
                 var fullName = $"{metadata.CreatorName}.{metadata.PackageName}.{metadata.Version}";
                 knownPackages.Add(fullName);
                 
-                // Also add the base name for .latest resolution
+                // Also add the base name for .latest/.min resolution
                 var baseName = $"{metadata.CreatorName}.{metadata.PackageName}";
                 knownPackageBases.Add(baseName);
+                
+                // Track versions for minimum version checking
+                if (!packageVersions.TryGetValue(baseName, out var versions))
+                {
+                    versions = new List<int>();
+                    packageVersions[baseName] = versions;
+                }
+                versions.Add(metadata.Version);
             }
             
             // Now check each package's dependencies
@@ -1429,32 +1458,7 @@ namespace VPM.Services
                     if (string.IsNullOrEmpty(dep))
                         continue;
                     
-                    bool found = false;
-                    
-                    // Check if it's a .latest reference
-                    if (dep.EndsWith(".latest", StringComparison.OrdinalIgnoreCase))
-                    {
-                        // Extract base name (Creator.Package)
-                        var baseName = dep.Substring(0, dep.Length - 7);
-                        found = knownPackageBases.Contains(baseName);
-                    }
-                    else
-                    {
-                        // Check exact match first
-                        found = knownPackages.Contains(dep);
-                        
-                        // If not found, check if any version of this package exists
-                        if (!found)
-                        {
-                            // Try to extract base name (handle Creator.Package.Version format)
-                            var lastDot = dep.LastIndexOf('.');
-                            if (lastDot > 0)
-                            {
-                                var baseName = dep.Substring(0, lastDot);
-                                found = knownPackageBases.Contains(baseName);
-                            }
-                        }
-                    }
+                    bool found = IsDependencySatisfied(dep, knownPackages, knownPackageBases, packageVersions);
                     
                     if (!found)
                     {
@@ -1464,11 +1468,54 @@ namespace VPM.Services
                 }
             }
         }
+        
+        /// <summary>
+        /// Checks if a dependency is satisfied by the available packages.
+        /// Handles .latest, .min[NUMBER], and exact version references.
+        /// </summary>
+        private bool IsDependencySatisfied(
+            string dep,
+            HashSet<string> knownPackages,
+            HashSet<string> knownPackageBases,
+            Dictionary<string, List<int>> packageVersions)
+        {
+            var depInfo = DependencyVersionInfo.Parse(dep);
+            
+            switch (depInfo.VersionType)
+            {
+                case DependencyVersionType.Latest:
+                    // Any version of this package satisfies .latest
+                    return knownPackageBases.Contains(depInfo.BaseName);
+                
+                case DependencyVersionType.Minimum:
+                    // Check if any version >= minimum exists
+                    if (packageVersions.TryGetValue(depInfo.BaseName, out var versions))
+                    {
+                        var minVersion = depInfo.VersionNumber ?? 0;
+                        // Any version >= minimum satisfies the dependency
+                        return versions.Any(v => v >= minVersion);
+                    }
+                    return false;
+                
+                case DependencyVersionType.Exact:
+                    // Check exact match first
+                    if (knownPackages.Contains(dep))
+                        return true;
+                    
+                    // Fallback: check if any version of this package exists
+                    // (for flexibility when exact version is not available)
+                    return knownPackageBases.Contains(depInfo.BaseName);
+                
+                default:
+                    return knownPackages.Contains(dep);
+            }
+        }
 
         /// <summary>
         /// Removes a newly downloaded package from all MissingDependencies lists.
         /// This is more efficient than re-running DetectMissingDependencies() for the entire collection.
         /// Call this after downloading a package from Hub to update the missing dependencies state.
+        /// Handles .latest, .min[NUMBER], and exact version references.
         /// </summary>
         /// <param name="packageName">The full package name (Creator.Package.Version) that was downloaded</param>
         public void RemoveFromMissingDependencies(string packageName)
@@ -1476,9 +1523,10 @@ namespace VPM.Services
             if (string.IsNullOrEmpty(packageName))
                 return;
             
-            // Extract base name for .latest resolution
-            var baseName = GetPackageBaseName(packageName);
-            var latestRef = baseName + ".latest";
+            // Parse the downloaded package to get base name and version
+            var downloadedInfo = DependencyVersionInfo.Parse(packageName);
+            var baseName = downloadedInfo.BaseName;
+            var downloadedVersion = downloadedInfo.VersionNumber ?? 0;
             
             foreach (var kvp in PackageMetadata)
             {
@@ -1489,20 +1537,19 @@ namespace VPM.Services
                 // Remove exact match
                 metadata.MissingDependencies.Remove(packageName);
                 
-                // Remove .latest reference if this package satisfies it
+                // Remove dependencies that this package satisfies
                 if (!string.IsNullOrEmpty(baseName))
                 {
-                    metadata.MissingDependencies.Remove(latestRef);
-                    
-                    // Also remove any versioned reference to the same base package
-                    // (e.g., if they needed Creator.Package.5 but we downloaded Creator.Package.6)
                     metadata.MissingDependencies.RemoveAll(dep =>
                     {
-                        if (dep.EndsWith(".latest", StringComparison.OrdinalIgnoreCase))
-                            return false; // Already handled above
+                        var depInfo = DependencyVersionInfo.Parse(dep);
                         
-                        var depBase = GetPackageBaseName(dep);
-                        return string.Equals(depBase, baseName, StringComparison.OrdinalIgnoreCase);
+                        // Must be the same base package
+                        if (!string.Equals(depInfo.BaseName, baseName, StringComparison.OrdinalIgnoreCase))
+                            return false;
+                        
+                        // Check if downloaded version satisfies the dependency
+                        return depInfo.IsSatisfiedBy(downloadedVersion);
                     });
                 }
             }
@@ -1545,33 +1592,17 @@ namespace VPM.Services
         }
         
         /// <summary>
-        /// Extracts the base name (Creator.Package) from a full package name (Creator.Package.Version)
+        /// Extracts the base name (Creator.Package) from a full package name.
+        /// Handles all version formats: exact (Creator.Package.5), latest (Creator.Package.latest), 
+        /// and minimum (Creator.Package.min32).
         /// </summary>
         private string GetPackageBaseName(string packageName)
         {
             if (string.IsNullOrEmpty(packageName))
                 return null;
             
-            // Remove .var extension if present
-            var name = packageName.EndsWith(".var", StringComparison.OrdinalIgnoreCase)
-                ? packageName.Substring(0, packageName.Length - 4)
-                : packageName;
-            
-            // Find the last dot that's followed by a number (version)
-            for (int i = name.Length - 1; i >= 0; i--)
-            {
-                if (name[i] == '.')
-                {
-                    var afterDot = name.Substring(i + 1);
-                    if (int.TryParse(afterDot, out _))
-                    {
-                        return name.Substring(0, i);
-                    }
-                    break;
-                }
-            }
-            
-            return name;
+            // Use the centralized DependencyVersionInfo parser
+            return DependencyVersionInfo.GetBaseName(packageName);
         }
 
         #region Dependency Graph API

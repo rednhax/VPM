@@ -40,6 +40,11 @@ namespace VPM.Services
         public bool FilterNoDependencies { get; set; } = false;
         public bool HideArchivedPackages { get; set; } = true;
 
+        // Content tag filtering (clothing and hair)
+        public HashSet<string> SelectedClothingTags { get; set; } = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        public HashSet<string> SelectedHairTags { get; set; } = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        public bool RequireAllTags { get; set; } = false;
+
         public void ClearAllFilters()
         {
             SelectedStatus = null;
@@ -63,6 +68,9 @@ namespace VPM.Services
             FilterDuplicates = false;
             FilterNoDependents = false;
             FilterNoDependencies = false;
+            SelectedClothingTags.Clear();
+            SelectedHairTags.Clear();
+            RequireAllTags = false;
         }
 
         public void ClearCategoryFilter()
@@ -105,6 +113,23 @@ namespace VPM.Services
         public void ClearSubfoldersFilter()
         {
             SelectedSubfolders.Clear();
+        }
+
+        public void ClearTagFilters()
+        {
+            SelectedClothingTags.Clear();
+            SelectedHairTags.Clear();
+            RequireAllTags = false;
+        }
+
+        public void ClearClothingTagFilter()
+        {
+            SelectedClothingTags.Clear();
+        }
+
+        public void ClearHairTagFilter()
+        {
+            SelectedHairTags.Clear();
         }
 
         public void SetSearchText(string text)
@@ -163,7 +188,10 @@ namespace VPM.Services
                 AutoInstallManager = AutoInstallManager,
                 FileSizeTinyMax = FileSizeTinyMax,
                 FileSizeSmallMax = FileSizeSmallMax,
-                FileSizeMediumMax = FileSizeMediumMax
+                FileSizeMediumMax = FileSizeMediumMax,
+                SelectedClothingTags = new HashSet<string>(SelectedClothingTags, StringComparer.OrdinalIgnoreCase),
+                SelectedHairTags = new HashSet<string>(SelectedHairTags, StringComparer.OrdinalIgnoreCase),
+                RequireAllTags = RequireAllTags
             };
         }
 
@@ -374,7 +402,58 @@ namespace VPM.Services
                 }
             }
 
+            // 18. Clothing tag filter
+            if (state.SelectedClothingTags.Count > 0)
+            {
+                if (!MatchesTagFilter(metadata.ClothingTags, state.SelectedClothingTags, state.RequireAllTags))
+                    return false;
+            }
+
+            // 19. Hair tag filter
+            if (state.SelectedHairTags.Count > 0)
+            {
+                if (!MatchesTagFilter(metadata.HairTags, state.SelectedHairTags, state.RequireAllTags))
+                    return false;
+            }
+
             return true;
+        }
+
+        /// <summary>
+        /// Checks if item tags match the filter tags
+        /// </summary>
+        /// <param name="itemTags">Tags on the item (from metadata)</param>
+        /// <param name="filterTags">Tags to filter by</param>
+        /// <param name="requireAll">If true, all filter tags must match (AND). If false, any tag matches (OR).</param>
+        /// <returns>True if the item matches the filter</returns>
+        private static bool MatchesTagFilter(HashSet<string> itemTags, HashSet<string> filterTags, bool requireAll)
+        {
+            if (filterTags == null || filterTags.Count == 0)
+                return true;
+            
+            if (itemTags == null || itemTags.Count == 0)
+                return false;
+            
+            if (requireAll)
+            {
+                // AND logic: all filter tags must be present
+                foreach (var filterTag in filterTags)
+                {
+                    if (!itemTags.Contains(filterTag))
+                        return false;
+                }
+                return true;
+            }
+            else
+            {
+                // OR logic: any filter tag matches
+                foreach (var filterTag in filterTags)
+                {
+                    if (itemTags.Contains(filterTag))
+                        return true;
+                }
+                return false;
+            }
         }
 
         private bool MatchesFileSizeFilter(long fileSizeBytes, FilterState state)
@@ -833,12 +912,16 @@ namespace VPM.Services
                 }
             }
 
-            // Status filter
+            // Status filter - O(1) using HashSet instead of O(n) List.Contains()
             if (filters.TryGetValue("Status", out var statusFilter) && statusFilter is List<string> selectedStatuses)
             {
-                if (selectedStatuses.Count > 0 && !selectedStatuses.Contains(package.Status))
+                if (selectedStatuses.Count > 0)
                 {
-                    return false;
+                    var statusSet = new HashSet<string>(selectedStatuses, StringComparer.OrdinalIgnoreCase);
+                    if (!statusSet.Contains(package.Status))
+                    {
+                        return false;
+                    }
                 }
             }
 
@@ -850,13 +933,16 @@ namespace VPM.Services
                 }
             }
 
-            // Creator filter (case-insensitive)
+            // Creator filter - O(1) using HashSet instead of O(n) Any()
             if (filters.TryGetValue("Creator", out var creatorFilter) && creatorFilter is List<string> selectedCreators)
             {
-                if (selectedCreators.Count > 0 && 
-                    !selectedCreators.Any(c => string.Equals(c, package.Creator, StringComparison.OrdinalIgnoreCase)))
+                if (selectedCreators.Count > 0)
                 {
-                    return false;
+                    var creatorSet = new HashSet<string>(selectedCreators, StringComparer.OrdinalIgnoreCase);
+                    if (!creatorSet.Contains(package.Creator))
+                    {
+                        return false;
+                    }
                 }
             }
 
@@ -897,12 +983,16 @@ namespace VPM.Services
                 }
             }
 
-            // Status filter
+            // Status filter - O(1) using HashSet instead of O(n) List.Contains()
             if (filters.TryGetValue("Status", out var statusFilter) && statusFilter is List<string> selectedStatuses)
             {
-                if (selectedStatuses.Count > 0 && !selectedStatuses.Contains(metadata.Status))
+                if (selectedStatuses.Count > 0)
                 {
-                    return false;
+                    var statusSet = new HashSet<string>(selectedStatuses, StringComparer.OrdinalIgnoreCase);
+                    if (!statusSet.Contains(metadata.Status))
+                    {
+                        return false;
+                    }
                 }
             }
 
@@ -914,26 +1004,28 @@ namespace VPM.Services
                 }
             }
 
-            // Creator filter (case-insensitive)
+            // Creator filter - O(1) using HashSet instead of O(n) Any()
             if (filters.TryGetValue("Creator", out var creatorFilter) && creatorFilter is List<string> selectedCreators)
             {
-                if (selectedCreators.Count > 0 && 
-                    !selectedCreators.Any(c => string.Equals(c, creator, StringComparison.OrdinalIgnoreCase)))
+                if (selectedCreators.Count > 0)
                 {
-                    return false;
+                    var creatorSet = new HashSet<string>(selectedCreators, StringComparer.OrdinalIgnoreCase);
+                    if (!creatorSet.Contains(creator))
+                    {
+                        return false;
+                    }
                 }
             }
 
-            // Content type filter
+            // Content type filter - O(n) using HashSet instead of O(n*m) nested Any()
             if (filters.TryGetValue("ContentType", out var contentTypeFilter) && contentTypeFilter is List<string> selectedTypes)
             {
                 if (selectedTypes.Count > 0)
                 {
                     var packageCategories = metadata.Categories ?? new HashSet<string>();
-                    bool hasMatchingCategory = selectedTypes.Any(selectedType => 
-                        packageCategories.Any(category => 
-                            category.Equals(selectedType, StringComparison.OrdinalIgnoreCase)));
-                    
+                    // Convert to HashSet for O(1) lookups instead of O(n) Any() calls
+                    var selectedTypesSet = new HashSet<string>(selectedTypes, StringComparer.OrdinalIgnoreCase);
+                    bool hasMatchingCategory = packageCategories.Any(category => selectedTypesSet.Contains(category));
                     
                     if (!hasMatchingCategory)
                     {
@@ -959,6 +1051,97 @@ namespace VPM.Services
 
             return true;
         }
+
+        /// <summary>
+        /// Get clothing tag counts from packages
+        /// Returns a dictionary of tag -> count of packages with that tag
+        /// </summary>
+        public Dictionary<string, int> GetClothingTagCounts(Dictionary<string, VarMetadata> packages)
+        {
+            var counts = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+            
+            foreach (var package in packages.Values)
+            {
+                if (package.ClothingTags == null || package.ClothingTags.Count == 0)
+                    continue;
+                
+                foreach (var tag in package.ClothingTags)
+                {
+                    if (string.IsNullOrEmpty(tag))
+                        continue;
+                    
+                    if (counts.TryGetValue(tag, out var count))
+                        counts[tag] = count + 1;
+                    else
+                        counts[tag] = 1;
+                }
+            }
+            
+            return counts;
+        }
+
+        /// <summary>
+        /// Get hair tag counts from packages
+        /// Returns a dictionary of tag -> count of packages with that tag
+        /// </summary>
+        public Dictionary<string, int> GetHairTagCounts(Dictionary<string, VarMetadata> packages)
+        {
+            var counts = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+            
+            foreach (var package in packages.Values)
+            {
+                if (package.HairTags == null || package.HairTags.Count == 0)
+                    continue;
+                
+                foreach (var tag in package.HairTags)
+                {
+                    if (string.IsNullOrEmpty(tag))
+                        continue;
+                    
+                    if (counts.TryGetValue(tag, out var count))
+                        counts[tag] = count + 1;
+                    else
+                        counts[tag] = 1;
+                }
+            }
+            
+            return counts;
+        }
+
+        /// <summary>
+        /// Get count of packages that have any clothing tags
+        /// </summary>
+        public int GetPackagesWithClothingTagsCount(Dictionary<string, VarMetadata> packages)
+        {
+            int count = 0;
+            foreach (var package in packages.Values)
+            {
+                if (package.ClothingTags != null && package.ClothingTags.Count > 0)
+                    count++;
+            }
+            return count;
+        }
+
+        /// <summary>
+        /// Get count of packages that have any hair tags
+        /// </summary>
+        public int GetPackagesWithHairTagsCount(Dictionary<string, VarMetadata> packages)
+        {
+            int count = 0;
+            foreach (var package in packages.Values)
+            {
+                if (package.HairTags != null && package.HairTags.Count > 0)
+                    count++;
+            }
+            return count;
+        }
+
+        /// <summary>
+        /// Check if any tag filters are active
+        /// </summary>
+        public bool HasActiveTagFilters()
+        {
+            return SelectedClothingTags.Count > 0 || SelectedHairTags.Count > 0;
+        }
     }
 }
-

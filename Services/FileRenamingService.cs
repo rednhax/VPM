@@ -326,16 +326,17 @@ namespace VPM.Services
         /// </summary>
         public List<string> GetRelatedFiles(string baseFilePath)
         {
-            var relatedFiles = new List<string>();
+            // Use HashSet for O(1) duplicate checking instead of O(n) List.Contains()
+            var relatedFilesSet = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             
             if (!File.Exists(baseFilePath))
-                return relatedFiles;
+                return new List<string>();
 
             var directory = Path.GetDirectoryName(baseFilePath);
             var nameWithoutExtension = Path.GetFileNameWithoutExtension(baseFilePath);
             
             // Add the base file
-            relatedFiles.Add(baseFilePath);
+            relatedFilesSet.Add(baseFilePath);
 
             // Look for related files
             var relatedExtensions = new[] { ".fav", ".hide" };
@@ -346,12 +347,15 @@ namespace VPM.Services
             {
                 var relatedFile = Path.Combine(directory, nameWithoutExtension + ext);
                 if (File.Exists(relatedFile))
-                    relatedFiles.Add(relatedFile);
+                    relatedFilesSet.Add(relatedFile);
 
-                // Also check for compound extensions
+                // Also check for compound extensions - HashSet.Add handles duplicates automatically O(1)
                 var pattern = nameWithoutExtension + "*" + ext;
                 var compoundFiles = Directory.GetFiles(directory, pattern);
-                relatedFiles.AddRange(compoundFiles.Where(f => !relatedFiles.Contains(f)));
+                foreach (var f in compoundFiles)
+                {
+                    relatedFilesSet.Add(f);
+                }
             }
 
             // Check for image files
@@ -360,12 +364,12 @@ namespace VPM.Services
                 var imageFile = Path.Combine(directory, nameWithoutExtension + imgExt);
                 if (File.Exists(imageFile))
                 {
-                    relatedFiles.Add(imageFile);
+                    relatedFilesSet.Add(imageFile);
                     break; // Only add the first matching image
                 }
             }
 
-            return relatedFiles;
+            return relatedFilesSet.ToList();
         }
     }
 }

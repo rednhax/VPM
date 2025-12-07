@@ -73,6 +73,26 @@ namespace VPM.Models
         // Dependency and Dependents tracking
         public int DependencyCount { get; set; } = 0;  // Number of packages this one depends on
         public int DependentsCount { get; set; } = 0;  // Number of packages that depend on this one
+
+        // Content tags extracted from .vam files (clothing and hair)
+        // Tags are comma-separated strings like "head,torso,dress,formal"
+        public HashSet<string> ClothingTags { get; set; } = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        public HashSet<string> HairTags { get; set; } = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        
+        /// <summary>
+        /// Returns true if this package has any clothing tags
+        /// </summary>
+        public bool HasClothingTags => ClothingTags?.Count > 0;
+        
+        /// <summary>
+        /// Returns true if this package has any hair tags
+        /// </summary>
+        public bool HasHairTags => HairTags?.Count > 0;
+        
+        /// <summary>
+        /// Returns true if this package has any content tags (clothing or hair)
+        /// </summary>
+        public bool HasContentTags => HasClothingTags || HasHairTags;
     }
 }
 

@@ -15,7 +15,7 @@ namespace VPM.Services
     /// </summary>
     public class BinaryMetadataCache
     {
-        private const int CACHE_VERSION = 12; // Added MissingDependencies tracking
+        private const int CACHE_VERSION = 13; // Added ClothingTags and HairTags
         private readonly string _cacheFilePath;
         private readonly string _cacheDirectory;
         private readonly Dictionary<string, CachedMetadata> _cache = new(StringComparer.OrdinalIgnoreCase);
@@ -516,6 +516,36 @@ namespace VPM.Services
                 metadata.MissingDependencies = new List<string>();
             }
 
+            // Read ClothingTags HashSet
+            try
+            {
+                var clothingTagsCount = reader.ReadInt32();
+                metadata.ClothingTags = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                for (int i = 0; i < clothingTagsCount; i++)
+                {
+                    metadata.ClothingTags.Add(reader.ReadString());
+                }
+            }
+            catch
+            {
+                metadata.ClothingTags = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            }
+
+            // Read HairTags HashSet
+            try
+            {
+                var hairTagsCount = reader.ReadInt32();
+                metadata.HairTags = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                for (int i = 0; i < hairTagsCount; i++)
+                {
+                    metadata.HairTags.Add(reader.ReadString());
+                }
+            }
+            catch
+            {
+                metadata.HairTags = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            }
+
             return metadata;
         }
 
@@ -620,6 +650,22 @@ namespace VPM.Services
             {
                 writer.Write(dep ?? "");
             }
+
+            // Write ClothingTags HashSet
+            var clothingTags = metadata.ClothingTags ?? new HashSet<string>();
+            writer.Write(clothingTags.Count);
+            foreach (var tag in clothingTags)
+            {
+                writer.Write(tag ?? "");
+            }
+
+            // Write HairTags HashSet
+            var hairTags = metadata.HairTags ?? new HashSet<string>();
+            writer.Write(hairTags.Count);
+            foreach (var tag in hairTags)
+            {
+                writer.Write(tag ?? "");
+            }
         }
 
         #endregion
@@ -673,7 +719,9 @@ namespace VPM.Services
                 SubScenesCount = source.SubScenesCount,
                 SkinsCount = source.SkinsCount,
                 AllFiles = new List<string>(source.AllFiles ?? new List<string>()),
-                MissingDependencies = new List<string>(source.MissingDependencies ?? new List<string>())
+                MissingDependencies = new List<string>(source.MissingDependencies ?? new List<string>()),
+                ClothingTags = new HashSet<string>(source.ClothingTags ?? new HashSet<string>(), StringComparer.OrdinalIgnoreCase),
+                HairTags = new HashSet<string>(source.HairTags ?? new HashSet<string>(), StringComparer.OrdinalIgnoreCase)
             };
         }
 

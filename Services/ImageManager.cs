@@ -54,6 +54,12 @@ namespace VPM.Services
         private readonly LinkedList<string> _strongCacheLru = new();
         private readonly Dictionary<string, LinkedListNode<string>> _strongCacheLruNodes = new();
         
+        // Track invalid cache entries to prevent reload loops (e.g., 80x80 EXIF thumbnails)
+        private readonly HashSet<string> _invalidCacheEntries = new();
+        
+        // Minimum image dimension to consider valid (rejects 80x80 EXIF thumbnails)
+        private const int MinValidImageSize = 100;
+        
         // Note: Texture reference counting is now handled by ImageLoaderAsyncPool
         // No need for duplicate tracking here
         
@@ -110,8 +116,8 @@ namespace VPM.Services
             _preloadCancellation = new CancellationTokenSource();
             StartPreloadingTask();
 
-            // Cleanup unused pools every 10 seconds
-            _poolCleanupTimer = new Timer(CleanupUnusedPools, null, 10000, 10000);
+            // Cleanup unused pools every 3 seconds (reduced from 10 for faster file handle release)
+            _poolCleanupTimer = new Timer(CleanupUnusedPools, null, 3000, 3000);
         }
 
         private void CleanupUnusedPools(object state)
@@ -119,7 +125,7 @@ namespace VPM.Services
             try
             {
                 var now = DateTime.UtcNow;
-                var timeout = TimeSpan.FromSeconds(30); // Dispose pools unused for 30 seconds
+                var timeout = TimeSpan.FromSeconds(5); // Dispose pools unused for 5 seconds (reduced from 30)
 
                 foreach (var kvp in _sharedArchivePools)
                 {
@@ -144,6 +150,50 @@ namespace VPM.Services
         private ArchiveHandlePool GetSharedArchivePool(string varPath)
         {
             return _sharedArchivePools.GetOrAdd(varPath, path => new ArchiveHandlePool(path, maxHandles: 2));
+        }
+
+        /// <summary>
+        /// Releases any open archive handles for the specified file path.
+        /// Call this before moving/deleting a VAR file to avoid file locking issues.
+        /// </summary>
+        public void ReleaseArchiveHandles(string varPath)
+        {
+            if (string.IsNullOrEmpty(varPath))
+                return;
+
+            try
+            {
+                if (_sharedArchivePools.TryRemove(varPath, out var pool))
+                {
+                    pool.Dispose();
+                }
+            }
+            catch
+            {
+                // Ignore errors during release
+            }
+        }
+
+        /// <summary>
+        /// Releases all open archive handles.
+        /// Call this before bulk file operations.
+        /// </summary>
+        public void ReleaseAllArchiveHandles()
+        {
+            try
+            {
+                foreach (var kvp in _sharedArchivePools.ToList())
+                {
+                    if (_sharedArchivePools.TryRemove(kvp.Key, out var pool))
+                    {
+                        pool.Dispose();
+                    }
+                }
+            }
+            catch
+            {
+                // Ignore errors during release
+            }
         }
         
         /// <summary>
@@ -1643,15 +1693,33 @@ namespace VPM.Services
         }
 
         /// <summary>
-        /// Gets an image from cache, returning null if not found
+        /// Gets an image from cache, returning null if not found.
+        /// Validates image dimensions and marks invalid entries to prevent reload loops.
         /// </summary>
         private BitmapImage GetCachedImage(string cacheKey)
         {
             _bitmapCacheLock.EnterReadLock();
             try
             {
+                // Skip if previously marked as invalid (prevents reload loops)
+                if (_invalidCacheEntries.Contains(cacheKey))
+                {
+                    _cacheMisses++;
+                    return null;
+                }
+                
                 if (_strongCache.TryGetValue(cacheKey, out var bitmap))
                 {
+                    // Validate image dimensions - reject tiny images (like 80x80 EXIF thumbnails)
+                    if (bitmap.PixelWidth < MinValidImageSize || bitmap.PixelHeight < MinValidImageSize)
+                    {
+                        // Will be marked as invalid and removed after releasing read lock
+                        _cacheMisses++;
+                        // Schedule cleanup (can't modify while holding read lock)
+                        _ = Task.Run(() => RemoveInvalidCacheEntry(cacheKey));
+                        return null;
+                    }
+                    
                     _cacheHits++;
                     _cacheAccessTimes[cacheKey] = DateTime.Now;
                     
@@ -1667,6 +1735,14 @@ namespace VPM.Services
                 
                 if (_bitmapCache.TryGetValue(cacheKey, out var weakRef) && weakRef.TryGetTarget(out bitmap))
                 {
+                    // Validate image dimensions
+                    if (bitmap.PixelWidth < MinValidImageSize || bitmap.PixelHeight < MinValidImageSize)
+                    {
+                        _cacheMisses++;
+                        _ = Task.Run(() => RemoveInvalidCacheEntry(cacheKey));
+                        return null;
+                    }
+                    
                     _cacheHits++;
                     PromoteToStrongCache(cacheKey, bitmap);
                     return bitmap;
@@ -1678,6 +1754,31 @@ namespace VPM.Services
             finally
             {
                 _bitmapCacheLock.ExitReadLock();
+            }
+        }
+        
+        /// <summary>
+        /// Removes an invalid cache entry and marks it to prevent reload loops
+        /// </summary>
+        private void RemoveInvalidCacheEntry(string cacheKey)
+        {
+            _bitmapCacheLock.EnterWriteLock();
+            try
+            {
+                _invalidCacheEntries.Add(cacheKey);
+                _strongCache.Remove(cacheKey);
+                _bitmapCache.Remove(cacheKey);
+                _cacheAccessTimes.Remove(cacheKey);
+                
+                if (_strongCacheLruNodes.TryGetValue(cacheKey, out var node))
+                {
+                    _strongCacheLru.Remove(node);
+                    _strongCacheLruNodes.Remove(cacheKey);
+                }
+            }
+            finally
+            {
+                _bitmapCacheLock.ExitWriteLock();
             }
         }
         
@@ -1697,6 +1798,15 @@ namespace VPM.Services
         {
             if (string.IsNullOrEmpty(cacheKey) || bitmap == null) return;
             
+            // CRITICAL: Validate image dimensions before caching
+            // Reject suspiciously small images (like 80x80 EXIF thumbnails)
+            const int MinCacheableSize = 100;
+            if (bitmap.PixelWidth < MinCacheableSize || bitmap.PixelHeight < MinCacheableSize)
+            {
+                // Don't cache tiny images - they're likely EXIF thumbnails or corrupted
+                return;
+            }
+            
             _bitmapCacheLock.EnterWriteLock();
             try
             {
@@ -1711,6 +1821,15 @@ namespace VPM.Services
         
         private void AddToStrongCache(string imagePath, BitmapImage bitmap)
         {
+            // CRITICAL: Validate image dimensions before caching
+            // Reject suspiciously small images (like 80x80 EXIF thumbnails)
+            const int MinCacheableSize = 100;
+            if (bitmap.PixelWidth < MinCacheableSize || bitmap.PixelHeight < MinCacheableSize)
+            {
+                // Don't cache tiny images - they're likely EXIF thumbnails or corrupted
+                return;
+            }
+            
             // O(1) LRU eviction - matching archive cache pattern
             if (_strongCache.Count >= MAX_STRONG_CACHE_SIZE)
             {

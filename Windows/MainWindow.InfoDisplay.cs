@@ -83,6 +83,8 @@ namespace VPM
             }
             
             var orderedCategories = new[] { "Morphs", "Hair", "Clothing", "Looks", "Scenes", "Poses", "Assets", "Textures", "Scripts", "Plugins", "Skins" };
+            // Convert to HashSet for O(1) lookups instead of O(n) Array.Contains()
+            var orderedCategoriesSet = new HashSet<string>(orderedCategories, StringComparer.OrdinalIgnoreCase);
             
             foreach (var category in orderedCategories)
             {
@@ -92,7 +94,7 @@ namespace VPM
                 }
             }
             
-            foreach (var kvp in categoryFiles.Where(c => !orderedCategories.Contains(c.Key)).OrderBy(c => c.Key))
+            foreach (var kvp in categoryFiles.Where(c => !orderedCategoriesSet.Contains(c.Key)).OrderBy(c => c.Key))
             {
                 CreateCategoryTab(kvp.Key, kvp.Value, packageItem, packageMetadata);
             }
@@ -616,9 +618,9 @@ namespace VPM
 
         private void DisplayDependencies(PackageItem packageItem)
         {
-            // Force refresh package status index to ensure we have the latest status of all packages
-            // This is critical when switching packages after downloading dependencies
-            _packageFileManager?.RefreshPackageStatusIndex(force: true);
+            // Use cached package status index - only refresh after actual file changes (downloads)
+            // RefreshPackageStatusIndex(force: true) is expensive and should not be called on every selection
+            _packageFileManager?.RefreshPackageStatusIndex(force: false);
 
             // Clear any existing filter first
             var view = CollectionViewSource.GetDefaultView(Dependencies);
@@ -710,9 +712,9 @@ namespace VPM
 
         private void DisplayConsolidatedDependencies(List<PackageItem> selectedPackages)
         {
-            // Refresh package status index to ensure we have the latest status of all packages
-            // This is critical when switching packages after downloading dependencies
-            _packageFileManager?.RefreshPackageStatusIndex(force: true);
+            // Use cached package status index - only refresh after actual file changes (downloads)
+            // RefreshPackageStatusIndex(force: true) is expensive and should not be called on every selection
+            _packageFileManager?.RefreshPackageStatusIndex(force: false);
 
             // Clear any existing filter first
             var view = CollectionViewSource.GetDefaultView(Dependencies);
@@ -836,9 +838,9 @@ namespace VPM
         /// </summary>
         private void DisplayAllAvailableDependencies()
         {
-            // Refresh package status index to ensure we have the latest status of all packages
-            // This is critical when switching packages after downloading dependencies
-            _packageFileManager?.RefreshPackageStatusIndex(force: true);
+            // Use cached package status index - only refresh after actual file changes (downloads)
+            // RefreshPackageStatusIndex(force: true) is expensive and should not be called on every selection
+            _packageFileManager?.RefreshPackageStatusIndex(force: false);
 
             // Clear any existing filter first
             var depsView = CollectionViewSource.GetDefaultView(Dependencies);
@@ -874,13 +876,21 @@ namespace VPM
                         if (!allDependencies.ContainsKey(dependency))
                         {
                             // Check if dependency is available in our packages
-                            var depStatus = "Missing";
+                            // Use GetPackageStatus which handles .latest, .min[NUMBER], and exact versions
+                            var depStatus = _packageFileManager?.GetPackageStatus(dependency) ?? "Missing";
                             
-                            // Try to find the dependency using the lookup dictionary
-                            if (packageLookup.TryGetValue(dependency, out var depPackage) ||
-                                packageLookup.TryGetValue(dependency.ToLowerInvariant(), out depPackage))
+                            // If still missing, try lookup dictionary as fallback
+                            if (depStatus == "Missing")
                             {
-                                depStatus = _packageFileManager?.GetPackageStatus(Path.GetFileNameWithoutExtension(depPackage.Filename)) ?? "Unknown";
+                                // Parse the dependency to get base name for lookup
+                                var depInfo = DependencyVersionInfo.Parse(dependency);
+                                
+                                // Try to find by base name
+                                if (packageLookup.TryGetValue(depInfo.BaseName, out var depPackage) ||
+                                    packageLookup.TryGetValue(depInfo.BaseName.ToLowerInvariant(), out depPackage))
+                                {
+                                    depStatus = _packageFileManager?.GetPackageStatus(Path.GetFileNameWithoutExtension(depPackage.Filename)) ?? "Unknown";
+                                }
                             }
                             
                             allDependencies[dependency] = depStatus;
@@ -946,8 +956,8 @@ namespace VPM
 
         private void DisplayDependents(PackageItem packageItem)
         {
-            // Refresh package status index to ensure we have the latest status of all packages
-            _packageFileManager?.RefreshPackageStatusIndex(force: true);
+            // Use cached package status index - only refresh after actual file changes (downloads)
+            _packageFileManager?.RefreshPackageStatusIndex(force: false);
 
             var view = CollectionViewSource.GetDefaultView(Dependencies);
             if (view != null)
@@ -1029,8 +1039,8 @@ namespace VPM
 
         private void DisplayConsolidatedDependents(List<PackageItem> selectedPackages)
         {
-            // Refresh package status index to ensure we have the latest status of all packages
-            _packageFileManager?.RefreshPackageStatusIndex(force: true);
+            // Use cached package status index - only refresh after actual file changes (downloads)
+            _packageFileManager?.RefreshPackageStatusIndex(force: false);
 
             var view = CollectionViewSource.GetDefaultView(Dependencies);
             if (view != null)

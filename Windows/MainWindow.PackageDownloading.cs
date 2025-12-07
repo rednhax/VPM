@@ -472,7 +472,7 @@ namespace VPM
         
         /// <summary>
         /// Finds all dependencies that match a downloaded package name
-        /// Handles exact matches, DisplayName matches, base name matches, and .latest dependencies
+        /// Handles exact matches, DisplayName matches, base name matches, .latest, and .min[NUMBER] dependencies
         /// </summary>
         private List<DependencyItem> FindMatchingDependencies(string packageName)
         {
@@ -481,20 +481,10 @@ namespace VPM
             if (string.IsNullOrEmpty(packageName))
                 return matches;
             
-            // Extract base name from the downloaded package (e.g., "Creator.Package" from "Creator.Package.5")
-            string downloadedBaseName = packageName;
-            string downloadedVersion = "";
-            
-            var lastDotIndex = packageName.LastIndexOf('.');
-            if (lastDotIndex > 0)
-            {
-                var potentialVersion = packageName.Substring(lastDotIndex + 1);
-                if (int.TryParse(potentialVersion, out _))
-                {
-                    downloadedBaseName = packageName.Substring(0, lastDotIndex);
-                    downloadedVersion = potentialVersion;
-                }
-            }
+            // Parse the downloaded package to get base name and version
+            var downloadedInfo = DependencyVersionInfo.Parse(packageName);
+            var downloadedBaseName = downloadedInfo.BaseName;
+            var downloadedVersion = downloadedInfo.VersionNumber ?? 0;
             
             foreach (var dep in Dependencies)
             {
@@ -514,25 +504,19 @@ namespace VPM
                 {
                     isMatch = true;
                 }
-                // Match 3: Base name match - downloaded package starts with dependency base name
-                else if (packageName.StartsWith(dep.Name + ".", StringComparison.OrdinalIgnoreCase))
+                // Match 3: Parse the dependency and check if downloaded package satisfies it
+                else
                 {
-                    // For .latest dependencies, any version of the same base name satisfies it
-                    if (dep.Version.Equals("latest", StringComparison.OrdinalIgnoreCase))
+                    // Build the full dependency string from Name and Version
+                    var depFullName = string.IsNullOrEmpty(dep.Version) ? dep.Name : $"{dep.Name}.{dep.Version}";
+                    var depInfo = DependencyVersionInfo.Parse(depFullName);
+                    
+                    // Check if base names match
+                    if (depInfo.BaseName.Equals(downloadedBaseName, StringComparison.OrdinalIgnoreCase))
                     {
-                        isMatch = true;
+                        // Check if downloaded version satisfies the dependency requirement
+                        isMatch = depInfo.IsSatisfiedBy(downloadedVersion);
                     }
-                    // For specific version dependencies, check if versions match
-                    else if (!string.IsNullOrEmpty(downloadedVersion) && dep.Version == downloadedVersion)
-                    {
-                        isMatch = true;
-                    }
-                }
-                // Match 4: Dependency base name matches downloaded base name (for .latest)
-                else if (dep.Name.Equals(downloadedBaseName, StringComparison.OrdinalIgnoreCase) &&
-                         dep.Version.Equals("latest", StringComparison.OrdinalIgnoreCase))
-                {
-                    isMatch = true;
                 }
                 
                 if (isMatch)

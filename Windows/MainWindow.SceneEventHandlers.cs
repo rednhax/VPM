@@ -313,34 +313,21 @@ namespace VPM
                     // Process accumulated dependencies
                     foreach (var dep in allDependencies.OrderBy(d => d))
                     {
-                        // Extract base package name (remove version suffix)
-                        // Dependencies come in format: "creator.package.version" or "creator.package" or "creator.package.latest"
-                        string baseName = dep;
-                        string version = "";
-                        
-                        // Check if it ends with .latest
-                        if (dep.EndsWith(".latest", StringComparison.OrdinalIgnoreCase))
+                        // Use DependencyVersionInfo to parse all version formats:
+                        // .latest, .min[NUMBER], and exact versions
+                        var depInfo = DependencyVersionInfo.Parse(dep);
+                        string baseName = depInfo.BaseName;
+                        string version = depInfo.VersionType switch
                         {
-                            baseName = dep.Substring(0, dep.Length - 7); // Remove .latest
-                            version = "latest";
-                        }
-                        else
-                        {
-                            // Check for numeric version at the end (e.g., ".4" or ".13")
-                            var lastDotIndex = dep.LastIndexOf('.');
-                            if (lastDotIndex > 0)
-                            {
-                                var potentialVersion = dep.Substring(lastDotIndex + 1);
-                                if (int.TryParse(potentialVersion, out int parsedVersion))
-                                {
-                                    version = potentialVersion;
-                                    baseName = dep.Substring(0, lastDotIndex);
-                                }
-                            }
-                        }
+                            DependencyVersionType.Latest => "latest",
+                            DependencyVersionType.Minimum => $"min{depInfo.VersionNumber}",
+                            DependencyVersionType.Exact => depInfo.VersionNumber?.ToString() ?? "",
+                            _ => ""
+                        };
                         
-                        // Get the actual status from package manager using base name
-                        var status = _packageFileManager?.GetPackageStatus(baseName) ?? "Missing";
+                        // Get the actual status from package manager using the full dependency string
+                        // GetPackageStatus now handles .latest, .min[NUMBER], and exact versions
+                        var status = _packageFileManager?.GetPackageStatus(dep) ?? "Missing";
                         // Store base name and version separately in DependencyItem
                         var depItem = new DependencyItem { Name = baseName, Version = version, Status = status };
                         Dependencies.Add(depItem);
@@ -1254,7 +1241,8 @@ namespace VPM
 
             try
             {
-                var selectedCategories = new List<string>();
+                // Use HashSet for O(1) lookups instead of O(n) List.Contains()
+                var selectedCategories = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
                 foreach (var item in PresetCategoryFilterList.SelectedItems)
                 {
                     if (item is string categoryItem)
@@ -1277,9 +1265,9 @@ namespace VPM
                 }
                 else
                 {
-                    // Filter to only show items with selected categories
+                    // Filter to only show items with selected categories - O(1) HashSet lookup
                     var filtered = _originalCustomAtomItems
-                        .Where(item => selectedCategories.Contains(item.Category, StringComparer.OrdinalIgnoreCase))
+                        .Where(item => selectedCategories.Contains(item.Category))
                         .ToList();
                     CustomAtomItems.ReplaceAll(filtered);
                 }

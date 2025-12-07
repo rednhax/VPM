@@ -55,6 +55,10 @@ namespace VPM
         private List<string> _currentlyDisplayedPackages = new List<string>();
         private List<string> _currentlyDisplayedDependencies = new List<string>();
         
+        // Cached package lookup for ConvertDependenciesToPackages (avoids rebuilding on every call)
+        private Dictionary<string, List<(string key, int version)>> _packageLookupCache;
+        private int _packageLookupCacheVersion = -1;
+        
         // Debounce timer for dependency selection changes
         private DispatcherTimer _dependencySelectionDebounceTimer;
         
@@ -770,7 +774,16 @@ namespace VPM
         
         private void RefreshPackages_Click(object sender, RoutedEventArgs e)
         {
-            RefreshPackages();
+            // Hold Shift for full refresh, otherwise use incremental
+            if (Keyboard.Modifiers.HasFlag(ModifierKeys.Shift))
+            {
+                SetStatus("Full refresh requested...");
+                RefreshPackages();
+            }
+            else
+            {
+                RefreshPackagesIncremental();
+            }
         }
 
         private async void ArchiveOldVersions_Click(object sender, RoutedEventArgs e)
@@ -2139,6 +2152,7 @@ namespace VPM
             _settingsManager.SaveSettingsImmediate();
             
             // Dispose of managers
+            _incrementalRefresh?.Dispose();
             _settingsManager?.Dispose();
         }
 
@@ -3252,34 +3266,40 @@ namespace VPM
                 return result;
             }
 
-            // Build lookup cache once to avoid O(n*m) scanning for each dependency
-            // Maps base package names (without version) to their metadata keys and versions
-            var packageLookup = new Dictionary<string, List<(string key, int version)>>(StringComparer.OrdinalIgnoreCase);
-            
-            foreach (var kvp in _packageManager.PackageMetadata)
+            // Use cached lookup to avoid rebuilding on every call (major performance improvement)
+            // Only rebuild if package metadata count has changed
+            var currentVersion = _packageManager.PackageMetadata.Count;
+            if (_packageLookupCache == null || _packageLookupCacheVersion != currentVersion)
             {
-                var key = kvp.Key;
-                var normalizedKey = NormalizePackageName(key); // Remove #archived suffix
-                var version = ExtractVersionFromPackageName(normalizedKey);
+                _packageLookupCache = new Dictionary<string, List<(string key, int version)>>(StringComparer.OrdinalIgnoreCase);
                 
-                // Extract base name (without version number)
-                // e.g., "Creator.Package.1" -> "Creator.Package"
-                string baseName = normalizedKey;
-                if (version > 0)
+                foreach (var kvp in _packageManager.PackageMetadata)
                 {
-                    var parts = normalizedKey.Split('.');
-                    if (parts.Length >= 3 && int.TryParse(parts.Last(), out _))
+                    var key = kvp.Key;
+                    var normalizedKey = NormalizePackageName(key); // Remove #archived suffix
+                    var version = ExtractVersionFromPackageName(normalizedKey);
+                    
+                    // Extract base name (without version number)
+                    // e.g., "Creator.Package.1" -> "Creator.Package"
+                    string baseName = normalizedKey;
+                    if (version > 0)
                     {
-                        baseName = string.Join(".", parts.Take(parts.Length - 1));
+                        var parts = normalizedKey.Split('.');
+                        if (parts.Length >= 3 && int.TryParse(parts.Last(), out _))
+                        {
+                            baseName = string.Join(".", parts.Take(parts.Length - 1));
+                        }
                     }
+                    
+                    if (!_packageLookupCache.ContainsKey(baseName))
+                    {
+                        _packageLookupCache[baseName] = new List<(string, int)>();
+                    }
+                    
+                    _packageLookupCache[baseName].Add((key, version));
                 }
                 
-                if (!packageLookup.ContainsKey(baseName))
-                {
-                    packageLookup[baseName] = new List<(string, int)>();
-                }
-                
-                packageLookup[baseName].Add((key, version));
+                _packageLookupCacheVersion = currentVersion;
             }
 
             foreach (var dependency in dependencies)
@@ -3301,7 +3321,7 @@ namespace VPM
                 }
 
                 // Fast lookup using pre-built cache instead of scanning all keys
-                if (!packageLookup.TryGetValue(baseDependencyName, out var matchingEntries))
+                if (!_packageLookupCache.TryGetValue(baseDependencyName, out var matchingEntries))
                 {
                     continue;
                 }
@@ -4744,10 +4764,20 @@ namespace VPM
         
         /// <summary>
         /// Handles the Refresh Packages button click in the filter panel
+        /// Hold Shift for full refresh, otherwise uses incremental refresh
         /// </summary>
         private void RefreshPackagesButton_Click(object sender, RoutedEventArgs e)
         {
-            RefreshPackages();
+            // Hold Shift for full refresh, otherwise use incremental
+            if (Keyboard.Modifiers.HasFlag(ModifierKeys.Shift))
+            {
+                SetStatus("Full refresh requested...");
+                RefreshPackages();
+            }
+            else
+            {
+                RefreshPackagesIncremental();
+            }
         }
         
         private void ScrollHereArea_PreviewMouseWheel(object sender, MouseWheelEventArgs e)

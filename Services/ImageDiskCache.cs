@@ -30,6 +30,13 @@ namespace VPM.Services
         private readonly string _cacheFilePath;
         private readonly Dictionary<string, PackageImageCache> _memoryCache = new();
         
+        // Track invalid cache entries to prevent reload loops
+        // Key format: "packageKey::internalPath"
+        private readonly HashSet<string> _invalidEntries = new();
+        
+        // Minimum image dimension to consider valid (rejects 80x80 EXIF thumbnails)
+        private const int MinValidImageSize = 100;
+        
         // Save throttling
         private bool _saveInProgress = false;
         private bool _savePending = false;
@@ -103,16 +110,24 @@ namespace VPM.Services
 
         /// <summary>
         /// Tries to load an image from disk cache
-        /// Returns null if not cached or invalid
+        /// Returns null if not cached, invalid, or previously marked as invalid
         /// </summary>
         public BitmapImage TryGetCached(string varPath, string internalPath, long fileSize, long lastWriteTicks)
         {
             try
             {
                 var packageKey = GetPackageCacheKey(varPath, fileSize, lastWriteTicks);
+                var invalidKey = $"{packageKey}::{internalPath}";
 
                 lock (_cacheLock)
                 {
+                    // Check if this entry was previously marked as invalid (prevents reload loops)
+                    if (_invalidEntries.Contains(invalidKey))
+                    {
+                        _cacheMisses++;
+                        return null;
+                    }
+                    
                     if (!_memoryCache.TryGetValue(packageKey, out var packageCache))
                     {
                         _cacheMisses++;
@@ -140,6 +155,17 @@ namespace VPM.Services
                     bitmap.EndInit();
                     
                     bitmap.Freeze();
+
+                    // Validate image dimensions - reject tiny images (like 80x80 EXIF thumbnails)
+                    if (bitmap.PixelWidth < MinValidImageSize || bitmap.PixelHeight < MinValidImageSize)
+                    {
+                        // Mark as invalid to prevent reload loops, remove from cache
+                        _invalidEntries.Add(invalidKey);
+                        packageCache.Images.Remove(internalPath);
+                        packageCache.ImagePaths.Remove(internalPath);
+                        _cacheMisses++;
+                        return null;
+                    }
 
                     _cacheHits++;
                     _totalBytesRead += decryptedData.Length;
@@ -204,9 +230,19 @@ namespace VPM.Services
                         return (cached, uncached);
                     }
 
-                    // Check each image in batch
+                    // Check each image in batch with validation
                     foreach (var internalPath in internalPaths)
                     {
+                        var invalidKey = $"{packageKey}::{internalPath}";
+                        
+                        // Skip if previously marked as invalid
+                        if (_invalidEntries.Contains(invalidKey))
+                        {
+                            uncached.Add(internalPath);
+                            _cacheMisses++;
+                            continue;
+                        }
+                        
                         if (packageCache.Images.TryGetValue(internalPath, out var encryptedData))
                         {
                             try
@@ -224,6 +260,18 @@ namespace VPM.Services
                                 bitmap.StreamSource = stream;
                                 bitmap.EndInit();
                                 bitmap.Freeze();
+
+                                // Validate image dimensions - reject tiny images (like 80x80 EXIF thumbnails)
+                                if (bitmap.PixelWidth < MinValidImageSize || bitmap.PixelHeight < MinValidImageSize)
+                                {
+                                    // Mark as invalid to prevent reload loops, remove from cache
+                                    _invalidEntries.Add(invalidKey);
+                                    packageCache.Images.Remove(internalPath);
+                                    packageCache.ImagePaths.Remove(internalPath);
+                                    uncached.Add(internalPath);
+                                    _cacheMisses++;
+                                    continue;
+                                }
 
                                 cached[internalPath] = bitmap;
                                 _cacheHits++;
@@ -262,6 +310,14 @@ namespace VPM.Services
         {
             try
             {
+                // Validate image dimensions before caching
+                // Reject suspiciously small images (like 80x80 EXIF thumbnails)
+                if (bitmap.PixelWidth < MinValidImageSize || bitmap.PixelHeight < MinValidImageSize)
+                {
+                    // Don't cache tiny images - they're likely EXIF thumbnails or corrupted
+                    return false;
+                }
+                
                 var packageKey = GetPackageCacheKey(varPath, fileSize, lastWriteTicks);
 
                 lock (_cacheLock)
@@ -599,6 +655,35 @@ namespace VPM.Services
             catch
             {
                 return 0;
+            }
+        }
+
+        /// <summary>
+        /// Clears all cached images from memory and disk.
+        /// Use this to reset the cache if corrupted images were cached.
+        /// </summary>
+        public void ClearAllCache()
+        {
+            lock (_cacheLock)
+            {
+                _memoryCache.Clear();
+                _invalidEntries.Clear();
+                _cacheHits = 0;
+                _cacheMisses = 0;
+                _totalBytesWritten = 0;
+                _totalBytesRead = 0;
+            }
+
+            try
+            {
+                if (File.Exists(_cacheFilePath))
+                {
+                    File.Delete(_cacheFilePath);
+                }
+            }
+            catch
+            {
+                // Ignore deletion errors
             }
         }
     }
