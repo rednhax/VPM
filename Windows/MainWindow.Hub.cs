@@ -20,20 +20,24 @@ namespace VPM
                 // Get the destination folder (AddonPackages or AllPackages)
                 var destinationFolder = GetHubDownloadFolder();
                 
-                // Get dictionary of local package names to their file paths for library status checking
+                // CRITICAL FIX: Get dictionary of ALL local package names from PackageMetadata
+                // NOT from the filtered Packages UI collection!
+                // This ensures we include packages from BOTH AddonPackages AND AllPackages folders
                 var localPackagePaths = new System.Collections.Generic.Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-                if (Packages != null && _packageManager?.PackageMetadata != null)
+                if (_packageManager?.PackageMetadata != null)
                 {
-                    foreach (var package in Packages)
+                    foreach (var metadata in _packageManager.PackageMetadata.Values)
                     {
-                        if (_packageManager.PackageMetadata.TryGetValue(package.MetadataKey, out var metadata) 
-                            && !string.IsNullOrEmpty(metadata.FilePath))
+                        // Only include packages that are on disk (Loaded or Available)
+                        if (metadata.Status != "Loaded" && metadata.Status != "Available")
+                            continue;
+                        
+                        if (!string.IsNullOrEmpty(metadata.FilePath))
                         {
-                            // Use package name (without .var) as key
-                            var name = package.Name.EndsWith(".var", StringComparison.OrdinalIgnoreCase) 
-                                ? package.Name.Substring(0, package.Name.Length - 4) 
-                                : package.Name;
-                            if (!localPackagePaths.ContainsKey(name))
+                            // Use the actual filename from the file path as the key
+                            // This preserves the exact casing from disk
+                            var name = System.IO.Path.GetFileNameWithoutExtension(metadata.FilePath);
+                            if (!string.IsNullOrEmpty(name) && !localPackagePaths.ContainsKey(name))
                             {
                                 localPackagePaths[name] = metadata.FilePath;
                             }

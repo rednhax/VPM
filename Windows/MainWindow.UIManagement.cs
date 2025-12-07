@@ -25,6 +25,9 @@ namespace VPM
         // Cache for dependents count calculation to avoid O(n²) recalculation
         private Dictionary<string, int> _cachedDependentsCount = null;
         private int _cachedPackageMetadataVersion = -1;
+        
+        // Track whether packages are currently loading
+        private bool _isLoadingPackages = false;
 
         // Windows API for dark title bar
         [DllImport("dwmapi.dll", PreserveSig = true)]
@@ -792,6 +795,10 @@ namespace VPM
                 return;
             }
             
+            // Disable Hub buttons while loading packages
+            _isLoadingPackages = true;
+            DisableHubButtons();
+            
             SetStatus("Scanning VAR files...");
 
             try
@@ -843,6 +850,9 @@ namespace VPM
 
                 // Update UI with real package data
                 await UpdatePackageListAsync();
+                
+                // Check for package updates after packages are loaded
+                _ = CheckForPackageUpdatesAsync();
 
                 // Auto-build image index if it doesn't exist
                 if (_imageManager.ImageIndex.Count == 0)
@@ -874,6 +884,12 @@ namespace VPM
                 MessageBox.Show($"Error refreshing packages: {ex.Message}", "Error", 
                                MessageBoxButton.OK, MessageBoxImage.Error);
                 SetStatus("Package refresh failed");
+            }
+            finally
+            {
+                // Re-enable Hub buttons after loading completes
+                _isLoadingPackages = false;
+                EnableHubButtons();
             }
         }
 
@@ -1311,6 +1327,19 @@ namespace VPM
                             StatusFilterList.Items.Add(displayText);
                             
                             if (selectedStatuses.Contains(ver.Key))
+                            {
+                                StatusFilterList.SelectedItems.Add(displayText);
+                            }
+                        }
+
+                        // Add dependency status counts (No Dependents / No Dependencies)
+                        var depCounts = _filterManager.GetDependencyStatusCounts(_packageManager.PackageMetadata);
+                        foreach (var dep in depCounts.OrderBy(s => s.Key))
+                        {
+                            var displayText = $"{dep.Key} ({dep.Value:N0})";
+                            StatusFilterList.Items.Add(displayText);
+                            
+                            if (selectedStatuses.Contains(dep.Key))
                             {
                                 StatusFilterList.SelectedItems.Add(displayText);
                             }
@@ -1778,6 +1807,50 @@ namespace VPM
                 return false;
             }
             return true;
+        }
+
+        /// <summary>
+        /// Greys out the VaM Hub and Updates buttons during package loading
+        /// </summary>
+        private void DisableHubButtons()
+        {
+            Dispatcher.Invoke(() =>
+            {
+                if (VamHubImageButton != null)
+                {
+                    VamHubImageButton.IsEnabled = false;
+                    VamHubImageButton.Background = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(60, 60, 60));
+                    VamHubImageButton.Foreground = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(100, 100, 100));
+                }
+                if (CheckUpdatesImageButton != null)
+                {
+                    CheckUpdatesImageButton.IsEnabled = false;
+                    CheckUpdatesImageButton.Background = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(60, 60, 60));
+                    CheckUpdatesImageButton.Foreground = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(100, 100, 100));
+                }
+            });
+        }
+
+        /// <summary>
+        /// Restores the VaM Hub and Updates buttons after package loading completes
+        /// </summary>
+        private void EnableHubButtons()
+        {
+            Dispatcher.Invoke(() =>
+            {
+                if (VamHubImageButton != null)
+                {
+                    VamHubImageButton.IsEnabled = true;
+                    VamHubImageButton.ClearValue(System.Windows.Controls.Button.BackgroundProperty);
+                    VamHubImageButton.ClearValue(System.Windows.Controls.Button.ForegroundProperty);
+                }
+                if (CheckUpdatesImageButton != null)
+                {
+                    CheckUpdatesImageButton.IsEnabled = true;
+                    CheckUpdatesImageButton.ClearValue(System.Windows.Controls.Button.BackgroundProperty);
+                    CheckUpdatesImageButton.ClearValue(System.Windows.Controls.Button.ForegroundProperty);
+                }
+            });
         }
 
         #endregion

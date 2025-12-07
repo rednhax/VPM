@@ -37,6 +37,8 @@ namespace VPM.Models
                 {
                     OnPropertyChanged(nameof(StatusText));
                     OnPropertyChanged(nameof(StatusColor));
+                    OnPropertyChanged(nameof(CanCancel));
+                    OnPropertyChanged(nameof(ProgressText));
                 }
             }
         }

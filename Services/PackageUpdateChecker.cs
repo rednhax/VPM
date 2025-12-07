@@ -348,6 +348,12 @@ namespace VPM.Services
                     // We need to find the actual latest version number
                     var latestVersion = GetHubLatestVersion(baseName);
                     
+                    // DEBUG: Log version comparison for ColliderEditor
+                    if (baseName.Contains("ColliderEditor", StringComparison.OrdinalIgnoreCase))
+                    {
+                        Debug.WriteLine($"[UpdateChecker] ColliderEditor: local={localVersion}, hub latest={latestVersion}");
+                    }
+                    
                     if (latestVersion > localVersion)
                     {
                         _availableUpdates.Add(new PackageUpdateInfo

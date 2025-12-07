@@ -32,6 +32,9 @@ namespace VPM
                 // Save package metadata cache on exit
                 _packageManager?.SaveBinaryCache();
 
+                // Save Hub image cache on exit
+                _hubService?.SaveImageCache();
+
                 _imageManager?.Dispose();
                 DisposePackageDownloader();
                 _sceneSelectionDebouncer?.Dispose();

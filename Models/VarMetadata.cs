@@ -69,6 +69,10 @@ namespace VPM.Models
         public List<string> MissingDependencies { get; set; } = new List<string>();
         public bool HasMissingDependencies => MissingDependencies?.Count > 0;
         public int MissingDependencyCount => MissingDependencies?.Count ?? 0;
+
+        // Dependency and Dependents tracking
+        public int DependencyCount { get; set; } = 0;  // Number of packages this one depends on
+        public int DependentsCount { get; set; } = 0;  // Number of packages that depend on this one
     }
 }
 

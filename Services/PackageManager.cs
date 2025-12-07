@@ -1327,6 +1327,9 @@ namespace VPM.Services
             // Build dependency graph for reverse lookups and analysis
             _dependencyGraph.Build(PackageMetadata);
             
+            // Populate dependency counts for each package
+            PopulateDependencyCounts();
+            
             // Save binary cache asynchronously after scanning completes (fire-and-forget)
             // Don't await to avoid blocking the UI
             _ = SaveBinaryCacheAsync();
@@ -1460,6 +1463,115 @@ namespace VPM.Services
                     }
                 }
             }
+        }
+
+        /// <summary>
+        /// Removes a newly downloaded package from all MissingDependencies lists.
+        /// This is more efficient than re-running DetectMissingDependencies() for the entire collection.
+        /// Call this after downloading a package from Hub to update the missing dependencies state.
+        /// </summary>
+        /// <param name="packageName">The full package name (Creator.Package.Version) that was downloaded</param>
+        public void RemoveFromMissingDependencies(string packageName)
+        {
+            if (string.IsNullOrEmpty(packageName))
+                return;
+            
+            // Extract base name for .latest resolution
+            var baseName = GetPackageBaseName(packageName);
+            var latestRef = baseName + ".latest";
+            
+            foreach (var kvp in PackageMetadata)
+            {
+                var metadata = kvp.Value;
+                if (metadata.MissingDependencies == null || metadata.MissingDependencies.Count == 0)
+                    continue;
+                
+                // Remove exact match
+                metadata.MissingDependencies.Remove(packageName);
+                
+                // Remove .latest reference if this package satisfies it
+                if (!string.IsNullOrEmpty(baseName))
+                {
+                    metadata.MissingDependencies.Remove(latestRef);
+                    
+                    // Also remove any versioned reference to the same base package
+                    // (e.g., if they needed Creator.Package.5 but we downloaded Creator.Package.6)
+                    metadata.MissingDependencies.RemoveAll(dep =>
+                    {
+                        if (dep.EndsWith(".latest", StringComparison.OrdinalIgnoreCase))
+                            return false; // Already handled above
+                        
+                        var depBase = GetPackageBaseName(dep);
+                        return string.Equals(depBase, baseName, StringComparison.OrdinalIgnoreCase);
+                    });
+                }
+            }
+        }
+        
+        /// <summary>
+        /// Populates DependencyCount and DependentsCount for all packages based on the dependency graph
+        /// </summary>
+        private void PopulateDependencyCounts()
+        {
+            int noDepsCount = 0;
+            int noDependentsCount = 0;
+            
+            foreach (var kvp in PackageMetadata)
+            {
+                var metadata = kvp.Value;
+                var packageName = kvp.Key;
+                
+                // Set dependency count (number of packages this one depends on)
+                if (metadata.Dependencies != null)
+                {
+                    metadata.DependencyCount = metadata.Dependencies.Count;
+                }
+                else
+                {
+                    metadata.DependencyCount = 0;
+                }
+                
+                // Set dependents count (number of packages that depend on this one)
+                var dependents = _dependencyGraph.GetDependents(packageName);
+                metadata.DependentsCount = dependents?.Count ?? 0;
+                
+                // Debug tracking
+                if (metadata.DependencyCount == 0)
+                    noDepsCount++;
+                if (metadata.DependentsCount == 0)
+                    noDependentsCount++;
+            }
+            
+        }
+        
+        /// <summary>
+        /// Extracts the base name (Creator.Package) from a full package name (Creator.Package.Version)
+        /// </summary>
+        private string GetPackageBaseName(string packageName)
+        {
+            if (string.IsNullOrEmpty(packageName))
+                return null;
+            
+            // Remove .var extension if present
+            var name = packageName.EndsWith(".var", StringComparison.OrdinalIgnoreCase)
+                ? packageName.Substring(0, packageName.Length - 4)
+                : packageName;
+            
+            // Find the last dot that's followed by a number (version)
+            for (int i = name.Length - 1; i >= 0; i--)
+            {
+                if (name[i] == '.')
+                {
+                    var afterDot = name.Substring(i + 1);
+                    if (int.TryParse(afterDot, out _))
+                    {
+                        return name.Substring(0, i);
+                    }
+                    break;
+                }
+            }
+            
+            return name;
         }
 
         #region Dependency Graph API

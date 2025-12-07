@@ -25,6 +25,8 @@ namespace VPM.Services
         public HashSet<string> SelectedSubfolders { get; set; }
         public string SelectedDamagedFilter { get; set; }
         public bool FilterDuplicates { get; set; }
+        public bool FilterNoDependents { get; set; }
+        public bool FilterNoDependencies { get; set; }
         public DateFilter DateFilter { get; set; }
         public FavoritesManager FavoritesManager { get; set; }
         public AutoInstallManager AutoInstallManager { get; set; }

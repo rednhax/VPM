@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Diagnostics;
+using System.Linq;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
@@ -79,6 +80,10 @@ namespace VPM.Models
         [JsonPropertyName("hubFiles")]
         public List<HubFile> HubFiles { get; set; }
 
+        [JsonPropertyName("tags")]
+        [JsonConverter(typeof(FlexibleDictConverter))]
+        public Dictionary<string, object> TagsDict { get; set; }
+
         // UI helper properties
         private bool _inLibrary;
         public bool InLibrary
@@ -100,6 +105,112 @@ namespace VPM.Models
             get => _updateMessage;
             set { _updateMessage = value; OnPropertyChanged(nameof(UpdateMessage)); }
         }
+
+        // Computed display properties for cards
+        
+        /// <summary>
+        /// Formatted last update string (e.g., "2 days ago", "3 weeks ago", "Jan 15, 2024")
+        /// </summary>
+        public string LastUpdateDisplay
+        {
+            get
+            {
+                if (LastUpdateTimestamp <= 0) return "";
+                var elapsed = DateTime.Now - LastUpdate;
+                
+                if (elapsed.TotalMinutes < 60)
+                    return $"{(int)elapsed.TotalMinutes}m ago";
+                if (elapsed.TotalHours < 24)
+                    return $"{(int)elapsed.TotalHours}h ago";
+                if (elapsed.TotalDays < 7)
+                    return $"{(int)elapsed.TotalDays}d ago";
+                if (elapsed.TotalDays < 30)
+                    return $"{(int)(elapsed.TotalDays / 7)}w ago";
+                if (elapsed.TotalDays < 365)
+                    return LastUpdate.ToString("MMM d");
+                return LastUpdate.ToString("MMM d, yyyy");
+            }
+        }
+
+        /// <summary>
+        /// Whether this was updated recently (within 7 days)
+        /// </summary>
+        public bool IsRecentlyUpdated => LastUpdateTimestamp > 0 && (DateTime.Now - LastUpdate).TotalDays <= 7;
+
+        /// <summary>
+        /// Rating display with count (e.g., "4.5 (127)")
+        /// </summary>
+        public string RatingDisplay => RatingCount > 0 ? $"{RatingAvg:F1} ({RatingCount})" : $"{RatingAvg:F1}";
+
+        /// <summary>
+        /// Whether this has dependencies
+        /// </summary>
+        public bool HasDependencies => DependencyCount > 0;
+
+        /// <summary>
+        /// Dependency count display (e.g., "3 deps")
+        /// </summary>
+        public string DependencyDisplay => DependencyCount > 0 ? $"{DependencyCount} dep{(DependencyCount > 1 ? "s" : "")}" : "";
+
+        /// <summary>
+        /// Total file size of all hub files in bytes
+        /// </summary>
+        public long TotalFileSize => HubFiles?.Count > 0 ? HubFiles.Sum(f => f.FileSize) : 0;
+
+        /// <summary>
+        /// Formatted total file size (e.g., "45.2 MB")
+        /// </summary>
+        public string FileSizeDisplay
+        {
+            get
+            {
+                var bytes = TotalFileSize;
+                if (bytes <= 0) return "";
+                
+                string[] sizes = { "B", "KB", "MB", "GB" };
+                int order = 0;
+                double size = bytes;
+                while (size >= 1024 && order < sizes.Length - 1)
+                {
+                    order++;
+                    size /= 1024;
+                }
+                return $"{size:0.#} {sizes[order]}";
+            }
+        }
+
+        /// <summary>
+        /// License type from first hub file
+        /// </summary>
+        public string LicenseType => HubFiles?.Count > 0 ? HubFiles[0].LicenseType : null;
+
+        /// <summary>
+        /// Whether this is externally hosted (not directly downloadable from Hub)
+        /// </summary>
+        public bool IsExternallyHosted => !HubDownloadable;
+
+        /// <summary>
+        /// List of tag names from the resource
+        /// </summary>
+        public List<string> TagsList
+        {
+            get
+            {
+                if (TagsDict == null || TagsDict.Count == 0)
+                    return new List<string>();
+                
+                // Filter out null/empty values and return keys
+                return TagsDict
+                    .Where(kvp => kvp.Value != null && !string.IsNullOrEmpty(kvp.Value.ToString()))
+                    .Select(kvp => kvp.Key)
+                    .ToList();
+            }
+        }
+
+        /// <summary>
+        /// Whether this resource has tags
+        /// </summary>
+        public bool HasTags => TagsList.Count > 0;
 
         public event PropertyChangedEventHandler PropertyChanged;
         protected void OnPropertyChanged(string name) =>
@@ -462,6 +573,109 @@ namespace VPM.Models
         public override void Write(Utf8JsonWriter writer, float value, JsonSerializerOptions options)
         {
             writer.WriteNumberValue(value);
+        }
+    }
+
+    /// <summary>
+    /// JSON converter that handles Dictionary values that may come in various formats.
+    /// Used for Hub resource tags which can be an object, array, or comma-separated string.
+    /// </summary>
+    public class FlexibleDictConverter : JsonConverter<Dictionary<string, object>>
+    {
+        public override Dictionary<string, object> Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+        {
+            try
+            {
+                // Explicit JSON null
+                if (reader.TokenType == JsonTokenType.Null)
+                {
+                    return null;
+                }
+
+                // Parse the full value so we reliably consume all tokens
+                using var doc = JsonDocument.ParseValue(ref reader);
+                var root = doc.RootElement;
+                var dict = new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase);
+
+                switch (root.ValueKind)
+                {
+                    case JsonValueKind.Object:
+                        // Typical Hub format for tag dictionaries: { "Tag1": 123, "Tag2": 45, ... }
+                        foreach (var prop in root.EnumerateObject())
+                        {
+                            if (!string.IsNullOrWhiteSpace(prop.Name))
+                            {
+                                dict[prop.Name] = true;
+                            }
+                        }
+                        break;
+
+                    case JsonValueKind.Array:
+                        // Handle ["Tag1", "Tag2", ...] or array of objects with a name field
+                        foreach (var element in root.EnumerateArray())
+                        {
+                            if (element.ValueKind == JsonValueKind.String)
+                            {
+                                var tag = element.GetString();
+                                if (!string.IsNullOrWhiteSpace(tag))
+                                    dict[tag.Trim()] = true;
+                            }
+                            else if (element.ValueKind == JsonValueKind.Object)
+                            {
+                                // Fallback: try common fields like "name" or "tag"
+                                if (element.TryGetProperty("name", out var nameProp) && nameProp.ValueKind == JsonValueKind.String)
+                                {
+                                    var tag = nameProp.GetString();
+                                    if (!string.IsNullOrWhiteSpace(tag))
+                                        dict[tag.Trim()] = true;
+                                }
+                                else if (element.TryGetProperty("tag", out var tagProp) && tagProp.ValueKind == JsonValueKind.String)
+                                {
+                                    var tag = tagProp.GetString();
+                                    if (!string.IsNullOrWhiteSpace(tag))
+                                        dict[tag.Trim()] = true;
+                                }
+                            }
+                        }
+                        break;
+
+                    case JsonValueKind.String:
+                        // Handle "Tag1, Tag2, Tag3"
+                        var str = root.GetString();
+                        if (!string.IsNullOrWhiteSpace(str))
+                        {
+                            var parts = str.Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries);
+                            foreach (var part in parts)
+                            {
+                                var tag = part.Trim();
+                                if (!string.IsNullOrWhiteSpace(tag))
+                                    dict[tag] = true;
+                            }
+                        }
+                        break;
+                }
+
+                return dict;
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"FlexibleDictConverter error: {ex.Message}");
+                return new Dictionary<string, object>();
+            }
+        }
+
+        public override void Write(Utf8JsonWriter writer, Dictionary<string, object> value, JsonSerializerOptions options)
+        {
+            writer.WriteStartObject();
+            if (value != null)
+            {
+                foreach (var kvp in value)
+                {
+                    writer.WritePropertyName(kvp.Key);
+                    writer.WriteNullValue();
+                }
+            }
+            writer.WriteEndObject();
         }
     }
 }

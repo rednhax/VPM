@@ -2023,6 +2023,10 @@ namespace VPM
         {
             var settings = _settingsManager.Settings;
             
+            // Disable Hub buttons while loading packages
+            _isLoadingPackages = true;
+            DisableHubButtons();
+            
             // Load caches asynchronously, then refresh packages after cache is ready
             // This prevents rebuilding the cache on every startup
             _ = LoadCachesAndRefreshAsync(settings);
@@ -2048,8 +2052,9 @@ namespace VPM
                 // Load binary cache first (critical for performance)
                 await _packageManager.LoadBinaryCacheAsync();
                 
-                // Load image cache in parallel
-                _ = _imageManager.LoadImageCacheAsync();
+                // Load image caches in parallel
+                await _imageManager.LoadImageCacheAsync();
+                await Task.Run(() => _hubService?.LoadImageCache());
                 
                 // Now refresh packages with cache ready
                 if (!string.IsNullOrEmpty(settings.SelectedFolder) && 

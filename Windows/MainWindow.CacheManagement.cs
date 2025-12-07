@@ -2,6 +2,7 @@
 using System.Diagnostics;
 using System.IO;
 using System.Windows;
+using VPM.Services;
 
 namespace VPM
 {
@@ -9,7 +10,7 @@ namespace VPM
     {
         /// <summary>
         /// Opens the cache folder in Windows Explorer
-        /// Contains both PackageMetadata.cache and PackageImages.cache
+        /// Contains PackageMetadata.cache, PackageImages.cache, and HubResources.cache
         /// </summary>
         private void OpenCacheFolder_Click(object sender, RoutedEventArgs e)
         {
@@ -69,6 +70,76 @@ namespace VPM
                     "Error",
                     MessageBoxButton.OK,
                     MessageBoxImage.Error);
+            }
+        }
+        
+        /// <summary>
+        /// Clears the Hub resources cache (packages.json binary cache)
+        /// Forces a fresh download from Hub on next access
+        /// </summary>
+        private void ClearHubCache_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                var result = MessageBox.Show(
+                    "Clear Hub resources cache? This will force a fresh download of the Hub packages index on next access.\n\nThis is useful if you're experiencing issues with package updates or Hub browsing.",
+                    "Clear Hub Cache",
+                    MessageBoxButton.OKCancel,
+                    MessageBoxImage.Question);
+
+                if (result == MessageBoxResult.OK)
+                {
+                    // Create a temporary HubService to access the cache
+                    using var hubService = new HubService();
+                    var cleared = hubService.ClearResourcesCache();
+                    
+                    if (cleared)
+                    {
+                        MessageBox.Show(
+                            "Hub resources cache cleared successfully.\n\nThe Hub packages index will be downloaded fresh on next access.",
+                            "Cache Cleared",
+                            MessageBoxButton.OK,
+                            MessageBoxImage.Information);
+                    }
+                    else
+                    {
+                        MessageBox.Show(
+                            "Hub cache was already empty or could not be cleared.",
+                            "Cache Status",
+                            MessageBoxButton.OK,
+                            MessageBoxImage.Information);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(
+                    $"Error clearing Hub cache: {ex.Message}",
+                    "Error",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Error);
+            }
+        }
+        
+        /// <summary>
+        /// Gets Hub cache statistics for display
+        /// </summary>
+        private string GetHubCacheStatistics()
+        {
+            try
+            {
+                using var hubService = new HubService();
+                var stats = hubService.GetCacheStatistics();
+                
+                if (stats == null)
+                    return "Hub cache: Not initialized";
+                
+                return $"Hub cache: {stats.PackageCount:N0} packages, {stats.CacheSizeFormatted}, " +
+                       $"{stats.ConditionalHitRate:F0}% conditional hits";
+            }
+            catch
+            {
+                return "Hub cache: Unable to read statistics";
             }
         }
     }

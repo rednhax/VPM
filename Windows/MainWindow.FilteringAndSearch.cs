@@ -160,6 +160,8 @@ namespace VPM
                 
                 // Update status filters (includes regular status, optimization status, version status, and favorites)
                 _filterManager.FilterDuplicates = false;
+                _filterManager.FilterNoDependents = false;
+                _filterManager.FilterNoDependencies = false;
                 if (StatusFilterList?.SelectedItems != null && StatusFilterList.SelectedItems.Count > 0)
                 {
                     var seenStatuses = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -190,6 +192,14 @@ namespace VPM
                         else if (status == "Latest" || status == "Old")
                         {
                             _filterManager.SelectedVersionStatuses.Add(status);
+                        }
+                        else if (status == "No Dependents")
+                        {
+                            _filterManager.FilterNoDependents = true;
+                        }
+                        else if (status == "No Dependencies")
+                        {
+                            _filterManager.FilterNoDependencies = true;
                         }
                         else
                         {
@@ -895,6 +905,21 @@ namespace VPM
                     }
                 }
                 
+                // Add dependency status counts (No Dependents / No Dependencies)
+                var depCounts = _filterManager.GetDependencyStatusCounts(filteredPackages);
+
+                foreach (var dep in depCounts.OrderBy(s => s.Key))
+                {
+                    var displayText = $"{dep.Key} ({dep.Value:N0})";
+                    StatusFilterList.Items.Add(displayText);
+
+                    // Restore selection if this dependency status was previously selected
+                    if (selectedStatuses.Contains(dep.Key))
+                    {
+                        StatusFilterList.SelectedItems.Add(displayText);
+                    }
+                }
+                
                 // Add favorites option
                 if (_favoritesManager != null && _packageManager?.PackageMetadata != null)
                 {
@@ -1291,6 +1316,14 @@ namespace VPM
                 {
                     StatusFilterList.Items.Add($"{ver.Key} ({ver.Value:N0})");
                 }
+                
+                // Add dependency status counts (No Dependents / No Dependencies)
+                var depCounts = _filterManager.GetDependencyStatusCounts(_packageManager.PackageMetadata);
+                
+                foreach (var dep in depCounts.OrderBy(s => s.Key))
+                {
+                    StatusFilterList.Items.Add($"{dep.Key} ({dep.Value:N0})");
+                }
             }
             catch (Exception)
             {
@@ -1536,6 +1569,19 @@ namespace VPM
                 StatusFilterList.Items.Add(displayText);
 
                 if (selectedStatuses.Contains(ver.Key))
+                {
+                    StatusFilterList.SelectedItems.Add(displayText);
+                }
+            }
+            
+            // Add dependency status items (No Dependents / No Dependencies)
+            var depCounts = _filterManager.GetDependencyStatusCounts(filteredPackages);
+            foreach (var dep in depCounts.OrderBy(s => s.Key))
+            {
+                var displayText = $"{dep.Key} ({dep.Value:N0})";
+                StatusFilterList.Items.Add(displayText);
+
+                if (selectedStatuses.Contains(dep.Key))
                 {
                     StatusFilterList.SelectedItems.Add(displayText);
                 }

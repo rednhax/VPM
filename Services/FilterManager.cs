@@ -36,6 +36,8 @@ namespace VPM.Services
         public HashSet<string> SelectedPackages { get; set; } = new HashSet<string>();
         public DateFilter DateFilter { get; set; } = new DateFilter();
         public bool FilterDuplicates { get; set; } = false;
+        public bool FilterNoDependents { get; set; } = false;
+        public bool FilterNoDependencies { get; set; } = false;
         public bool HideArchivedPackages { get; set; } = true;
 
         public void ClearAllFilters()
@@ -59,6 +61,8 @@ namespace VPM.Services
             SelectedPackages.Clear();
             DateFilter = new DateFilter();
             FilterDuplicates = false;
+            FilterNoDependents = false;
+            FilterNoDependencies = false;
         }
 
         public void ClearCategoryFilter()
@@ -78,6 +82,8 @@ namespace VPM.Services
             SelectedStatus = null;
             SelectedStatuses.Clear();
             FilterDuplicates = false;
+            FilterNoDependents = false;
+            FilterNoDependencies = false;
         }
 
         public void ClearLicenseFilter()
@@ -145,6 +151,8 @@ namespace VPM.Services
                 SelectedSubfolders = new HashSet<string>(SelectedSubfolders, StringComparer.OrdinalIgnoreCase),
                 SelectedDamagedFilter = SelectedDamagedFilter,
                 FilterDuplicates = FilterDuplicates,
+                FilterNoDependents = FilterNoDependents,
+                FilterNoDependencies = FilterNoDependencies,
                 DateFilter = new DateFilter 
                 { 
                     FilterType = DateFilter.FilterType,
@@ -320,7 +328,15 @@ namespace VPM.Services
             if (state.FilterDuplicates && metadata.DuplicateLocationCount <= 1)
                 return false;
 
-            // 12. Date filter
+            // 12. No Dependents filter (packages that nothing depends on)
+            if (state.FilterNoDependents && metadata.DependentsCount > 0)
+                return false;
+
+            // 13. No Dependencies filter (packages that don't require other packages)
+            if (state.FilterNoDependencies && metadata.DependencyCount > 0)
+                return false;
+
+            // 14. Date filter
             if (state.DateFilter.FilterType != DateFilterType.AllTime)
             {
                 var dateToCheck = metadata.ModifiedDate ?? metadata.CreatedDate;
@@ -328,14 +344,14 @@ namespace VPM.Services
                     return false;
             }
 
-            // 13. File size filter
+            // 15. File size filter
             if (state.SelectedFileSizeRanges.Count > 0)
             {
                 if (!MatchesFileSizeFilter(metadata.FileSize, state))
                     return false;
             }
 
-            // 14. Subfolders filter
+            // 16. Subfolders filter
             if (state.SelectedSubfolders.Count > 0)
             {
                 var subfolder = ExtractSubfolderFromMetadata(metadata);
@@ -343,7 +359,7 @@ namespace VPM.Services
                     return false;
             }
 
-            // 15. Damaged filter
+            // 17. Damaged filter
             if (!string.IsNullOrEmpty(state.SelectedDamagedFilter))
             {
                 if (state.SelectedDamagedFilter.Contains("Damaged"))
@@ -574,6 +590,29 @@ namespace VPM.Services
                 else
                     counts["Latest"]++;
             }
+            
+            return counts;
+        }
+
+        /// <summary>
+        /// Get dependency status counts (No Dependents / No Dependencies)
+        /// </summary>
+        public Dictionary<string, int> GetDependencyStatusCounts(Dictionary<string, VarMetadata> packages)
+        {
+            var counts = new Dictionary<string, int>
+            {
+                ["No Dependents"] = 0,
+                ["No Dependencies"] = 0
+            };
+            
+            foreach (var package in packages.Values)
+            {
+                if (package.DependentsCount == 0)
+                    counts["No Dependents"]++;
+                if (package.DependencyCount == 0)
+                    counts["No Dependencies"]++;
+            }
+            
             
             return counts;
         }

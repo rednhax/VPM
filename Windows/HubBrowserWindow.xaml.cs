@@ -12,6 +12,7 @@ using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
+using System.Windows.Documents;
 using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Media;
@@ -100,6 +101,10 @@ namespace VPM.Windows
         
         // Old version handling option
         private string _oldVersionHandling = "No Change";
+        
+        // Pre-computed lookups for fast library status checking
+        private HashSet<string> _localPackageNames;  // All package names (without .var)
+        private Dictionary<string, int> _localPackageVersions;  // Package group -> highest local version
 
         public HubBrowserWindow(string destinationFolder, Dictionary<string, string> localPackagePaths = null, PackageManager packageManager = null, SettingsManager settingsManager = null)
         {
@@ -110,6 +115,12 @@ namespace VPM.Windows
             _localPackagePaths = localPackagePaths ?? new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
             _packageManager = packageManager;
             _settingsManager = settingsManager ?? new SettingsManager();
+            
+            // Pre-compute lookups for fast library status checking
+            BuildLocalPackageLookups();
+            
+            // Initialize the cached image converter with the HubService
+            CachedHubImageConverter.SetHubService(_hubService);
             
             // Derive VaM folder from destination folder
             // Look for the parent that contains known VaM folders (Custom, Saves, etc.)
@@ -172,16 +183,7 @@ namespace VPM.Windows
 
         private async void HubBrowserWindow_Loaded(object sender, RoutedEventArgs e)
         {
-            // Load packages.json for version checking
-            await _hubService.LoadPackagesJsonAsync();
-            
-            // Load creator list from packages.json (fast, has all creators)
-            LoadCreatorListFromPackages();
-            
-            // Load dynamic filter options from Hub API
-            await LoadFilterOptionsAsync();
-            
-            // Hook up old version handling dropdown
+            // Hook up old version handling dropdown (sync, fast)
             if (OldVersionHandlingDropdown != null)
             {
                 // Load saved setting from settings manager
@@ -201,8 +203,25 @@ namespace VPM.Windows
                 OldVersionHandlingDropdown.SelectionChanged += OldVersionHandlingDropdown_SelectionChanged;
             }
             
-            // Initial search
-            await SearchAsync();
+            // Start all async operations in parallel for faster startup
+            var packagesTask = _hubService.LoadPackagesJsonAsync();
+            var searchTask = SearchAsync();
+            
+            // Wait for all tasks in parallel
+            await Task.WhenAll(packagesTask, searchTask);
+        }
+
+        protected override void OnKeyDown(KeyEventArgs e)
+        {
+            // Ctrl+Shift+P to open Performance Monitor
+            if (e.Key == Key.P && 
+                (Keyboard.Modifiers & ModifierKeys.Control) == ModifierKeys.Control &&
+                (Keyboard.Modifiers & ModifierKeys.Shift) == ModifierKeys.Shift)
+            {
+                ShowPerformanceMonitor();
+                e.Handled = true;
+            }
+            base.OnKeyDown(e);
         }
         
         private void OldVersionHandlingDropdown_SelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -231,7 +250,6 @@ namespace VPM.Windows
             }
             catch (Exception ex)
             {
-                Debug.WriteLine($"[HubBrowser] Error disposing WebView2: {ex.Message}");
             }
         }
         
@@ -270,11 +288,9 @@ namespace VPM.Windows
                 OverviewWebView.NavigationCompleted += WebView_NavigationCompleted;
                 
                 _webViewInitialized = true;
-                Debug.WriteLine("[HubBrowser] WebView2 initialized successfully");
             }
             catch (Exception ex)
             {
-                Debug.WriteLine($"[HubBrowser] WebView2 initialization failed: {ex.Message}");
                 _webViewInitialized = false;
                 ShowWebViewError($"WebView2 initialization failed: {ex.Message}");
             }
@@ -292,7 +308,6 @@ namespace VPM.Windows
             
             if (!e.IsSuccess)
             {
-                Debug.WriteLine($"[HubBrowser] Navigation failed: {e.WebErrorStatus}");
                 ShowWebViewError($"Failed to load page: {e.WebErrorStatus}");
             }
             else
@@ -331,7 +346,6 @@ namespace VPM.Windows
             }
             catch (Exception ex)
             {
-                Debug.WriteLine($"[HubBrowser] Failed to inject dark theme: {ex.Message}");
             }
         }
         
@@ -341,6 +355,16 @@ namespace VPM.Windows
             WebViewErrorPanel.Visibility = Visibility.Visible;
         }
         
+        /// <summary>
+        /// Open the performance monitoring window
+        /// </summary>
+        public void ShowPerformanceMonitor()
+        {
+            var perfWindow = new PerformanceWindow(_hubService.PerformanceMonitor);
+            perfWindow.Owner = this;
+            perfWindow.Show();
+        }
+
         private void OpenInBrowser_Click(object sender, RoutedEventArgs e)
         {
             if (!string.IsNullOrEmpty(_currentWebViewUrl))
@@ -353,7 +377,111 @@ namespace VPM.Windows
                 }
                 catch (Exception ex)
                 {
-                    Debug.WriteLine($"[HubBrowser] Failed to open browser: {ex.Message}");
+                }
+            }
+        }
+        
+        private void SupportCreator_Click(object sender, RoutedEventArgs e)
+        {
+            if (sender is TextBlock textBlock && textBlock.Tag is string url && !string.IsNullOrEmpty(url))
+            {
+                try
+                {
+                    Process.Start(new ProcessStartInfo(url) { UseShellExecute = true });
+                }
+                catch (Exception ex)
+                {
+                }
+            }
+        }
+        
+        private void DetailCreator_Click(object sender, MouseButtonEventArgs e)
+        {
+            if (sender is TextBlock textBlock && textBlock.Tag is string creatorName && !string.IsNullOrEmpty(creatorName))
+            {
+                // Set the creator filter
+                FilterByCreator(creatorName);
+            }
+        }
+        
+        private void DetailCategory_Click(object sender, MouseButtonEventArgs e)
+        {
+            if (sender is TextBlock textBlock && textBlock.Tag is string categoryName && !string.IsNullOrEmpty(categoryName))
+            {
+                // Set the category filter
+                FilterByCategory(categoryName);
+            }
+        }
+        
+        private void FilterByCategory(string categoryName)
+        {
+            // Find the category in the CategoryFilter ComboBox and select it
+            for (int i = 0; i < CategoryFilter.Items.Count; i++)
+            {
+                var item = CategoryFilter.Items[i] as ComboBoxItem;
+                if (item != null && item.Content?.ToString()?.Equals(categoryName, StringComparison.OrdinalIgnoreCase) == true)
+                {
+                    CategoryFilter.SelectedIndex = i;
+                    // Trigger search with new filter
+                    _ = SearchAsync();
+                    return;
+                }
+            }
+        }
+        
+        private void FilterByCreator(string creatorName)
+        {
+            // Set the selected creator first (this is what SearchAsync uses)
+            _selectedCreator = creatorName;
+            
+            // Find the creator in the list box and select it
+            for (int i = 0; i < CreatorListBox.Items.Count; i++)
+            {
+                var item = CreatorListBox.Items[i]?.ToString();
+                if (item != null && item.Equals(creatorName, StringComparison.OrdinalIgnoreCase))
+                {
+                    CreatorListBox.SelectedIndex = i;
+                    // Update the display text
+                    SelectedCreatorText.Text = creatorName;
+                    ClearCreatorButton.Visibility = Visibility.Visible;
+                    // Trigger search with new filter
+                    _ = SearchAsync();
+                    return;
+                }
+            }
+            
+            // If creator not in list, add it temporarily and select
+            // Must modify the ItemsSource collection directly, not Items
+            if (CreatorListBox.ItemsSource is List<string> creators)
+            {
+                if (!creators.Contains(creatorName, StringComparer.OrdinalIgnoreCase))
+                {
+                    creators.Add(creatorName);
+                }
+                CreatorListBox.SelectedItem = creatorName;
+            }
+            SelectedCreatorText.Text = creatorName;
+            ClearCreatorButton.Visibility = Visibility.Visible;
+            _ = SearchAsync();
+        }
+        
+        private void DetailTag_Click(object sender, RoutedEventArgs e)
+        {
+            if (sender is Hyperlink hyperlink && hyperlink.Tag is string tag && !string.IsNullOrWhiteSpace(tag))
+            {
+                try
+                {
+                    // Apply this tag as the active tags filter
+                    _selectedTags.Clear();
+                    _selectedTags.Add(tag);
+                    UpdateTagsDisplay();
+
+                    // Start a new search from page 1
+                    _currentPage = 1;
+                    _ = SearchAsync();
+                }
+                catch (Exception ex)
+                {
                 }
             }
         }
@@ -479,34 +607,46 @@ namespace VPM.Windows
 
             try
             {
-                LoadingPanel.Visibility = Visibility.Visible;
-                ResourcesItemsControl.ItemsSource = null;
-
-                var searchParams = BuildSearchParams();
-                var response = await _hubService.SearchResourcesAsync(searchParams, _searchCts.Token);
-
-                if (response?.IsSuccess == true)
+                using (var timer = _hubService.PerformanceMonitor.StartOperation("SearchAsync_Total"))
                 {
-                    _totalResources = response.Pagination?.TotalFound ?? 0;
-                    _totalPages = response.Pagination?.TotalPages ?? 1;
+                    LoadingPanel.Visibility = Visibility.Visible;
+                    ResourcesItemsControl.ItemsSource = null;
 
-                    // Mark resources that are in library or have updates
-                    foreach (var resource in response.Resources ?? Enumerable.Empty<HubResource>())
+                    var searchParams = BuildSearchParams();
+                    var response = await _hubService.SearchResourcesAsync(searchParams, _searchCts.Token);
+
+                    if (response?.IsSuccess == true)
                     {
-                        CheckLibraryStatus(resource);
-                    }
+                        using (var uiTimer = _hubService.PerformanceMonitor.StartOperation("SearchAsync_UIUpdate"))
+                        {
+                            _totalResources = response.Pagination?.TotalFound ?? 0;
+                            _totalPages = response.Pagination?.TotalPages ?? 1;
 
-                    ResourcesItemsControl.ItemsSource = response.Resources;
-                    UpdatePaginationUI();
-                    
-                    // Learn Hub API creator names from results (for name mapping)
-                    LearnCreatorNamesFromResults(response.Resources);
-                    
-                    StatusText.Text = $"Found {_totalResources} resources";
-                }
-                else
-                {
-                    StatusText.Text = $"Error: {response?.Error ?? "Unknown error"}";
+                            // Mark resources that are in library or have updates
+                            using (var libTimer = _hubService.PerformanceMonitor.StartOperation("SearchAsync_CheckLibraryStatus"))
+                            {
+                                foreach (var resource in response.Resources ?? Enumerable.Empty<HubResource>())
+                                {
+                                    CheckLibraryStatus(resource);
+                                }
+                            }
+
+                            ResourcesItemsControl.ItemsSource = response.Resources;
+                            UpdatePaginationUI();
+                            
+                            // Learn Hub API creator names from results (for name mapping)
+                            LearnCreatorNamesFromResults(response.Resources);
+                            
+                            StatusText.Text = $"Found {_totalResources} resources";
+                        }
+                        
+                        // Prefetch adjacent pages in background for faster navigation
+                        _ = PrefetchAdjacentPagesAsync(searchParams);
+                    }
+                    else
+                    {
+                        StatusText.Text = $"Error: {response?.Error ?? "Unknown error"}";
+                    }
                 }
             }
             catch (OperationCanceledException)
@@ -515,13 +655,67 @@ namespace VPM.Windows
             }
             catch (Exception ex)
             {
-                Debug.WriteLine($"[HubBrowser] Search error: {ex.Message}");
                 StatusText.Text = $"Error: {ex.Message}";
             }
             finally
             {
                 LoadingPanel.Visibility = Visibility.Collapsed;
             }
+        }
+        
+        /// <summary>
+        /// Prefetch adjacent pages in background to make pagination feel instant
+        /// </summary>
+        private async Task PrefetchAdjacentPagesAsync(HubSearchParams currentParams)
+        {
+            try
+            {
+                var prefetchTasks = new List<Task>();
+                
+                // Prefetch next page if not at end
+                if (_currentPage < _totalPages)
+                {
+                    var nextParams = CloneSearchParams(currentParams);
+                    nextParams.Page = _currentPage + 1;
+                    prefetchTasks.Add(_hubService.SearchResourcesAsync(nextParams));
+                }
+                
+                // Prefetch previous page if not at start
+                if (_currentPage > 1)
+                {
+                    var prevParams = CloneSearchParams(currentParams);
+                    prevParams.Page = _currentPage - 1;
+                    prefetchTasks.Add(_hubService.SearchResourcesAsync(prevParams));
+                }
+                
+                // Fire and forget - results will be cached
+                if (prefetchTasks.Count > 0)
+                {
+                    await Task.WhenAll(prefetchTasks);
+                }
+            }
+            catch
+            {
+                // Ignore prefetch errors - they're not critical
+            }
+        }
+        
+        private static HubSearchParams CloneSearchParams(HubSearchParams p)
+        {
+            return new HubSearchParams
+            {
+                Page = p.Page,
+                PerPage = p.PerPage,
+                Location = p.Location,
+                Search = p.Search,
+                PayType = p.PayType,
+                Category = p.Category,
+                Creator = p.Creator,
+                Tags = p.Tags,
+                Sort = p.Sort,
+                SortSecondary = p.SortSecondary,
+                OnlyDownloadable = p.OnlyDownloadable
+            };
         }
 
         private HubSearchParams BuildSearchParams()
@@ -551,6 +745,37 @@ namespace VPM.Windows
             };
         }
 
+        /// <summary>
+        /// Build pre-computed lookups for fast library status checking.
+        /// Called once at startup to avoid repeated dictionary iterations.
+        /// </summary>
+        private void BuildLocalPackageLookups()
+        {
+            _localPackageNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            _localPackageVersions = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+            
+            foreach (var pkg in _localPackagePaths.Keys)
+            {
+                var name = pkg.Replace(".var", "");
+                _localPackageNames.Add(name);
+                
+                // Extract group name and version
+                var groupName = GetPackageGroupName(name);
+                var lastDot = name.LastIndexOf('.');
+                if (lastDot > 0)
+                {
+                    var versionPart = name.Substring(lastDot + 1);
+                    if (int.TryParse(versionPart, out var version))
+                    {
+                        if (!_localPackageVersions.TryGetValue(groupName, out var existing) || version > existing)
+                        {
+                            _localPackageVersions[groupName] = version;
+                        }
+                    }
+                }
+            }
+        }
+        
         private void CheckLibraryStatus(HubResource resource)
         {
             if (resource.HubFiles == null || !resource.HubFiles.Any())
@@ -562,18 +787,28 @@ namespace VPM.Windows
                 if (string.IsNullOrEmpty(packageName))
                     continue;
 
-                // Check if we have this package - verify file actually exists
-                var localPath = FindLocalPackage(packageName);
-                if (localPath != null)
+                var cleanName = packageName.Replace(".var", "");
+                
+                // Fast check using pre-computed HashSet
+                if (_localPackageNames.Contains(cleanName))
                 {
                     resource.InLibrary = true;
                 }
+                else
+                {
+                    // Check for any version of this package (for .latest)
+                    var groupName = GetPackageGroupName(cleanName);
+                    if (_localPackageVersions.ContainsKey(groupName))
+                    {
+                        resource.InLibrary = true;
+                    }
+                }
 
-                // Check for updates
-                var groupName = GetPackageGroupName(packageName);
-                var localVersion = GetHighestLocalVersion(groupName);
-                
-                if (localVersion > 0 && _hubService.HasUpdate(groupName, localVersion))
+                // Check for updates using pre-computed version lookup
+                var pkgGroupName = GetPackageGroupName(cleanName);
+                if (_localPackageVersions.TryGetValue(pkgGroupName, out var localVersion) && 
+                    localVersion > 0 && 
+                    _hubService.HasUpdate(pkgGroupName, localVersion))
                 {
                     resource.UpdateAvailable = true;
                     resource.UpdateMessage = "Update available";
@@ -608,24 +843,13 @@ namespace VPM.Windows
 
         private int GetHighestLocalVersion(string groupName)
         {
-            int highest = 0;
-            foreach (var pkg in _localPackagePaths.Keys)
-            {
-                var name = pkg.Replace(".var", "");
-                if (name.StartsWith(groupName + ".", StringComparison.OrdinalIgnoreCase))
-                {
-                    var versionPart = name.Substring(groupName.Length + 1);
-                    if (int.TryParse(versionPart, out var version) && version > highest)
-                    {
-                        highest = version;
-                    }
-                }
-            }
-            return highest;
+            // Use pre-computed lookup (O(1) instead of O(n))
+            return _localPackageVersions.TryGetValue(groupName, out var version) ? version : 0;
         }
         
         /// <summary>
-        /// Find a local package by name, checking if the file actually exists.
+        /// Find a local package by name. Trusts _localPackagePaths without File.Exists checks
+        /// since it was populated from actual files on disk at startup.
         /// Supports finding any version of a package (for .latest dependencies).
         /// </summary>
         /// <param name="packageName">Package name to find</param>
@@ -637,47 +861,38 @@ namespace VPM.Windows
             
             var cleanName = packageName.Replace(".var", "");
             
-            // First, try exact match in our known packages
+            // First, try exact match in our known packages (trust the dictionary - files were verified at startup)
             if (_localPackagePaths.TryGetValue(cleanName, out var exactPath))
-            {
-                if (File.Exists(exactPath))
-                    return exactPath;
-            }
+                return exactPath;
             
             // Try with .var extension
             if (_localPackagePaths.TryGetValue(cleanName + ".var", out exactPath))
-            {
-                if (File.Exists(exactPath))
-                    return exactPath;
-            }
+                return exactPath;
             
             // For .latest or version-flexible matching, find any version of this package
             var basePackage = GetBasePackageName(cleanName);
+            var basePackagePrefix = basePackage + ".";
             
             // Find matching packages - must be basePackage.{version} where version is numeric
-            var matchingEntry = _localPackagePaths
-                .Where(kvp => {
-                    var name = kvp.Key.Replace(".var", "");
-                    if (!name.StartsWith(basePackage + ".", StringComparison.OrdinalIgnoreCase))
-                        return false;
-                    // Ensure what follows is a version number
-                    var suffix = name.Substring(basePackage.Length + 1);
-                    return int.TryParse(suffix, out _);
-                })
-                .OrderByDescending(kvp => {
-                    // Get highest version
-                    var name = kvp.Key.Replace(".var", "");
-                    var suffix = name.Substring(basePackage.Length + 1);
-                    return int.TryParse(suffix, out var v) ? v : 0;
-                })
-                .FirstOrDefault();
+            // Optimized: single pass through dictionary
+            string bestPath = null;
+            int bestVersion = -1;
             
-            if (!string.IsNullOrEmpty(matchingEntry.Value) && File.Exists(matchingEntry.Value))
+            foreach (var kvp in _localPackagePaths)
             {
-                return matchingEntry.Value;
+                var name = kvp.Key.Replace(".var", "");
+                if (!name.StartsWith(basePackagePrefix, StringComparison.OrdinalIgnoreCase))
+                    continue;
+                    
+                var suffix = name.Substring(basePackagePrefix.Length);
+                if (int.TryParse(suffix, out var version) && version > bestVersion)
+                {
+                    bestVersion = version;
+                    bestPath = kvp.Value;
+                }
             }
             
-            return null;
+            return bestPath;
         }
 
         #endregion
@@ -726,7 +941,6 @@ namespace VPM.Windows
             }
             catch (Exception ex)
             {
-                Debug.WriteLine($"[HubBrowser] Filter_SelectionChanged error: {ex.Message}");
                 StatusText.Text = $"Error: {ex.Message}";
             }
         }
@@ -821,7 +1035,6 @@ namespace VPM.Windows
             }
             catch (Exception ex)
             {
-                Debug.WriteLine($"[HubBrowser] Error loading filter options: {ex.Message}");
                 StatusText.Text = $"Error loading filter options: {ex.Message}";
             }
         }
@@ -896,7 +1109,6 @@ namespace VPM.Windows
                             {
                                 // Found it! Cache and return
                                 _creatorNameMap[normalized] = resource.Creator;
-                                Debug.WriteLine($"[HubBrowser] Resolved '{creator}' -> '{resource.Creator}'");
                                 return resource.Creator;
                             }
                         }
@@ -905,7 +1117,6 @@ namespace VPM.Windows
             }
             catch (Exception ex)
             {
-                Debug.WriteLine($"[HubBrowser] Error resolving creator name: {ex.Message}");
             }
             
             // Fallback to original name
@@ -1094,6 +1305,7 @@ namespace VPM.Windows
                 // Limit to 100 items for performance
                 var items = filtered.Take(100).ToList();
                 
+                CreatorListBox.ItemsSource = null;
                 CreatorListBox.ItemsSource = items;
                 
                 // Update count
@@ -1239,37 +1451,26 @@ namespace VPM.Windows
                 // Clear while loading
                 DetailImage.Source = null;
                 
-                // Download image data on background thread
-                var imageData = await Task.Run(async () =>
-                {
-                    using var client = new System.Net.Http.HttpClient();
-                    client.Timeout = TimeSpan.FromSeconds(10);
-                    return await client.GetByteArrayAsync(imageUrl);
-                });
+                // Use HubService cached image method instead of direct download
+                var bitmap = await _hubService.GetCachedImageAsync(imageUrl);
                 
-                // Check if still current before creating bitmap on UI thread
-                if (_currentImageUrl != imageUrl) return;
-                
-                // Create bitmap from memory stream on UI thread
-                var bitmap = new BitmapImage();
-                using (var stream = new System.IO.MemoryStream(imageData))
+                // Check if still current before setting on UI thread
+                if (_currentImageUrl != imageUrl)
                 {
-                    bitmap.BeginInit();
-                    bitmap.StreamSource = stream;
-                    bitmap.DecodePixelWidth = 350;
-                    bitmap.CacheOption = BitmapCacheOption.OnLoad;
-                    bitmap.EndInit();
+                    return;
                 }
-                bitmap.Freeze();
                 
-                if (_currentImageUrl == imageUrl)
+                if (bitmap != null)
                 {
                     DetailImage.Source = bitmap;
+                }
+                else
+                {
+                    DetailImage.Source = null;
                 }
             }
             catch (Exception ex)
             {
-                Debug.WriteLine($"[HubBrowser] Error loading image: {ex.Message}");
                 if (_currentImageUrl == imageUrl)
                 {
                     DetailImage.Source = null;
@@ -1300,6 +1501,18 @@ namespace VPM.Windows
                 
                 if (detail != null)
                 {
+                    // Preserve tags from search result if the detail call doesn't provide them
+                    try
+                    {
+                        if ((detail.TagsDict == null || detail.TagsDict.Count == 0) &&
+                            resource.TagsDict != null && resource.TagsDict.Count > 0)
+                        {
+                            detail.TagsDict = resource.TagsDict;
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                    }
                     // Push current state to stack before showing new resource (if there is one)
                     // This saves the previous resource so we can go back to it
                     if (_currentDetail != null && _currentResource != null && _detailStack.Count > 0)
@@ -1342,8 +1555,6 @@ namespace VPM.Windows
             }
             catch (Exception ex)
             {
-                Debug.WriteLine($"[HubBrowser] Error loading resource details: {ex.Message}");
-                Debug.WriteLine($"[HubBrowser] Stack trace: {ex.StackTrace}");
                 StatusText.Text = $"Error loading details: {ex.Message}";
             }
         }
@@ -1352,9 +1563,146 @@ namespace VPM.Windows
         {
             // Set basic info
             DetailTitle.Text = detail.Title ?? "";
-            DetailCreator.Text = $"by {detail.Creator ?? "Unknown"}";
+            DetailCreator.Text = detail.Creator ?? "Unknown";
+            DetailCreator.Tag = detail.Creator;  // Store creator name for filter click
+            
+            // Restore blue styling for normal package details (for user filtering)
+            DetailCreator.Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#4A90D9"));
+            DetailCreator.TextDecorations = TextDecorations.Underline;
+            DetailCreator.Cursor = Cursors.Hand;  // Clickable
+            DetailCreator.ToolTip = "Click to filter by this creator";
+            
+            // Category (Type) with filter link
+            if (!string.IsNullOrEmpty(detail.Type))
+            {
+                DetailCategory.Text = detail.Type;
+                DetailCategory.Tag = detail.Type;  // Store for filter click
+                DetailCategory.Visibility = Visibility.Visible;
+            }
+            else
+            {
+                DetailCategory.Visibility = Visibility.Collapsed;
+            }
+            
+            // Tag line
+            if (!string.IsNullOrEmpty(detail.TagLine))
+            {
+                DetailTagLine.Text = detail.TagLine;
+                DetailTagLine.Visibility = Visibility.Visible;
+            }
+            else
+            {
+                DetailTagLine.Visibility = Visibility.Collapsed;
+            }
+            
+            // Creator icon
+            if (!string.IsNullOrEmpty(detail.IconUrl))
+            {
+                try
+                {
+                    DetailCreatorIconBrush.ImageSource = new BitmapImage(new Uri(detail.IconUrl));
+                    DetailCreatorIcon.Visibility = Visibility.Visible;
+                }
+                catch
+                {
+                    DetailCreatorIcon.Visibility = Visibility.Collapsed;
+                }
+            }
+            else
+            {
+                DetailCreatorIcon.Visibility = Visibility.Collapsed;
+            }
+            
+            // Stats
             DetailDownloads.Text = $"⬇ {detail.DownloadCount}";
-            DetailRating.Text = $"⭐ {detail.RatingAvg:F1}";
+            DetailRating.Text = $"⭐ {detail.RatingDisplay}";
+            
+            // Dependencies
+            if (detail.HasDependencies)
+            {
+                DetailDependencies.Text = $"📦 {detail.DependencyDisplay}";
+                DetailDependencies.Visibility = Visibility.Visible;
+            }
+            else
+            {
+                DetailDependencies.Visibility = Visibility.Collapsed;
+            }
+            
+            // File size
+            if (!string.IsNullOrEmpty(detail.FileSizeDisplay))
+            {
+                DetailFileSize.Text = $"📁 {detail.FileSizeDisplay}";
+                DetailFileSize.Visibility = Visibility.Visible;
+            }
+            else
+            {
+                DetailFileSize.Visibility = Visibility.Collapsed;
+            }
+            
+            // Last update
+            if (!string.IsNullOrEmpty(detail.LastUpdateDisplay))
+            {
+                DetailLastUpdate.Text = $"🕐 {detail.LastUpdateDisplay}";
+                DetailLastUpdate.Visibility = Visibility.Visible;
+            }
+            else
+            {
+                DetailLastUpdate.Visibility = Visibility.Collapsed;
+            }
+            
+            
+            // Tags (populate if available from API) - single row, comma-separated with clickable hyperlinks
+            try
+            {
+                if (detail.HasTags && detail.TagsList.Count > 0)
+                {
+                    DetailTagsPanel.Visibility = Visibility.Visible;
+                    DetailTagsPanel.Inlines.Clear();
+                    DetailTagsPanel.Inlines.Add(new Run("Tags: "));
+                    
+                    for (int i = 0; i < detail.TagsList.Count; i++)
+                    {
+                        var tag = detail.TagsList[i];
+                        if (!string.IsNullOrWhiteSpace(tag))
+                        {
+                            // Create a clickable hyperlink for the tag
+                            var hyperlink = new Hyperlink(new Run(tag))
+                            {
+                                Foreground = new SolidColorBrush(Color.FromRgb(74, 144, 226)),  // #4A90E2
+                                TextDecorations = TextDecorations.Underline,
+                                Tag = tag
+                            };
+                            hyperlink.Click += (s, e) => DetailTag_Click(s, new RoutedEventArgs());
+                            DetailTagsPanel.Inlines.Add(hyperlink);
+                            
+                            // Add comma separator if not the last tag
+                            if (i < detail.TagsList.Count - 1)
+                            {
+                                DetailTagsPanel.Inlines.Add(new Run(", "));
+                            }
+                        }
+                    }
+                }
+                else
+                {
+                    DetailTagsPanel.Visibility = Visibility.Collapsed;
+                }
+            }
+            catch (Exception ex)
+            {
+                DetailTagsPanel.Visibility = Visibility.Collapsed;
+            }
+            
+            // Badges
+            DetailInLibraryBadge.Visibility = detail.InLibrary ? Visibility.Visible : Visibility.Collapsed;
+            DetailUpdateBadge.Visibility = detail.UpdateAvailable ? Visibility.Visible : Visibility.Collapsed;
+            DetailExternalBadge.Visibility = detail.IsExternallyHosted ? Visibility.Visible : Visibility.Collapsed;
+            
+            // Show/hide promotional link button
+            var hasPromoLink = !string.IsNullOrEmpty(detail.PromotionalLink) && 
+                               detail.PromotionalLink != "null";
+            SupportCreatorButton.Visibility = hasPromoLink ? Visibility.Visible : Visibility.Collapsed;
+            SupportCreatorButton.Tag = hasPromoLink ? detail.PromotionalLink : null;
             
             // Show image border for regular packages
             DetailImageBorder.Visibility = Visibility.Visible;
@@ -1409,6 +1757,7 @@ namespace VPM.Windows
             }
             
             UpdateDownloadAllButton();
+            UpdateCancelAllButtonVisibility();
         }
 
         private HubFileViewModel CreateFileViewModel(HubFile file, bool isDependency)
@@ -1495,9 +1844,16 @@ namespace VPM.Windows
                 vm.LocalPath = localPath;
                 
                 // Check if there's an update available
-                // Get local version from the found package path
+                // CRITICAL: Use the pre-computed _localPackageVersions dictionary
+                // which already contains the HIGHEST version for each base package name.
+                // This was built in BuildLocalPackageLookups() at startup.
                 var localPackageName = Path.GetFileNameWithoutExtension(localPath);
-                var localVersion = ExtractVersionNumber(localPackageName);
+                var basePackageName = GetBasePackageName(localPackageName);
+                
+                // Get the highest local version from our pre-computed lookup
+                var localVersion = _localPackageVersions.TryGetValue(basePackageName, out var highestVersion) 
+                    ? highestVersion 
+                    : ExtractVersionNumber(localPackageName);
                 
                 // Get latest version from Hub API
                 // Try multiple sources: LatestVersion property, Version property, or extract from filename
@@ -1675,13 +2031,8 @@ namespace VPM.Windows
         /// </summary>
         private string ExtractVersionFromUrl(string url, string originalFilename)
         {
-            Debug.WriteLine($"[HubBrowser] ExtractVersionFromUrl called:");
-            Debug.WriteLine($"[HubBrowser]   URL: {url}");
-            Debug.WriteLine($"[HubBrowser]   Original filename: {originalFilename}");
-            
             if (string.IsNullOrEmpty(url))
             {
-                Debug.WriteLine($"[HubBrowser]   URL is null/empty, returning null");
                 return null;
             }
             
@@ -1690,51 +2041,33 @@ namespace VPM.Windows
                 // Get the filename from URL
                 var uri = new Uri(url);
                 var urlFilename = Path.GetFileName(uri.LocalPath);
-                Debug.WriteLine($"[HubBrowser]   URL filename extracted: {urlFilename}");
                 
                 if (string.IsNullOrEmpty(urlFilename))
                 {
-                    Debug.WriteLine($"[HubBrowser]   URL filename is empty, returning null");
                     return null;
                 }
                 
                 // Remove .var extension
                 urlFilename = urlFilename.Replace(".var", "");
-                Debug.WriteLine($"[HubBrowser]   URL filename without .var: {urlFilename}");
                 
                 // Get base package name (Creator.PackageName)
                 var baseName = GetBasePackageName(originalFilename.Replace(".var", "").Replace(".latest", ""));
-                Debug.WriteLine($"[HubBrowser]   Base package name: {baseName}");
                 
                 // Extract version - everything after the base name
                 if (urlFilename.StartsWith(baseName + ".", StringComparison.OrdinalIgnoreCase))
                 {
                     var version = urlFilename.Substring(baseName.Length + 1);
-                    Debug.WriteLine($"[HubBrowser]   Extracted version string: {version}");
                     
                     // Validate it looks like a version (numeric)
                     if (!string.IsNullOrEmpty(version) && char.IsDigit(version[0]))
                     {
-                        Debug.WriteLine($"[HubBrowser]   Version is valid (starts with digit): {version}");
                         return version;
                     }
-                    else
-                    {
-                        Debug.WriteLine($"[HubBrowser]   Version invalid (doesn't start with digit)");
-                    }
-                }
-                else
-                {
-                    Debug.WriteLine($"[HubBrowser]   URL filename doesn't start with base name + '.'");
-                    Debug.WriteLine($"[HubBrowser]   Expected prefix: {baseName}.");
                 }
             }
             catch (Exception ex)
             {
-                Debug.WriteLine($"[HubBrowser] Error extracting version from URL: {ex.Message}");
             }
-            
-            Debug.WriteLine($"[HubBrowser]   Returning null - no version extracted");
             return null;
         }
 
@@ -1851,7 +2184,6 @@ namespace VPM.Windows
             }
             catch (Exception ex)
             {
-                Debug.WriteLine($"[HubBrowser] Navigation error: {ex.Message}");
                 ShowWebViewError($"Navigation failed: {ex.Message}");
             }
         }
@@ -1876,6 +2208,13 @@ namespace VPM.Windows
         {
             if (sender is Button button && button.Tag is HubFileViewModel file)
             {
+                // If downloading, cancel the download
+                if (file.IsDownloading)
+                {
+                    CancelFileDownload(file);
+                    return;
+                }
+                
                 // If has update available, download the update
                 if (file.HasUpdate && file.CanDownload)
                 {
@@ -1894,7 +2233,6 @@ namespace VPM.Windows
                         }
                         catch (Exception ex)
                         {
-                            Debug.WriteLine($"[HubBrowser] Error opening explorer: {ex.Message}");
                         }
                     }
                     else
@@ -1937,7 +2275,7 @@ namespace VPM.Windows
             _completedDownloadsInBatch = 0;
             _currentDownloadingPackage = "";
             
-            // Show progress bar, hide button
+            // Show progress bar (which includes cancel button), hide download button
             DownloadAllButton.Visibility = Visibility.Collapsed;
             DownloadProgressContainer.Visibility = Visibility.Visible;
             UpdateBatchProgressUI();
@@ -1946,6 +2284,49 @@ namespace VPM.Windows
             foreach (var file in allToDownload)
             {
                 QueueFileForDownload(file);
+            }
+        }
+        
+        private void CancelAllDetailDownloads_Click(object sender, RoutedEventArgs e)
+        {
+            // Cancel all downloads in the current detail panel
+            foreach (var file in _currentFiles.Where(f => f.IsDownloading))
+            {
+                CancelFileDownload(file);
+            }
+            foreach (var file in _currentDependencies.Where(f => f.IsDownloading))
+            {
+                CancelFileDownload(file);
+            }
+            
+            // Also cancel any queued downloads
+            _hubService.CancelAllDownloads();
+            
+            // Reset batch progress
+            _totalDownloadsInBatch = 0;
+            _completedDownloadsInBatch = 0;
+            
+            // Hide progress bar (which includes cancel button), show download button
+            DownloadAllButton.Visibility = Visibility.Visible;
+            DownloadProgressContainer.Visibility = Visibility.Collapsed;
+            
+            UpdateDownloadQueueUI();
+            UpdateDownloadAllButton();
+        }
+        
+        /// <summary>
+        /// Update the Cancel All button visibility based on active downloads
+        /// </summary>
+        private void UpdateCancelAllButtonVisibility()
+        {
+            // Cancel button is now inside progress container, so we control visibility via the container
+            var hasActiveDownloads = (_currentFiles?.Any(f => f.IsDownloading) ?? false) || 
+                                     (_currentDependencies?.Any(f => f.IsDownloading) ?? false);
+            // Show progress container if there are active downloads (it contains the cancel button)
+            if (!hasActiveDownloads && _totalDownloadsInBatch == 0)
+            {
+                DownloadProgressContainer.Visibility = Visibility.Collapsed;
+                DownloadAllButton.Visibility = Visibility.Visible;
             }
         }
         
@@ -1974,6 +2355,8 @@ namespace VPM.Windows
             _completedDownloadsInBatch = 0;
             _currentDownloadingPackage = "";
             
+            // Progress container (with cancel button) will be hidden after delay
+            
             // Show completed state briefly, then revert to button
             DownloadProgressText.Text = "✓ All Downloads Complete";
             DownloadProgressDetail.Text = "";
@@ -1992,6 +2375,35 @@ namespace VPM.Windows
 
         // Track file view models by package name for queue updates
         private Dictionary<string, HubFileViewModel> _downloadingFiles = new Dictionary<string, HubFileViewModel>(StringComparer.OrdinalIgnoreCase);
+        
+        /// <summary>
+        /// Cancel a file download that is in progress
+        /// </summary>
+        private void CancelFileDownload(HubFileViewModel file)
+        {
+            // Find the queued download for this file
+            var packageName = file.Filename?.Replace(".var", "") ?? "";
+            
+            // Find matching download in the queue
+            var queuedDownload = _downloadQueue.FirstOrDefault(d => 
+                d.PackageName.Equals(packageName, StringComparison.OrdinalIgnoreCase) ||
+                d.PackageName.Contains(packageName, StringComparison.OrdinalIgnoreCase));
+            
+            if (queuedDownload != null)
+            {
+                _hubService.CancelDownload(queuedDownload);
+                UpdateDownloadQueueUI();
+            }
+            else
+            {
+                // Fallback: just reset the UI state
+                file.Status = "Cancelled";
+                file.StatusColor = new SolidColorBrush(Colors.Gray);
+                file.IsDownloading = false;
+                file.CanDownload = true;
+                file.ButtonText = "⬇";
+            }
+        }
         
         private void QueueFileForDownload(HubFileViewModel file)
         {
@@ -2050,7 +2462,10 @@ namespace VPM.Windows
                             case DownloadStatus.Downloading:
                                 file.Status = file.HasUpdate ? "Updating..." : "Downloading...";
                                 file.StatusColor = new SolidColorBrush(Colors.Yellow);
-                                file.ButtonText = "...";
+                                file.IsDownloading = true;
+                                file.ButtonText = "✕";  // Show cancel button
+                                
+                                // Progress container (with cancel button) is already visible
                                 
                                 // Update batch progress - show current package
                                 _currentDownloadingPackage = packageName;
@@ -2067,12 +2482,45 @@ namespace VPM.Windows
                                 file.Status = wasUpdate ? "✓ Updated" : "✓ Downloaded";
                                 file.StatusColor = new SolidColorBrush(Colors.LimeGreen);
                                 file.ButtonText = "✓";
+                                file.IsDownloading = false;
                                 file.IsInstalled = true;
                                 file.HasUpdate = false;
                                 file.LocalPath = downloadedPath;
                                 file.Filename = downloadedFilename;
                                 
                                 _localPackagePaths[packageName] = downloadedPath;
+                                
+                                // CRITICAL FIX: Update PackageManager metadata so that when the Hub window is reopened,
+                                // it will correctly detect that this package is already downloaded and not show it as available
+                                if (_packageManager != null && System.IO.File.Exists(downloadedPath))
+                                {
+                                    try
+                                    {
+                                        // Parse the downloaded package's metadata
+                                        var metadata = _packageManager.ParseVarMetadataComplete(downloadedPath);
+                                        if (metadata != null)
+                                        {
+                                            metadata.FilePath = downloadedPath;
+                                            metadata.Status = "Loaded";
+                                            _packageManager.PackageMetadata[packageName] = metadata;
+                                            
+                                            // Rebuild local package lookups so future checks use the updated data
+                                            BuildLocalPackageLookups();
+                                        }
+                                        
+                                        // CRITICAL FIX: Remove this package from all MissingDependencies lists
+                                        // so that the missing dependencies panel updates correctly after download
+                                        _packageManager.RemoveFromMissingDependencies(packageName);
+                                    }
+                                    catch
+                                    {
+                                        // If parsing fails, at least update the lookups from _localPackagePaths
+                                        BuildLocalPackageLookups();
+                                        
+                                        // Still try to remove from missing dependencies
+                                        _packageManager.RemoveFromMissingDependencies(packageName);
+                                    }
+                                }
                                 
                                 if (_currentResource != null)
                                 {
@@ -2087,6 +2535,9 @@ namespace VPM.Windows
                                 {
                                     HandleOldVersions(packageName);
                                 }
+                                
+                                // Update missing dependencies panel if we're viewing it
+                                UpdateMissingDepsPanelAfterDownload(packageName);
                                 
                                 // Update batch progress
                                 _completedDownloadsInBatch++;
@@ -2103,9 +2554,13 @@ namespace VPM.Windows
                             case DownloadStatus.Failed:
                                 file.Status = "Download failed";
                                 file.StatusColor = new SolidColorBrush(Colors.Red);
+                                file.IsDownloading = false;
                                 file.CanDownload = true;
-                                file.ButtonText = "Retry";
+                                file.ButtonText = "⬇";
                                 _downloadingFiles.Remove(packageName);
+                                
+                                // Hide cancel button if no more active downloads
+                                UpdateCancelAllButtonVisibility();
                                 
                                 // Update batch progress (count as completed for progress purposes)
                                 _completedDownloadsInBatch++;
@@ -2122,9 +2577,13 @@ namespace VPM.Windows
                             case DownloadStatus.Cancelled:
                                 file.Status = "Cancelled";
                                 file.StatusColor = new SolidColorBrush(Colors.Gray);
+                                file.IsDownloading = false;
                                 file.CanDownload = true;
                                 file.ButtonText = "⬇";
                                 _downloadingFiles.Remove(packageName);
+                                
+                                // Hide cancel button if no more active downloads
+                                UpdateCancelAllButtonVisibility();
                                 
                                 // Update batch progress (count as completed for progress purposes)
                                 _completedDownloadsInBatch++;
@@ -2203,7 +2662,6 @@ namespace VPM.Windows
             }
             catch (Exception ex)
             {
-                Debug.WriteLine($"[HubBrowser] Error handling old versions: {ex.Message}");
             }
         }
         
@@ -2227,7 +2685,6 @@ namespace VPM.Windows
                             // Check file exists before attempting move
                             if (!File.Exists(filePath))
                             {
-                                Debug.WriteLine($"[HubBrowser] Source file not found for archiving: {filePath}");
                                 _localPackagePaths.Remove(packageName);
                                 continue;
                             }
@@ -2245,24 +2702,19 @@ namespace VPM.Windows
                             }
                             catch (Exception ex)
                             {
-                                Debug.WriteLine($"[HubBrowser] Failed to delete existing archive file: {ex.Message}");
                             }
                             
                             File.Move(filePath, archivePath);
                             _localPackagePaths.Remove(packageName);
-                            
-                            Debug.WriteLine($"[HubBrowser] Archived old version: {packageName} -> {archivePath}");
                         }
                         catch (Exception ex)
                         {
-                            Debug.WriteLine($"[HubBrowser] Failed to archive {packageName}: {ex.Message}");
                         }
                     }
                 }
             }
             catch (Exception ex)
             {
-                Debug.WriteLine($"[HubBrowser] Error archiving old versions: {ex.Message}");
             }
         }
         
@@ -2286,7 +2738,6 @@ namespace VPM.Windows
                             // Check file exists before attempting move
                             if (!File.Exists(filePath))
                             {
-                                Debug.WriteLine($"[HubBrowser] Source file not found for discarding: {filePath}");
                                 _localPackagePaths.Remove(packageName);
                                 continue;
                             }
@@ -2304,24 +2755,19 @@ namespace VPM.Windows
                             }
                             catch (Exception ex)
                             {
-                                Debug.WriteLine($"[HubBrowser] Failed to delete existing discard file: {ex.Message}");
                             }
                             
                             File.Move(filePath, discardPath);
                             _localPackagePaths.Remove(packageName);
-                            
-                            Debug.WriteLine($"[HubBrowser] Discarded old version: {packageName} -> {discardPath}");
                         }
                         catch (Exception ex)
                         {
-                            Debug.WriteLine($"[HubBrowser] Failed to discard {packageName}: {ex.Message}");
                         }
                     }
                 }
             }
             catch (Exception ex)
             {
-                Debug.WriteLine($"[HubBrowser] Error discarding old versions: {ex.Message}");
             }
         }
         
@@ -2378,6 +2824,9 @@ namespace VPM.Windows
             
             // Update Cancel All button visibility
             CancelAllDownloadsButton.Visibility = _downloadQueue.Any(d => d.CanCancel) ? Visibility.Visible : Visibility.Collapsed;
+            
+            // Update Open Downloading button visibility (show if there are saved downloading details)
+            OpenDownloadingButton.Visibility = _savedDownloadingDetails.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
         }
         
         private void DownloadQueueButton_Click(object sender, RoutedEventArgs e)
@@ -2405,18 +2854,56 @@ namespace VPM.Windows
             UpdateDownloadQueueUI();
         }
         
+        private void OpenDownloading_Click(object sender, RoutedEventArgs e)
+        {
+            // Close the popup first
+            DownloadQueuePopup.IsOpen = false;
+            
+            // Open all saved downloading detail panels
+            var keysToOpen = _savedDownloadingDetails.Keys.ToList();
+            foreach (var resourceId in keysToOpen)
+            {
+                if (_savedDownloadingDetails.TryGetValue(resourceId, out var entry))
+                {
+                    _savedDownloadingDetails.Remove(resourceId);
+                    _detailStack.Push(entry);
+                }
+            }
+            
+            // Restore the top of the stack if any
+            if (_detailStack.Count > 0)
+            {
+                var top = _detailStack.Peek();
+                RestoreDetailFromStack(top);
+                ExpandPanel();
+                UpdateDetailStackUI();
+            }
+        }
+        
         #endregion
         
         #region Stack-Based Detail Navigation
         
-        private void DetailBackButton_Click(object sender, RoutedEventArgs e)
-        {
-            PopDetailStack();
-        }
-        
         private void PushToDetailStack(HubResourceDetail detail, HubResource resource, 
             ObservableCollection<HubFileViewModel> files, ObservableCollection<HubFileViewModel> dependencies)
         {
+            var resourceId = resource?.ResourceId;
+            
+            // Don't add duplicate if the same resource is already at the top of the stack
+            if (_detailStack.Count > 0)
+            {
+                var top = _detailStack.Peek();
+                if (top.ResourceId == resourceId && !string.IsNullOrEmpty(resourceId))
+                {
+                    // Same resource - just update the existing entry instead of pushing a new one
+                    top.Detail = detail;
+                    top.Resource = resource;
+                    top.Files = new ObservableCollection<HubFileViewModel>(files);
+                    top.Dependencies = new ObservableCollection<HubFileViewModel>(dependencies);
+                    return;
+                }
+            }
+            
             // Save current state to stack
             var entry = new DetailStackEntry
             {
@@ -2424,47 +2911,10 @@ namespace VPM.Windows
                 Resource = resource,
                 Files = new ObservableCollection<HubFileViewModel>(files),
                 Dependencies = new ObservableCollection<HubFileViewModel>(dependencies),
-                ResourceId = resource?.ResourceId
+                ResourceId = resourceId
             };
             
             _detailStack.Push(entry);
-            UpdateDetailStackUI();
-        }
-        
-        private void PopDetailStack()
-        {
-            if (_detailStack.Count <= 1)
-            {
-                // Only current item, just close
-                CollapsePanel();
-                _detailStack.Clear();
-                UpdateDetailStackUI();
-                return;
-            }
-            
-            // Pop current item
-            var current = _detailStack.Pop();
-            
-            // Check if current has active downloads - if so, save it
-            if (HasActiveDownloads(current))
-            {
-                if (!string.IsNullOrEmpty(current.ResourceId))
-                {
-                    _savedDownloadingDetails[current.ResourceId] = current;
-                }
-            }
-            
-            // Restore previous item
-            if (_detailStack.Count > 0)
-            {
-                var previous = _detailStack.Peek();
-                RestoreDetailFromStack(previous);
-            }
-            else
-            {
-                CollapsePanel();
-            }
-            
             UpdateDetailStackUI();
         }
         
@@ -2519,18 +2969,79 @@ namespace VPM.Windows
         {
             var stackCount = _detailStack.Count;
             
-            // Show back button if there's more than one item in stack
-            DetailBackButton.Visibility = stackCount > 1 ? Visibility.Visible : Visibility.Collapsed;
-            
-            // Show stack indicator
-            if (stackCount > 1)
+            // Show stack indicator panel when there are items (even just 1 for visibility)
+            if (stackCount >= 1)
             {
-                DetailStackIndicator.Text = $"({stackCount} in stack)";
-                DetailStackIndicator.Visibility = Visibility.Visible;
+                DetailStackIndicator.Text = stackCount == 1 ? "(1 item)" : $"({stackCount} in stack)";
+                DetailStackPanel.Visibility = Visibility.Visible;
             }
             else
             {
-                DetailStackIndicator.Visibility = Visibility.Collapsed;
+                DetailStackPanel.Visibility = Visibility.Collapsed;
+            }
+        }
+        
+        private void StackDropdownButton_Click(object sender, RoutedEventArgs e)
+        {
+            // Build the list of stack items for the dropdown
+            var stackItems = new List<StackDropdownItem>();
+            var stackArray = _detailStack.ToArray();
+            
+            for (int i = 0; i < stackArray.Length; i++)
+            {
+                var entry = stackArray[i];
+                var title = entry.Resource?.Title ?? entry.Detail?.Title ?? "Unknown";
+                stackItems.Add(new StackDropdownItem
+                {
+                    Index = i,
+                    Position = $"{i + 1}.",
+                    Title = title,
+                    IsCurrent = i == 0,
+                    DisplayForeground = i == 0 ? new SolidColorBrush(Color.FromRgb(0x4A, 0x90, 0xD9)) : new SolidColorBrush(Color.FromRgb(0xE0, 0xE0, 0xE0)),
+                    DisplayFontWeight = i == 0 ? FontWeights.Bold : FontWeights.Normal
+                });
+            }
+            
+            StackItemsList.ItemsSource = stackItems;
+            StackDropdownPopup.IsOpen = true;
+        }
+        
+        private void StackItem_Click(object sender, RoutedEventArgs e)
+        {
+            if (sender is Button button && button.Tag is int index)
+            {
+                StackDropdownPopup.IsOpen = false;
+                
+                // Index 0 is the current item (top of stack), no action needed
+                if (index == 0) return;
+                
+                // Navigate to the selected item WITHOUT removing anything from the stack
+                // Stack is persistent memory - only cleared by X button
+                var stackArray = _detailStack.ToArray();
+                if (index < stackArray.Length)
+                {
+                    var selectedEntry = stackArray[index];
+                    
+                    // Move selected item to top of stack (make it current)
+                    // Rebuild stack: selected item on top, then all others in original order (excluding selected)
+                    _detailStack.Clear();
+                    
+                    // Push in reverse order (bottom to top), skipping the selected one
+                    for (int i = stackArray.Length - 1; i >= 0; i--)
+                    {
+                        if (i != index)
+                        {
+                            _detailStack.Push(stackArray[i]);
+                        }
+                    }
+                    // Push selected item last (so it's on top)
+                    _detailStack.Push(selectedEntry);
+                    
+                    // Restore the selected item's view
+                    RestoreDetailFromStack(selectedEntry);
+                }
+                
+                UpdateDetailStackUI();
             }
         }
         
@@ -2546,6 +3057,38 @@ namespace VPM.Windows
                 }
             }
             
+            UpdateDetailStackUI();
+        }
+        
+        private void ClearStackButton_Click(object sender, RoutedEventArgs e)
+        {
+            // Keep only the current item (top of stack), clear the rest
+            if (_detailStack.Count <= 1)
+            {
+                // Nothing to clear, or clear the single item and collapse
+                ClearDetailStack();
+                CollapsePanel();
+                _currentDetail = null;
+                _currentResource = null;
+                _currentResourceId = null;
+                return;
+            }
+            
+            // Keep the current (top) item, clear the rest
+            var current = _detailStack.Pop();
+            
+            // Save downloading entries from the rest
+            while (_detailStack.Count > 0)
+            {
+                var entry = _detailStack.Pop();
+                if (HasActiveDownloads(entry) && !string.IsNullOrEmpty(entry.ResourceId))
+                {
+                    _savedDownloadingDetails[entry.ResourceId] = entry;
+                }
+            }
+            
+            // Put current back
+            _detailStack.Push(current);
             UpdateDetailStackUI();
         }
         
@@ -2586,24 +3129,20 @@ namespace VPM.Windows
                 StatusText.Text = "Checking for updates...";
                 
                 // Get all package groups that have updates available
+                // CRITICAL: Use _localPackageVersions which contains the HIGHEST version for each base package
                 var updatesAvailable = new List<(string packageGroup, int localVersion, int hubVersion)>();
                 
-                foreach (var pkg in _localPackagePaths)
+                foreach (var kvp in _localPackageVersions)
                 {
-                    var packageName = pkg.Key.Replace(".var", "");
-                    var groupName = GetPackageGroupName(packageName);
-                    var localVersion = ExtractVersionNumber(packageName);
+                    var groupName = kvp.Key;
+                    var localVersion = kvp.Value;
                     
                     if (localVersion > 0 && _hubService.HasUpdate(groupName, localVersion))
                     {
                         var hubVersion = _hubService.GetLatestVersion(groupName);
                         if (hubVersion > localVersion)
                         {
-                            // Check if we already have this group
-                            if (!updatesAvailable.Any(u => u.packageGroup == groupName))
-                            {
-                                updatesAvailable.Add((groupName, localVersion, hubVersion));
-                            }
+                            updatesAvailable.Add((groupName, localVersion, hubVersion));
                         }
                     }
                 }
@@ -2666,11 +3205,28 @@ namespace VPM.Windows
                 
                 // Update UI
                 DetailTitle.Text = $"📦 Available Updates ({updatesAvailable.Count})";
-                DetailCreator.Text = "Packages with newer versions on Hub";
+                DetailCreator.Text = $"Found {updatesAvailable.Count} updates available";
+                DetailCreator.Foreground = new SolidColorBrush(Colors.White);  // Normal text, not blue
+                DetailCreator.TextDecorations = null;  // Remove underline
+                DetailCreator.Cursor = Cursors.Arrow;  // Not clickable
+                DetailCreator.ToolTip = null;  // Remove tooltip
                 DetailImageBorder.Visibility = Visibility.Collapsed;
+                SupportCreatorButton.Visibility = Visibility.Collapsed;
+                DetailCategory.Visibility = Visibility.Collapsed;
                 DetailDownloads.Text = "";
                 DetailRating.Text = "";
                 
+                // Hide all per-package elements (not applicable to collection views)
+                DetailDependencies.Visibility = Visibility.Collapsed;
+                DetailFileSize.Visibility = Visibility.Collapsed;
+                DetailLastUpdate.Visibility = Visibility.Collapsed;
+                DetailTagsPanel.Visibility = Visibility.Collapsed;
+                DetailTagLine.Visibility = Visibility.Collapsed;
+                DetailCreatorIcon.Visibility = Visibility.Collapsed;
+                DetailInLibraryBadge.Visibility = Visibility.Collapsed;
+                DetailUpdateBadge.Visibility = Visibility.Collapsed;
+                DetailExternalBadge.Visibility = Visibility.Collapsed;
+
                 DetailFilesControl.ItemsSource = _currentFiles;
                 DependenciesHeader.Visibility = Visibility.Collapsed;
                 DetailDependenciesControl.ItemsSource = null;
@@ -2690,7 +3246,6 @@ namespace VPM.Windows
             }
             catch (Exception ex)
             {
-                Debug.WriteLine($"[HubBrowser] Error showing updates: {ex.Message}");
                 StatusLoadingSpinner.Visibility = Visibility.Collapsed;
                 StatusText.Text = $"Error: {ex.Message}";
             }
@@ -2736,6 +3291,40 @@ namespace VPM.Windows
                         }
                     }
                 }
+                
+                // CRITICAL FIX: Filter out packages that are actually on disk
+                // The MissingDependencies list may be stale if packages were downloaded since last scan
+                var trulyMissing = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                foreach (var dep in missingDeps)
+                {
+                    // Check if this exact package is on disk
+                    var depClean = dep.Replace(".var", "");
+                    if (_localPackageNames.Contains(depClean))
+                        continue; // Already have it
+                    
+                    // Check if it's a .latest reference and we have any version
+                    if (dep.EndsWith(".latest", StringComparison.OrdinalIgnoreCase))
+                    {
+                        var baseName = dep.Substring(0, dep.Length - 7);
+                        if (_localPackageVersions.ContainsKey(baseName))
+                            continue; // Have some version of this package
+                    }
+                    else
+                    {
+                        // Check if we have any version of this package (for versioned references)
+                        var lastDot = depClean.LastIndexOf('.');
+                        if (lastDot > 0)
+                        {
+                            var baseName = depClean.Substring(0, lastDot);
+                            if (_localPackageVersions.ContainsKey(baseName))
+                                continue; // Have some version of this package
+                        }
+                    }
+                    
+                    trulyMissing.Add(dep);
+                }
+                
+                missingDeps = trulyMissing;
                 
                 if (missingDeps.Count == 0)
                 {
@@ -2817,9 +3406,26 @@ namespace VPM.Windows
                 // Update UI
                 DetailTitle.Text = $"🔗 Missing Dependencies ({foundCount} available, {notFoundCount} not found)";
                 DetailCreator.Text = $"Found {foundCount} of {missingDeps.Count} missing dependencies on Hub";
+                DetailCreator.Foreground = new SolidColorBrush(Colors.White);  // Normal text, not blue
+                DetailCreator.TextDecorations = null;  // Remove underline
+                DetailCreator.Cursor = Cursors.Arrow;  // Not clickable
+                DetailCreator.ToolTip = null;  // Remove tooltip
                 DetailImageBorder.Visibility = Visibility.Collapsed;
+                SupportCreatorButton.Visibility = Visibility.Collapsed;
+                DetailCategory.Visibility = Visibility.Collapsed;
                 DetailDownloads.Text = "";
                 DetailRating.Text = "";
+                
+                // Hide all per-package elements (not applicable to collection views)
+                DetailDependencies.Visibility = Visibility.Collapsed;
+                DetailFileSize.Visibility = Visibility.Collapsed;
+                DetailLastUpdate.Visibility = Visibility.Collapsed;
+                DetailTagsPanel.Visibility = Visibility.Collapsed;
+                DetailTagLine.Visibility = Visibility.Collapsed;
+                DetailCreatorIcon.Visibility = Visibility.Collapsed;
+                DetailInLibraryBadge.Visibility = Visibility.Collapsed;
+                DetailUpdateBadge.Visibility = Visibility.Collapsed;
+                DetailExternalBadge.Visibility = Visibility.Collapsed;
                 
                 DetailFilesControl.ItemsSource = _currentFiles;
                 DependenciesHeader.Visibility = Visibility.Collapsed;
@@ -2840,10 +3446,54 @@ namespace VPM.Windows
             }
             catch (Exception ex)
             {
-                Debug.WriteLine($"[HubBrowser] Error showing missing deps: {ex.Message}");
                 StatusLoadingSpinner.Visibility = Visibility.Collapsed;
                 StatusText.Text = $"Error: {ex.Message}";
             }
+        }
+        
+        /// <summary>
+        /// Updates the missing dependencies panel after a package has been downloaded.
+        /// Removes the downloaded package from the list and updates the title.
+        /// </summary>
+        private void UpdateMissingDepsPanelAfterDownload(string packageName)
+        {
+            // Check if we're currently viewing the missing dependencies panel
+            if (DetailTitle.Text == null || !DetailTitle.Text.StartsWith("🔗 Missing Dependencies"))
+                return;
+            
+            // Count remaining missing dependencies (files that are not yet downloaded)
+            int remainingCount = 0;
+            int downloadedCount = 0;
+            
+            foreach (var file in _currentFiles)
+            {
+                if (file.IsInstalled || file.Status?.Contains("Downloaded") == true || file.Status?.Contains("Updated") == true)
+                {
+                    downloadedCount++;
+                }
+                else
+                {
+                    remainingCount++;
+                }
+            }
+            
+            // Update the title to reflect the new state
+            if (remainingCount == 0 && downloadedCount > 0)
+            {
+                DetailTitle.Text = $"🔗 Missing Dependencies (All {downloadedCount} downloaded!)";
+                DetailCreator.Text = "All missing dependencies have been downloaded";
+            }
+            else
+            {
+                DetailTitle.Text = $"🔗 Missing Dependencies ({remainingCount} remaining, {downloadedCount} downloaded)";
+                DetailCreator.Text = $"{downloadedCount} downloaded, {remainingCount} still available for download";
+            }
+            
+            // Keep text styling consistent (white, not blue, not clickable)
+            DetailCreator.Foreground = new SolidColorBrush(Colors.White);
+            DetailCreator.TextDecorations = null;
+            DetailCreator.Cursor = Cursors.Arrow;
+            DetailCreator.ToolTip = null;
         }
         
         #endregion
@@ -2975,5 +3625,240 @@ namespace VPM.Windows
         {
             throw new NotImplementedException();
         }
+    }
+
+    /// <summary>
+    /// Attached behavior for loading cached images with async support
+    /// </summary>
+    public static class CachedImageBehavior
+    {
+        public static string GetImageUrl(DependencyObject obj)
+        {
+            return (string)obj.GetValue(ImageUrlProperty);
+        }
+
+        public static void SetImageUrl(DependencyObject obj, string value)
+        {
+            obj.SetValue(ImageUrlProperty, value);
+        }
+
+        public static readonly DependencyProperty ImageUrlProperty =
+            DependencyProperty.RegisterAttached(
+                "ImageUrl",
+                typeof(string),
+                typeof(CachedImageBehavior),
+                new PropertyMetadata(null, OnImageUrlChanged));
+
+        private static void OnImageUrlChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+        {
+            if (!(d is Image image))
+                return;
+
+            var imageUrl = (string)e.NewValue;
+            if (string.IsNullOrEmpty(imageUrl))
+            {
+                image.Source = null;
+                return;
+            }
+
+            var manager = CachedImageManager.GetOrCreate(imageUrl);
+            if (manager != null)
+            {
+                // Set initial image (may be null)
+                image.Source = manager.Image;
+
+                // Listen for updates
+                manager.PropertyChanged += (s, args) =>
+                {
+                    if (args.PropertyName == nameof(CachedImageManager.Image))
+                    {
+                        image.Source = manager.Image;
+                    }
+                };
+            }
+        }
+    }
+
+    /// <summary>
+    /// Manages cached Hub images with UI update support
+    /// Handles async downloads and notifies UI when images are ready
+    /// </summary>
+    public class CachedImageManager : INotifyPropertyChanged
+    {
+        private static readonly Dictionary<string, CachedImageManager> _instanceCache = new Dictionary<string, CachedImageManager>(StringComparer.OrdinalIgnoreCase);
+        private static readonly object _instanceCacheLock = new object();
+        private static HubService _hubService;
+        
+        private BitmapImage _image;
+        private bool _isLoading;
+        
+        public event PropertyChangedEventHandler PropertyChanged;
+        
+        public BitmapImage Image
+        {
+            get => _image;
+            set
+            {
+                if (_image != value)
+                {
+                    _image = value;
+                    PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Image)));
+                }
+            }
+        }
+        
+        public bool IsLoading
+        {
+            get => _isLoading;
+            set
+            {
+                if (_isLoading != value)
+                {
+                    _isLoading = value;
+                    PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(IsLoading)));
+                }
+            }
+        }
+        
+        public string ImageUrl { get; private set; }
+        
+        public static void SetHubService(HubService hubService)
+        {
+            _hubService = hubService;
+        }
+        
+        public static CachedImageManager GetOrCreate(string imageUrl)
+        {
+            if (string.IsNullOrEmpty(imageUrl))
+                return null;
+            
+            lock (_instanceCacheLock)
+            {
+                if (_instanceCache.TryGetValue(imageUrl, out var manager))
+                {
+                    return manager;
+                }
+                
+                var newManager = new CachedImageManager { ImageUrl = imageUrl };
+                _instanceCache[imageUrl] = newManager;
+                
+                // Start loading asynchronously
+                _ = newManager.LoadImageAsync();
+                
+                return newManager;
+            }
+        }
+        
+        private async Task LoadImageAsync()
+        {
+            if (_hubService == null)
+            {
+                // Fallback to direct URL
+                LoadDirectUrl();
+                return;
+            }
+            
+            try
+            {
+                IsLoading = true;
+                
+                // Wait for cache to be fully loaded with retries
+                BitmapImage cachedImage = null;
+                for (int retries = 0; retries < 5; retries++)
+                {
+                    cachedImage = _hubService.ResourcesCache?.TryGetCachedImage(ImageUrl);
+                    if (cachedImage != null)
+                    {
+                        Image = cachedImage;
+                        IsLoading = false;
+                        return;
+                    }
+                    if (retries < 4)
+                        await Task.Delay(50); // Wait 50ms before retrying
+                }
+                
+                // Download and cache the image
+                var bitmap = await _hubService.GetCachedImageAsync(ImageUrl);
+                if (bitmap != null)
+                {
+                    Image = bitmap;
+                }
+                else
+                {
+                    // Fallback to direct URL if download failed
+                    LoadDirectUrl();
+                }
+            }
+            catch (Exception ex)
+            {
+                LoadDirectUrl();
+            }
+            finally
+            {
+                IsLoading = false;
+            }
+        }
+        
+        private void LoadDirectUrl()
+        {
+            try
+            {
+                var bitmap = new BitmapImage();
+                bitmap.BeginInit();
+                bitmap.UriSource = new Uri(ImageUrl);
+                bitmap.CacheOption = BitmapCacheOption.OnLoad;
+                bitmap.EndInit();
+                bitmap.Freeze();
+                Image = bitmap;
+            }
+            catch (Exception ex)
+            {
+            }
+        }
+    }
+
+    /// <summary>
+    /// Converter for cached Hub images - downloads and caches images from Hub
+    /// Returns cached BitmapImage if available, otherwise downloads and caches
+    /// Properly updates UI when images are ready
+    /// </summary>
+    public class CachedHubImageConverter : System.Windows.Data.IValueConverter
+    {
+        public static void SetHubService(HubService hubService)
+        {
+            CachedImageManager.SetHubService(hubService);
+        }
+        
+        public object Convert(object value, Type targetType, object parameter, System.Globalization.CultureInfo culture)
+        {
+            if (value == null || string.IsNullOrEmpty(value.ToString()))
+                return null;
+            
+            var imageUrl = value.ToString();
+            var manager = CachedImageManager.GetOrCreate(imageUrl);
+            
+            // Return the current image (may be null if still loading)
+            // The manager will update the Image property via PropertyChanged
+            // We use an attached behavior to listen for updates
+            return manager?.Image;
+        }
+
+        public object ConvertBack(object value, Type targetType, object parameter, System.Globalization.CultureInfo culture)
+        {
+            throw new NotImplementedException();
+        }
+    }
+
+    /// <summary>
+    /// Item for the stack dropdown list
+    /// </summary>
+    public class StackDropdownItem
+    {
+        public int Index { get; set; }
+        public string Position { get; set; }
+        public string Title { get; set; }
+        public bool IsCurrent { get; set; }
+        public SolidColorBrush DisplayForeground { get; set; }
+        public FontWeight DisplayFontWeight { get; set; }
     }
 }

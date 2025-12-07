@@ -1,8 +1,10 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 using System.Threading.Tasks;
 using System.Windows;
+using VPM.Models;
 using VPM.Services;
 
 namespace VPM
@@ -19,6 +21,7 @@ namespace VPM
         private List<string> _availableUpdatePackages;
         private List<PackageUpdateInfo> _cachedUpdateInfo;  // Cache the full update info
         private int _updateCount = 0;
+        private System.Threading.SemaphoreSlim _updateCheckSemaphore = new System.Threading.SemaphoreSlim(1, 1);  // Prevent concurrent update checks
         
         #endregion
         
@@ -58,18 +61,26 @@ namespace VPM
         {
             try
             {
-                // Ensure update checker is initialized
-                if (_updateChecker == null)
-                {
-                    InitializeUpdateChecker();
-                }
-                
-                if (_updateChecker == null)
+                // Prevent concurrent update checks - only one can run at a time
+                if (!await _updateCheckSemaphore.WaitAsync(0))
                 {
                     return;
                 }
                 
-                SetStatus("Checking for package updates...");
+                try
+                {
+                    // Ensure update checker is initialized
+                    if (_updateChecker == null)
+                    {
+                        InitializeUpdateChecker();
+                    }
+                    
+                    if (_updateChecker == null)
+                    {
+                        return;
+                    }
+                    
+                    SetStatus("Checking for package updates...");
                 
                 // Load package source (local links.txt or Hub resources)
                 var sourceLoaded = await _updateChecker.LoadPackageSourceAsync();
@@ -89,18 +100,56 @@ namespace VPM
                     SetStatus("Checking for updates using Hub resources...");
                 }
                 
-                // Use the already-loaded package list from the main table (in-memory, very fast!)
-                // This includes both Loaded and Available packages
-                var allPackages = Packages.ToList();
+                // CRITICAL FIX: Use the UNFILTERED package metadata, not the filtered UI collection!
+                // The Packages collection is filtered by UI filters (status, version, etc.)
+                // which can exclude the latest versions and cause false update notifications.
+                // We need ALL packages that are on disk (both "Loaded" from AddonPackages and 
+                // "Available" from AllPackages) to correctly determine what the user has.
+                // 
+                // Build a dictionary of base package names to their highest on-disk version
+                // using the VarMetadata.Version property directly (parsed from meta.json/filename).
+                var onDiskVersions = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+                foreach (var kvp in _packageManager.PackageMetadata)
+                {
+                    var metadata = kvp.Value;
+                    
+                    // Only consider packages that are on disk (Loaded or Available)
+                    if (metadata.Status != "Loaded" && metadata.Status != "Available")
+                        continue;
+                    
+                    // Use PackageBaseName if available, otherwise construct from CreatorName.PackageName
+                    var baseName = !string.IsNullOrEmpty(metadata.PackageBaseName) 
+                        ? metadata.PackageBaseName 
+                        : $"{metadata.CreatorName}.{metadata.PackageName}";
+                    
+                    var version = metadata.Version;
+                    
+                    // Keep track of the highest version for each base name
+                    if (!onDiskVersions.TryGetValue(baseName, out var currentVersion) || version > currentVersion)
+                    {
+                        onDiskVersions[baseName] = version;
+                    }
+                }
                 
-                if (allPackages.Count == 0)
+                // Convert to PackageItem list for the update checker
+                // Use the highest version for each base name
+                var onDiskPackages = onDiskVersions
+                    .Select(kvp => new PackageItem 
+                    { 
+                        Name = $"{kvp.Key}.{kvp.Value}",
+                        Status = "Loaded" // Status doesn't matter for update checking
+                    })
+                    .ToList();
+                
+                
+                if (onDiskPackages.Count == 0)
                 {
                     SetStatus("No packages to check for updates");
                     return;
                 }
                 
                 // Check for updates (all in-memory, no file I/O)
-                var updates = await _updateChecker.CheckForUpdatesAsync(allPackages);
+                var updates = await _updateChecker.CheckForUpdatesAsync(onDiskPackages);
                 
                 // Cache the results
                 _cachedUpdateInfo = updates;
@@ -119,14 +168,20 @@ namespace VPM
                     UpdateCheckUpdatesButton();
                 });
                 
-                var sourceInfo = _updateChecker.IsUsingLocalLinks ? " (from links.txt)" : " (from Hub)";
-                if (_updateCount > 0)
-                {
-                    SetStatus($"Found {_updateCount} package update(s) available{sourceInfo}");
+                    var sourceInfo = _updateChecker.IsUsingLocalLinks ? " (from links.txt)" : " (from Hub)";
+                    if (_updateCount > 0)
+                    {
+                        SetStatus($"Found {_updateCount} package update(s) available{sourceInfo}");
+                    }
+                    else
+                    {
+                        SetStatus($"All packages are up to date{sourceInfo}");
+                    }
                 }
-                else
+                finally
                 {
-                    SetStatus($"All packages are up to date{sourceInfo}");
+                    // Release the semaphore to allow next update check
+                    _updateCheckSemaphore.Release();
                 }
             }
             catch (Exception)
@@ -162,24 +217,42 @@ namespace VPM
                     return;
                 }
                 
-                // Get current package list
-                var currentPackages = Packages.ToList();
+                // CRITICAL FIX: Use the UNFILTERED package metadata, not the filtered UI collection!
+                // Build a lookup of all on-disk packages with their highest versions
+                // Both "Loaded" (AddonPackages) and "Available" (AllPackages) are on disk
+                // Use VarMetadata.Version and PackageBaseName directly for consistency.
+                var onDiskPackageVersions = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+                foreach (var kvp in _packageManager.PackageMetadata)
+                {
+                    var metadata = kvp.Value;
+                    
+                    if (metadata.Status != "Loaded" && metadata.Status != "Available")
+                        continue;
+                    
+                    // Use PackageBaseName if available, otherwise construct from CreatorName.PackageName
+                    var baseName = !string.IsNullOrEmpty(metadata.PackageBaseName) 
+                        ? metadata.PackageBaseName 
+                        : $"{metadata.CreatorName}.{metadata.PackageName}";
+                    
+                    var version = metadata.Version;
+                    
+                    if (version >= 0)
+                    {
+                        if (!onDiskPackageVersions.TryGetValue(baseName, out var currentVersion) || version > currentVersion)
+                        {
+                            onDiskPackageVersions[baseName] = version;
+                        }
+                    }
+                }
                 
-                // Filter out updates for packages that are now loaded
+                // Filter out updates for packages that are now on disk with sufficient version
                 var remainingUpdates = _cachedUpdateInfo.Where(update =>
                 {
-                    // Check if this package is now loaded (downloaded)
-                    var pkg = currentPackages.FirstOrDefault(p => 
-                        p.Name.StartsWith(update.BaseName + ".", StringComparison.OrdinalIgnoreCase) &&
-                        p.Status == "Loaded");
-                    
-                    if (pkg != null)
+                    // Check if this package is now on disk with a version >= online version
+                    if (onDiskPackageVersions.TryGetValue(update.BaseName, out var onDiskVersion))
                     {
-                        // Extract version from the loaded package
-                        var loadedVersion = _updateChecker.ExtractVersion(pkg.Name);
-                        
-                        // If the loaded version is >= online version, this update is no longer needed
-                        if (loadedVersion >= update.OnlineVersion)
+                        // If the on-disk version is >= online version, this update is no longer needed
+                        if (onDiskVersion >= update.OnlineVersion)
                         {
                             return false;
                         }

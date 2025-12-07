@@ -10,6 +10,7 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Threading;
 using System.Threading.Tasks;
+using System.Windows.Media.Imaging;
 using VPM.Models;
 
 namespace VPM.Services
@@ -25,14 +26,36 @@ namespace VPM.Services
         private const string CookieHost = "hub.virtamate.com";
 
         private readonly HttpClient _httpClient;
-        private readonly SemaphoreSlim _requestLock = new SemaphoreSlim(1, 1);
+        private readonly SemaphoreSlim _requestThrottle = new SemaphoreSlim(4, 4); // Allow up to 4 concurrent API requests
         private bool _disposed;
+        
+        // Performance monitoring
+        public readonly PerformanceMonitor PerformanceMonitor = new PerformanceMonitor();
+        
+        // API Response Caching
+        private HubFilterOptions _cachedFilterOptions;
+        private DateTime _filterOptionsCacheTime = DateTime.MinValue;
+        private readonly TimeSpan _filterOptionsCacheExpiry = TimeSpan.FromHours(1); // Filter options rarely change
+        
+        // Resource detail cache (LRU-style with max size)
+        private readonly Dictionary<string, (HubResourceDetail Detail, DateTime CacheTime)> _resourceDetailCache = new();
+        private readonly int _resourceDetailCacheMaxSize = 100;
+        private readonly TimeSpan _resourceDetailCacheExpiry = TimeSpan.FromMinutes(10);
+        
+        // Search result cache
+        private readonly Dictionary<string, (HubSearchResponse Response, DateTime CacheTime)> _searchCache = new();
+        private readonly int _searchCacheMaxSize = 20;
+        private readonly TimeSpan _searchCacheExpiry = TimeSpan.FromMinutes(5);
 
-        // Cache for packages.json (packageId -> resourceId mapping)
+        // Binary cache for packages.json with HTTP conditional request support
+        private readonly HubResourcesCache _hubResourcesCache;
+        private bool _cacheInitialized = false;
+        
+        // In-memory cache references (populated from HubResourcesCache)
         private Dictionary<string, string> _packageIdToResourceId;
         private Dictionary<string, int> _packageGroupToLatestVersion;
         private DateTime _packagesCacheTime = DateTime.MinValue;
-        private readonly TimeSpan _packagesCacheExpiry = TimeSpan.FromHours(1);
+        private readonly TimeSpan _packagesCacheExpiry = TimeSpan.FromMinutes(30); // Reduced since we use conditional requests
 
         // Download queue management
         private readonly Queue<QueuedDownload> _downloadQueue = new Queue<QueuedDownload>();
@@ -69,6 +92,9 @@ namespace VPM.Services
             };
 
             _httpClient.DefaultRequestHeaders.Add("User-Agent", "VPM/1.0");
+            
+            // Initialize the binary cache for Hub resources
+            _hubResourcesCache = new HubResourcesCache(_httpClient);
         }
 
         #region Search & Browse
@@ -78,29 +104,47 @@ namespace VPM.Services
         /// </summary>
         public async Task<HubFilterOptions> GetFilterOptionsAsync(CancellationToken cancellationToken = default)
         {
-            try
+            // Check cache first
+            if (_cachedFilterOptions != null && DateTime.Now - _filterOptionsCacheTime < _filterOptionsCacheExpiry)
             {
-                var request = new JsonObject
-                {
-                    ["source"] = "VaM",
-                    ["action"] = "getInfo"
-                };
-
-                var requestJson = request.ToJsonString();
-
-                var response = await PostRequestRawAsync(requestJson, cancellationToken);
-                var options = JsonSerializer.Deserialize<HubFilterOptions>(response, new JsonSerializerOptions
-                {
-                    PropertyNameCaseInsensitive = true
-                });
-
-                return options;
+                PerformanceMonitor.RecordOperation("GetFilterOptionsAsync", 0, "Cached");
+                return _cachedFilterOptions;
             }
-            catch (Exception ex)
+            
+            using (var timer = PerformanceMonitor.StartOperation("GetFilterOptionsAsync"))
             {
-                Debug.WriteLine($"[HubService] Failed to get filter options: {ex.Message}");
-                Debug.WriteLine($"[HubService] Exception details: {ex}");
-                return null;
+                try
+                {
+                    var request = new JsonObject
+                    {
+                        ["source"] = "VaM",
+                        ["action"] = "getInfo"
+                    };
+
+                    var requestJson = request.ToJsonString();
+
+                    var response = await PostRequestRawAsync(requestJson, cancellationToken);
+                    var options = JsonSerializer.Deserialize<HubFilterOptions>(response, new JsonSerializerOptions
+                    {
+                        PropertyNameCaseInsensitive = true
+                    });
+
+                    // Cache the result
+                    if (options != null)
+                    {
+                        _cachedFilterOptions = options;
+                        _filterOptionsCacheTime = DateTime.Now;
+                    }
+                    
+                    return options;
+                }
+                catch (Exception ex)
+                {
+                    // Return cached version if available, even if expired
+                    if (_cachedFilterOptions != null)
+                        return _cachedFilterOptions;
+                    return null;
+                }
             }
         }
 
@@ -109,48 +153,92 @@ namespace VPM.Services
         /// </summary>
         public async Task<HubSearchResponse> SearchResourcesAsync(HubSearchParams searchParams, CancellationToken cancellationToken = default)
         {
-            var request = new JsonObject
-            {
-                ["source"] = "VaM",
-                ["action"] = "getResources",
-                ["latest_image"] = "Y",
-                ["perpage"] = searchParams.PerPage.ToString(),
-                ["page"] = searchParams.Page.ToString()
-            };
-
-            if (searchParams.Location != "All")
-                request["location"] = searchParams.Location;
-
-            if (!string.IsNullOrEmpty(searchParams.Search))
-            {
-                request["search"] = searchParams.Search;
-                request["searchall"] = "true";
-            }
-
-            // Set category based on PayType filter
-            if (searchParams.PayType != "All")
-            {
-                request["category"] = searchParams.PayType;
-            }
-
-            if (searchParams.Category != "All")
-                request["type"] = searchParams.Category;
-
-            if (searchParams.Creator != "All")
-                request["username"] = searchParams.Creator;
-
-            if (searchParams.Tags != "All")
-                request["tags"] = searchParams.Tags;
-
-            request["sort"] = searchParams.Sort;
+            // Build cache key from search params
+            var cacheKey = BuildSearchCacheKey(searchParams);
             
-            if (!string.IsNullOrEmpty(searchParams.SortSecondary) && searchParams.SortSecondary != "None")
-                request["sort_secondary"] = searchParams.SortSecondary;
-
-            var requestJson = request.ToJsonString();
+            // Check cache first
+            if (_searchCache.TryGetValue(cacheKey, out var cached) && 
+                DateTime.Now - cached.CacheTime < _searchCacheExpiry)
+            {
+                PerformanceMonitor.RecordOperation("SearchResourcesAsync", 0, $"Cached - Page {searchParams.Page}");
+                return cached.Response;
+            }
             
-            var response = await PostRequestAsync<HubSearchResponse>(requestJson, cancellationToken);
-            return response;
+            using (var timer = PerformanceMonitor.StartOperation("SearchResourcesAsync")
+                .WithDetails($"Page {searchParams.Page}, PerPage {searchParams.PerPage}"))
+            {
+                var request = new JsonObject
+                {
+                    ["source"] = "VaM",
+                    ["action"] = "getResources",
+                    ["latest_image"] = "Y",
+                    ["perpage"] = searchParams.PerPage.ToString(),
+                    ["page"] = searchParams.Page.ToString()
+                };
+
+                if (searchParams.Location != "All")
+                    request["location"] = searchParams.Location;
+
+                if (!string.IsNullOrEmpty(searchParams.Search))
+                {
+                    request["search"] = searchParams.Search;
+                    request["searchall"] = "true";
+                }
+
+                // Set category based on PayType filter
+                if (searchParams.PayType != "All")
+                {
+                    request["category"] = searchParams.PayType;
+                }
+
+                if (searchParams.Category != "All")
+                    request["type"] = searchParams.Category;
+
+                if (searchParams.Creator != "All")
+                    request["username"] = searchParams.Creator;
+
+                if (searchParams.Tags != "All")
+                    request["tags"] = searchParams.Tags;
+
+                request["sort"] = searchParams.Sort;
+                
+                if (!string.IsNullOrEmpty(searchParams.SortSecondary) && searchParams.SortSecondary != "None")
+                    request["sort_secondary"] = searchParams.SortSecondary;
+
+                var requestJson = request.ToJsonString();
+                
+                var response = await PostRequestAsync<HubSearchResponse>(requestJson, cancellationToken);
+                
+                // Cache the result
+                if (response != null)
+                {
+                    // Evict oldest entries if cache is full
+                    if (_searchCache.Count >= _searchCacheMaxSize)
+                    {
+                        var oldest = _searchCache.OrderBy(x => x.Value.CacheTime).First().Key;
+                        _searchCache.Remove(oldest);
+                    }
+                    _searchCache[cacheKey] = (response, DateTime.Now);
+                }
+                
+                return response;
+            }
+        }
+        
+        /// <summary>
+        /// Build a cache key from search parameters
+        /// </summary>
+        private static string BuildSearchCacheKey(HubSearchParams p)
+        {
+            return $"{p.Page}|{p.PerPage}|{p.Location}|{p.Search}|{p.PayType}|{p.Category}|{p.Creator}|{p.Tags}|{p.Sort}|{p.SortSecondary}|{p.OnlyDownloadable}";
+        }
+        
+        /// <summary>
+        /// Clear search cache (call when user wants fresh results)
+        /// </summary>
+        public void ClearSearchCache()
+        {
+            _searchCache.Clear();
         }
 
         /// <summary>
@@ -158,37 +246,74 @@ namespace VPM.Services
         /// </summary>
         public async Task<HubResourceDetail> GetResourceDetailAsync(string resourceId, bool isPackageName = false, CancellationToken cancellationToken = default)
         {
-            var request = new JsonObject
-            {
-                ["source"] = "VaM",
-                ["action"] = "getResourceDetail",
-                ["latest_image"] = "Y"
-            };
-
-            if (isPackageName)
-                request["package_name"] = resourceId;
-            else
-                request["resource_id"] = resourceId;
-
-            var jsonResponse = await PostRequestRawAsync(request.ToJsonString(), cancellationToken);
+            // Create cache key
+            var cacheKey = isPackageName ? $"pkg:{resourceId}" : $"id:{resourceId}";
             
-            // Parse the response - the detail fields are at root level
-            var doc = JsonDocument.Parse(jsonResponse);
-            var root = doc.RootElement;
-
-            if (root.TryGetProperty("status", out var statusProp) && statusProp.GetString() == "error")
+            // Check cache first
+            if (_resourceDetailCache.TryGetValue(cacheKey, out var cached) && 
+                DateTime.Now - cached.CacheTime < _resourceDetailCacheExpiry)
             {
-                var error = root.TryGetProperty("error", out var errorProp) ? errorProp.GetString() : "Unknown error";
-                throw new Exception($"Hub API error: {error}");
+                PerformanceMonitor.RecordOperation("GetResourceDetailAsync", 0, $"Cached - {cacheKey}");
+                return cached.Detail;
             }
-
-            // Deserialize directly as HubResourceDetail since fields are at root
-            var detail = JsonSerializer.Deserialize<HubResourceDetail>(jsonResponse, new JsonSerializerOptions
+            
+            using (var timer = PerformanceMonitor.StartOperation("GetResourceDetailAsync")
+                .WithDetails(isPackageName ? $"Package: {resourceId}" : $"ResourceId: {resourceId}"))
             {
-                PropertyNameCaseInsensitive = true
-            });
+                var request = new JsonObject
+                {
+                    ["source"] = "VaM",
+                    ["action"] = "getResourceDetail",
+                    ["latest_image"] = "Y"
+                };
 
-            return detail;
+                if (isPackageName)
+                    request["package_name"] = resourceId;
+                else
+                    request["resource_id"] = resourceId;
+
+                var jsonResponse = await PostRequestRawAsync(request.ToJsonString(), cancellationToken);
+                
+                // Parse the response - the detail fields are at root level
+                var doc = JsonDocument.Parse(jsonResponse);
+                var root = doc.RootElement;
+
+                if (root.TryGetProperty("status", out var statusProp) && statusProp.GetString() == "error")
+                {
+                    var error = root.TryGetProperty("error", out var errorProp) ? errorProp.GetString() : "Unknown error";
+                    throw new Exception($"Hub API error: {error}");
+                }
+
+                // Deserialize directly as HubResourceDetail since fields are at root
+                var detail = JsonSerializer.Deserialize<HubResourceDetail>(jsonResponse, new JsonSerializerOptions
+                {
+                    PropertyNameCaseInsensitive = true
+                });
+
+                // Cache the result
+                if (detail != null)
+                {
+                    // Evict oldest entries if cache is full
+                    if (_resourceDetailCache.Count >= _resourceDetailCacheMaxSize)
+                    {
+                        var oldest = _resourceDetailCache.OrderBy(x => x.Value.CacheTime).First().Key;
+                        _resourceDetailCache.Remove(oldest);
+                    }
+                    _resourceDetailCache[cacheKey] = (detail, DateTime.Now);
+                    
+                    // Also cache by resource ID if we looked up by package name
+                    if (isPackageName && !string.IsNullOrEmpty(detail.ResourceId))
+                    {
+                        var idKey = $"id:{detail.ResourceId}";
+                        if (!_resourceDetailCache.ContainsKey(idKey))
+                        {
+                            _resourceDetailCache[idKey] = (detail, DateTime.Now);
+                        }
+                    }
+                }
+
+                return detail;
+            }
         }
 
         /// <summary>
@@ -243,66 +368,107 @@ namespace VPM.Services
         #region Package Version Checking
 
         /// <summary>
-        /// Load the packages.json from Hub CDN for version checking
+        /// Load the packages.json from Hub CDN for version checking.
+        /// Uses binary caching with HTTP conditional requests (ETag/Last-Modified) for optimal performance.
         /// </summary>
         public async Task<bool> LoadPackagesJsonAsync(bool forceRefresh = false, CancellationToken cancellationToken = default)
         {
+            // Check if in-memory cache is still valid
             if (!forceRefresh && _packageIdToResourceId != null && DateTime.Now - _packagesCacheTime < _packagesCacheExpiry)
                 return true;
 
             try
             {
-                StatusChanged?.Invoke(this, "Loading Hub packages index...");
-
-                var response = await _httpClient.GetStringAsync(PackagesJsonUrl, cancellationToken);
-                var packagesJson = JsonDocument.Parse(response);
-
-                _packageIdToResourceId = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-                _packageGroupToLatestVersion = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
-
-                foreach (var prop in packagesJson.RootElement.EnumerateObject())
+                var sw = Stopwatch.StartNew();
+                
+                // Try to load from disk cache first (if not already initialized)
+                if (!_cacheInitialized)
                 {
-                    var packageName = prop.Name.Replace(".var", "");
+                    StatusChanged?.Invoke(this, "Loading Hub packages from cache...");
                     
-                    // Handle both string and number resource IDs
-                    string resourceId;
-                    if (prop.Value.ValueKind == JsonValueKind.String)
+                    if (_hubResourcesCache.LoadFromDisk())
                     {
-                        resourceId = prop.Value.GetString();
-                    }
-                    else if (prop.Value.ValueKind == JsonValueKind.Number)
-                    {
-                        resourceId = prop.Value.GetRawText();
-                    }
-                    else
-                    {
-                        resourceId = prop.Value.ToString();
-                    }
-
-                    _packageIdToResourceId[packageName] = resourceId;
-
-                    // Extract version info
-                    var version = ExtractVersion(packageName);
-                    var groupName = GetPackageGroupName(packageName);
-
-                    if (version >= 0 && !string.IsNullOrEmpty(groupName))
-                    {
-                        if (!_packageGroupToLatestVersion.TryGetValue(groupName, out var currentLatest) || version > currentLatest)
+                        // Cache loaded successfully, populate in-memory dictionaries
+                        _packageIdToResourceId = _hubResourcesCache.GetPackageIdToResourceId();
+                        _packageGroupToLatestVersion = _hubResourcesCache.GetPackageGroupToLatestVersion();
+                        _packagesCacheTime = DateTime.Now;
+                        _cacheInitialized = true;
+                        
+                        sw.Stop();
+                        StatusChanged?.Invoke(this, $"Loaded {_packageIdToResourceId.Count} packages from cache ({sw.ElapsedMilliseconds}ms)");
+                        
+                        // Check if cache needs refresh in background (non-blocking)
+                        if (_hubResourcesCache.NeedsRefresh() || forceRefresh)
                         {
-                            _packageGroupToLatestVersion[groupName] = version;
+                            _ = RefreshCacheInBackgroundAsync(cancellationToken);
                         }
+                        
+                        return true;
                     }
+                    
+                    _cacheInitialized = true; // Mark as initialized even if load failed
                 }
-
-                _packagesCacheTime = DateTime.Now;
-                StatusChanged?.Invoke(this, $"Loaded {_packageIdToResourceId.Count} packages from Hub index");
-                return true;
+                
+                // Fetch from Hub (with conditional request if we have cached data)
+                StatusChanged?.Invoke(this, "Fetching Hub packages index...");
+                
+                var success = await _hubResourcesCache.FetchFromHubAsync(PackagesJsonUrl, cancellationToken);
+                
+                if (success)
+                {
+                    // Update in-memory dictionaries from cache
+                    _packageIdToResourceId = _hubResourcesCache.GetPackageIdToResourceId();
+                    _packageGroupToLatestVersion = _hubResourcesCache.GetPackageGroupToLatestVersion();
+                    _packagesCacheTime = DateTime.Now;
+                    
+                    sw.Stop();
+                    var stats = _hubResourcesCache.GetStatistics();
+                    var cacheInfo = stats.ConditionalHits > 0 ? $" (cached, {stats.ConditionalHitRate:F0}% conditional hits)" : "";
+                    StatusChanged?.Invoke(this, $"Loaded {_packageIdToResourceId.Count} packages from Hub index{cacheInfo} ({sw.ElapsedMilliseconds}ms)");
+                    
+                    return true;
+                }
+                else
+                {
+                    // Fetch failed, but we might have stale cache data
+                    if (_packageIdToResourceId != null && _packageIdToResourceId.Count > 0)
+                    {
+                        StatusChanged?.Invoke(this, $"Using cached Hub index ({_packageIdToResourceId.Count} packages) - network unavailable");
+                        return true;
+                    }
+                    
+                    StatusChanged?.Invoke(this, "Failed to load Hub packages index");
+                    return false;
+                }
             }
             catch (Exception ex)
             {
-                Debug.WriteLine($"[HubService] Failed to load Hub packages index: {ex.Message}");
                 StatusChanged?.Invoke(this, $"Failed to load Hub packages index: {ex.Message}");
-                return false;
+                
+                // Return true if we have any cached data
+                return _packageIdToResourceId != null && _packageIdToResourceId.Count > 0;
+            }
+        }
+        
+        /// <summary>
+        /// Refreshes the cache in the background without blocking the caller
+        /// </summary>
+        private async Task RefreshCacheInBackgroundAsync(CancellationToken cancellationToken)
+        {
+            try
+            {
+                var success = await _hubResourcesCache.FetchFromHubAsync(PackagesJsonUrl, cancellationToken);
+                
+                if (success)
+                {
+                    _packageIdToResourceId = _hubResourcesCache.GetPackageIdToResourceId();
+                    _packageGroupToLatestVersion = _hubResourcesCache.GetPackageGroupToLatestVersion();
+                    _cacheInitialized = true;
+                    _packagesCacheTime = DateTime.Now;
+                }
+            }
+            catch (Exception ex)
+            {
             }
         }
 
@@ -651,7 +817,6 @@ namespace VPM.Services
                     }
                     catch (Exception ex)
                     {
-                        Debug.WriteLine($"[HubService] Download error: {ex.Message}");
                         download.ErrorMessage = ex.Message;
                         success = false;
                     }
@@ -715,15 +880,13 @@ namespace VPM.Services
             }
             catch (JsonException ex)
             {
-                Debug.WriteLine($"[HubService] JSON deserialization error: {ex.Message}");
-                Debug.WriteLine($"[HubService] Response was: {responseJson?.Substring(0, Math.Min(500, responseJson?.Length ?? 0))}...");
                 throw;
             }
         }
 
         private async Task<string> PostRequestRawAsync(string jsonContent, CancellationToken cancellationToken)
         {
-            await _requestLock.WaitAsync(cancellationToken);
+            await _requestThrottle.WaitAsync(cancellationToken);
             try
             {
                 var content = new StringContent(jsonContent, Encoding.UTF8, "application/json");
@@ -733,7 +896,7 @@ namespace VPM.Services
             }
             finally
             {
-                _requestLock.Release();
+                _requestThrottle.Release();
             }
         }
 
@@ -804,12 +967,164 @@ namespace VPM.Services
 
         #endregion
 
+        /// <summary>
+        /// Gets the Hub resources cache for statistics and management
+        /// </summary>
+        public HubResourcesCache ResourcesCache => _hubResourcesCache;
+        
+        /// <summary>
+        /// Gets cache statistics
+        /// </summary>
+        public HubResourcesCacheStats GetCacheStatistics()
+        {
+            return _hubResourcesCache?.GetStatistics();
+        }
+        
+        /// <summary>
+        /// Clears the Hub resources cache
+        /// </summary>
+        public bool ClearResourcesCache()
+        {
+            var result = _hubResourcesCache?.ClearCache() ?? false;
+            if (result)
+            {
+                _packageIdToResourceId = null;
+                _packageGroupToLatestVersion = null;
+                _packagesCacheTime = DateTime.MinValue;
+                _cacheInitialized = false;
+            }
+            return result;
+        }
+        
+        private System.Threading.Timer _imageCacheSaveTimer;
+        private readonly object _imageCacheSaveLock = new object();
+        private bool _imageCacheDirty = false;
+        private const int IMAGE_CACHE_SAVE_DELAY_MS = 3000; // Save 3 seconds after last change
+        
+        /// <summary>
+        /// Downloads and caches an image from Hub
+        /// Returns cached image if available, otherwise downloads from URL
+        /// </summary>
+        public async Task<BitmapImage> GetCachedImageAsync(string imageUrl, CancellationToken cancellationToken = default)
+        {
+            if (string.IsNullOrEmpty(imageUrl))
+            {
+                return null;
+            }
+            
+            // Try to get from cache first
+            var cachedImage = _hubResourcesCache?.TryGetCachedImage(imageUrl);
+            if (cachedImage != null)
+            {
+                return cachedImage;
+            }
+            
+            // Download from URL
+            try
+            {
+                using var response = await _httpClient.GetAsync(imageUrl, HttpCompletionOption.ResponseContentRead, cancellationToken);
+                response.EnsureSuccessStatusCode();
+                
+                var imageData = await response.Content.ReadAsByteArrayAsync(cancellationToken);
+                
+                // Cache the image data
+                var cacheResult = _hubResourcesCache?.CacheImage(imageUrl, imageData) ?? false;
+                
+                // Schedule a batched save (debounced)
+                if (cacheResult)
+                {
+                    ScheduleImageCacheSave();
+                }
+                
+                // Convert to BitmapImage
+                var bitmap = new BitmapImage();
+                bitmap.BeginInit();
+                bitmap.CacheOption = BitmapCacheOption.OnLoad;
+                bitmap.CreateOptions = BitmapCreateOptions.IgnoreColorProfile;
+                bitmap.StreamSource = new MemoryStream(imageData);
+                bitmap.EndInit();
+                bitmap.Freeze();
+                
+                return bitmap;
+            }
+            catch (Exception ex)
+            {
+                return null;
+            }
+        }
+        
+        /// <summary>
+        /// Schedules a debounced save of the image cache
+        /// Multiple rapid changes will only result in one save after 3 seconds of inactivity
+        /// </summary>
+        private void ScheduleImageCacheSave()
+        {
+            lock (_imageCacheSaveLock)
+            {
+                _imageCacheDirty = true;
+                
+                if (_imageCacheSaveTimer == null)
+                {
+                    _imageCacheSaveTimer = new System.Threading.Timer(
+                        _ => PerformImageCacheSave(),
+                        null,
+                        IMAGE_CACHE_SAVE_DELAY_MS,
+                        System.Threading.Timeout.Infinite);
+                }
+                else
+                {
+                    // Reset the timer
+                    _imageCacheSaveTimer.Change(IMAGE_CACHE_SAVE_DELAY_MS, System.Threading.Timeout.Infinite);
+                }
+            }
+        }
+        
+        /// <summary>
+        /// Performs the actual save of the image cache
+        /// </summary>
+        private void PerformImageCacheSave()
+        {
+            lock (_imageCacheSaveLock)
+            {
+                if (_imageCacheDirty)
+                {
+                    _imageCacheDirty = false;
+                    SaveImageCache();
+                }
+            }
+        }
+        
+        /// <summary>
+        /// Loads the image cache from disk
+        /// Call this during app startup to restore cached images
+        /// </summary>
+        public bool LoadImageCache()
+        {
+            var result = _hubResourcesCache?.LoadImageCacheFromDisk() ?? false;
+            return result;
+        }
+        
+        /// <summary>
+        /// Saves the image cache to disk
+        /// Call this during app shutdown to persist cached images
+        /// </summary>
+        public bool SaveImageCache()
+        {
+            var result = _hubResourcesCache?.SaveImageCacheToDisk() ?? false;
+            return result;
+        }
+        
         public void Dispose()
         {
             if (!_disposed)
             {
+                // Perform final image cache save before disposing
+                PerformImageCacheSave();
+                
+                _imageCacheSaveTimer?.Dispose();
                 _httpClient?.Dispose();
-                _requestLock?.Dispose();
+                _requestThrottle?.Dispose();
+                _hubResourcesCache?.Dispose();
                 _disposed = true;
             }
         }

@@ -567,6 +567,23 @@ namespace VPM
                     return;
                 }
                 
+                // CRITICAL FIX: Add the downloaded package to PackageManager metadata
+                // so that missing dependencies are recalculated and the dependency graph is updated
+                if (_packageManager != null && metadata != null)
+                {
+                    // Set the file path and status
+                    metadata.FilePath = filePath;
+                    metadata.Status = "Loaded";
+                    
+                    // Add to PackageMetadata dictionary using the filename as key
+                    var metadataKey = System.IO.Path.GetFileNameWithoutExtension(filePath);
+                    _packageManager.PackageMetadata[metadataKey] = metadata;
+                    
+                    // Recalculate missing dependencies for all packages
+                    // This will remove the downloaded package from other packages' MissingDependencies lists
+                    await Task.Run(() => _packageManager.DetectMissingDependencies());
+                }
+                
                 // Use the full filename (without .var extension) as the package name for display
                 // This ensures we show "VAMBO.Elsa.3" instead of just "Elsa"
                 var fullPackageName = System.IO.Path.GetFileNameWithoutExtension(metadata.Filename);
