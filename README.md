@@ -69,7 +69,7 @@ That's it. No installer, no registry entries, no admin rights needed.
 - **WPF (.NET 10)** — part of the .NET ecosystem, licensed under [MIT License](https://github.com/dotnet/runtime/blob/main/LICENSE.TXT)
 - [**NetVips**](https://github.com/kleisauke/net-vips) — high-performance image processing library (MIT License)
 - [**SharpCompress**](https://github.com/adamhathcock/sharpcompress) — archive handling and compression utilities (MIT License)
-- [**ImageListView**](https://github.com/oozcitak/imagelistview) — customizable image preview grid (MIT License)
+- [**ImageListView**](https://github.com/oozcitak/imagelistview) — customizable image preview grid ([Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0))
 
 ## License
 This project is licensed under the Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International License.
