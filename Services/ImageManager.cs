@@ -468,34 +468,37 @@ namespace VPM.Services
                     }
                 }
 
-                using var archive = SharpCompressHelper.OpenForRead(varPath);
+                // Use LOCK-FREE approach: get all entries from virtual archive cache
+                // File is opened once to read directory, then closed immediately
+                var lockFreeReader = _asyncPool.LockFreeReader;
+                var allEntries = lockFreeReader.GetAllEntries(varPath).ToList();
 
                 // Build a flattened list of all files in the archive for pairing detection
                 // Flatten by filename only (without directory path) for global pairing detection
                 // This catches all pairs regardless of directory depth
                 var allFilesFlattened = new List<string>();
-                foreach (var entry in archive.Entries)
+                foreach (var entry in allEntries)
                 {
-                    if (!entry.Key.EndsWith("/"))
+                    if (!entry.IsDirectory)
                     {
                         // Store just the filename for global pairing
-                        var entryFilename = Path.GetFileName(entry.Key);
+                        var entryFilename = Path.GetFileName(entry.Path);
                         allFilesFlattened.Add(entryFilename.ToLower());
                     }
                 }
 
                 // Now check each image file for pairing
-                foreach (var entry in archive.Entries)
+                foreach (var entry in allEntries)
                 {
-                    if (entry.Key.EndsWith("/")) continue;
+                    if (entry.IsDirectory) continue;
 
-                    var ext = Path.GetExtension(entry.Key).ToLower();
+                    var ext = Path.GetExtension(entry.Path).ToLower();
                     if (ext != ".jpg" && ext != ".jpeg" && ext != ".png") continue;
 
-                    var entryFilename = Path.GetFileName(entry.Key).ToLower();
+                    var entryFilename = Path.GetFileName(entry.Path).ToLower();
                     
                     // Size filter: 1KB - 1MB (allow larger images, validation happens during load)
-                    if (entry.Size < 1024 || entry.Size > 1024 * 1024)
+                    if (entry.UncompressedSize < 1024 || entry.UncompressedSize > 1024 * 1024)
                     {
                         continue;
                     }
@@ -507,9 +510,9 @@ namespace VPM.Services
                         continue;
                     }
 
-                    // Phase 1 Optimization: Use header-only read for dimension detection
-                    // This reduces I/O by 95-99% compared to loading full image
-                    var (width, height) = SharpCompressHelper.GetImageDimensionsFromEntry(archive.Archive, entry);
+                    // Use lock-free reader for dimension detection
+                    // File is opened, header read, file closed immediately
+                    var (width, height) = lockFreeReader.GetImageDimensions(varPath, entry.Path);
                     
                     // Only index images with valid dimensions
                     if (width <= 0 || height <= 0)
@@ -520,8 +523,8 @@ namespace VPM.Services
                     imageLocations.Add(new ImageLocation
                     {
                         VarFilePath = varPath,
-                        InternalPath = entry.Key,
-                        FileSize = entry.Size,
+                        InternalPath = entry.Path,
+                        FileSize = entry.UncompressedSize,
                         Width = width,
                         Height = height
                     });
@@ -686,85 +689,40 @@ namespace VPM.Services
         }
         /// <summary>
         /// Loads an image directly from a VAR archive into memory with validation
-        /// Optimized with O(1) LRU operations and lock-free file I/O
-        /// Phase 3: Uses chunked loading for large images (40-50% memory fragmentation reduction)
+        /// Uses LOCK-FREE approach: opens file, reads entry, closes immediately.
+        /// No file handles are held after this method returns.
         /// </summary>
         private BitmapImage LoadImageFromVar(string varPath, string internalPath)
         {
             try
             {
-                using var archive = SharpCompressHelper.OpenForRead(varPath);
-
-                var entry = SharpCompressHelper.FindEntryByPath(archive.Archive, internalPath);
-
-                if (entry == null) return null;
-
-                var pathNorm = internalPath.Replace('\\', '/').ToLower();
-                if (!IsValidImageEntry(entry, pathNorm)) return null;
+                // Use lock-free reader - file is opened, entry read, file closed immediately
+                var lockFreeReader = _asyncPool.LockFreeReader;
+                var imageData = lockFreeReader.ReadEntryData(varPath, internalPath);
+                
+                if (imageData == null || imageData.Length < 4) return null;
+                
+                // Validate header
+                if (!IsValidImageHeader(imageData))
+                    return null;
 
                 try
                 {
-                    using (var entryStream = entry.OpenEntryStream())
+                    using var memoryStream = new MemoryStream(imageData);
+                    var bitmap = new BitmapImage();
+                    bitmap.BeginInit();
+                    bitmap.CacheOption = BitmapCacheOption.OnLoad;
+                    bitmap.StreamSource = memoryStream;
+                    bitmap.CreateOptions = BitmapCreateOptions.IgnoreColorProfile | BitmapCreateOptions.PreservePixelFormat;
+                    bitmap.EndInit();
+                    bitmap.Freeze();
+
+                    if (!IsValidImageDimensions(bitmap))
                     {
-                        // Phase 2 Optimization: Validate header BEFORE full decompression
-                        // This saves 50-70% I/O for invalid images
-                        byte[] header = new byte[4];
-                        int bytesRead = entryStream.Read(header, 0, 4);
-                        
-                        // Check magic bytes early
-                        if (bytesRead < 4 || !IsValidImageHeader(header))
-                            return null;  // Skip invalid images without decompression
-                        
-                        // Now safe to decompress
-                        entryStream.Position = 0;
-                        
-                        byte[] imageData;
-                        
-                        // Phase 3 Optimization: Use chunked loading for large images
-                        // Reduces memory fragmentation by 40-50% for files > threshold
-                        if (entry.Size > CHUNKED_LOADING_THRESHOLD)
-                        {
-                            int chunkSize = SharpCompressHelper.GetAdaptiveChunkSize(entry.Size);
-                            imageData = SharpCompressHelper.ReadEntryChunked(archive.Archive, entry, chunkSize);
-                        }
-                        else
-                        {
-                            // Use standard loading for small images
-                            using (var ms = new MemoryStream())
-                            {
-                                entryStream.CopyTo(ms);
-                                ms.Position = 0;
-                                imageData = ms.ToArray();
-                            }
-                        }
-
-                        MemoryStream memoryStream = null;
-                        try
-                        {
-                            memoryStream = new MemoryStream(imageData);
-                            var bitmap = new BitmapImage();
-                            bitmap.BeginInit();
-                            bitmap.CacheOption = BitmapCacheOption.OnLoad;
-                            bitmap.StreamSource = memoryStream;
-                            bitmap.CreateOptions = BitmapCreateOptions.IgnoreColorProfile | BitmapCreateOptions.PreservePixelFormat;
-                            bitmap.EndInit();
-                            bitmap.Freeze();
-
-                            if (!IsValidImageDimensions(bitmap))
-                            {
-                                memoryStream.Dispose();
-                                return null;
-                            }
-
-                            memoryStream.Dispose();
-                            return bitmap;
-                        }
-                        catch
-                        {
-                            memoryStream?.Dispose();
-                            throw;
-                        }
+                        return null;
                     }
+
+                    return bitmap;
                 }
                 catch (Exception ex) when (ex is InvalidOperationException or IOException or ArgumentException)
                 {
@@ -890,6 +848,8 @@ namespace VPM.Services
 
         /// <summary>
         /// Loads multiple images from the same VAR in one pass (batch optimization)
+        /// Uses LOCK-FREE approach: opens file once, reads requested entries, closes immediately.
+        /// No file handles are held after this method returns.
         /// </summary>
         public Dictionary<string, BitmapImage> LoadImagesFromVarBatch(string varPath, List<string> internalPaths, bool cacheOnly = false)
         {
@@ -900,9 +860,6 @@ namespace VPM.Services
             {
                 return results;
             }
-
-            // Register active file usage
-            _asyncPool.RegisterActiveFile(varPath);
 
             try
             {
@@ -929,7 +886,6 @@ namespace VPM.Services
                 var uncachedPaths = new List<string>();
                 if (fileSize > 0 && lastWriteTicks > 0)
                 {
-                    // MEDIUM PRIORITY FIX 5: Use batch lookup instead of sequential checks
                     var (cachedImages, uncached) = _diskCache.TryGetCachedBatch(varPath, internalPaths, fileSize, lastWriteTicks);
                     
                     // Add cached images to results
@@ -951,95 +907,45 @@ namespace VPM.Services
                     return results;
                 }
                 
-                using var archive = SharpCompressHelper.OpenForRead(varPath);
+                // LOCK-FREE APPROACH: Use batch read that opens file ONCE, reads all entries, closes immediately
+                // No file handles are held after ReadEntriesBatch returns
+                var lockFreeReader = _asyncPool.LockFreeReader;
+                var batchData = lockFreeReader.ReadEntriesBatch(varPath, uncachedPaths);
 
-                foreach (var internalPath in uncachedPaths)
+                foreach (var kvp in batchData)
                 {
+                    var internalPath = kvp.Key;
+                    var imageData = kvp.Value;
+                    
+                    if (imageData == null || imageData.Length < 4)
+                        continue;
+                    
+                    // Validate image header
+                    if (!IsValidImageHeader(imageData))
+                        continue;
+                    
                     try
                     {
-                        var entry = SharpCompressHelper.FindEntryByPath(archive.Archive, internalPath);
-                        if (entry == null)
-                        {
-                            continue;
-                        }
+                        using var memoryStream = new MemoryStream(imageData);
+                        var bitmap = new BitmapImage();
+                        bitmap.BeginInit();
+                        bitmap.CacheOption = BitmapCacheOption.OnLoad;
+                        bitmap.StreamSource = memoryStream;
+                        bitmap.CreateOptions = BitmapCreateOptions.IgnoreColorProfile | BitmapCreateOptions.PreservePixelFormat;
+                        bitmap.EndInit();
+                        bitmap.Freeze();
 
-                        var pathNorm = internalPath.Replace('\\', '/').ToLower();
-                        if (!IsValidImageEntry(entry, pathNorm))
+                        if (IsValidImageDimensions(bitmap))
                         {
-                            continue;
-                        }
-
-                        // Phase 2 Optimization: Validate header BEFORE full decompression
-                        // This saves 50-70% I/O for invalid images
-                        byte[] header = new byte[4];
-                        bool isValid = false;
-
-                        // Use a separate stream for validation to avoid seeking issues with DeflateStream
-                        using (var validationStream = entry.OpenEntryStream())
-                        {
-                            int bytesRead = validationStream.Read(header, 0, 4);
-                            if (bytesRead >= 4 && IsValidImageHeader(header))
+                            results[internalPath] = bitmap;
+                            
+                            if (fileSize > 0 && lastWriteTicks > 0)
                             {
-                                isValid = true;
+                                _diskCache.TrySaveToCache(varPath, internalPath, fileSize, lastWriteTicks, bitmap);
                             }
                         }
-
-                        if (!isValid)
-                            continue;  // Skip invalid images without full decompression
-                        
-                        byte[] imageData;
-                        
-                        // Phase 3 Optimization: Use chunked loading for large images
-                        if (entry.Size > CHUNKED_LOADING_THRESHOLD)
-                        {
-                            // ReadEntryChunked opens a new stream, so it starts from the beginning
-                            int chunkSize = SharpCompressHelper.GetAdaptiveChunkSize(entry.Size);
-                            imageData = SharpCompressHelper.ReadEntryChunked(archive.Archive, entry, chunkSize);
-                        }
-                        else
-                        {
-                            // Use standard loading for small images
-                            // We need to open the stream again since we closed the validation stream
-                            // This is acceptable overhead for small files to ensure safety
-                            using (var entryStream = entry.OpenEntryStream())
-                            using (var ms = new MemoryStream())
-                            {
-                                entryStream.CopyTo(ms);
-                                ms.Position = 0;
-                                imageData = ms.ToArray();
-                            }
-                        }
-
-                            MemoryStream memoryStream = null;
-                            try
-                            {
-                                memoryStream = new MemoryStream(imageData);
-                                var bitmap = new BitmapImage();
-                                bitmap.BeginInit();
-                                bitmap.CacheOption = BitmapCacheOption.OnLoad;
-                                bitmap.StreamSource = memoryStream;
-                                bitmap.CreateOptions = BitmapCreateOptions.IgnoreColorProfile | BitmapCreateOptions.PreservePixelFormat;
-                                bitmap.EndInit();
-                                bitmap.Freeze();
-
-                                if (IsValidImageDimensions(bitmap))
-                                {
-                                    results[internalPath] = bitmap;
-                                    
-                                    if (fileSize > 0 && lastWriteTicks > 0)
-                                    {
-                                        _diskCache.TrySaveToCache(varPath, internalPath, fileSize, lastWriteTicks, bitmap);
-                                    }
-                                }
-                                
-                                memoryStream.Dispose();
-                            }
-                            catch
-                            {
-                                memoryStream?.Dispose();
-                            }
                     }
-                    catch (Exception ex) when (ex is ArgumentException or IOException or InvalidOperationException)
+                    catch
                     {
                         // Skip invalid images silently
                     }
@@ -1047,10 +953,6 @@ namespace VPM.Services
             }
             catch (Exception)
             {
-            }
-            finally
-            {
-                _asyncPool.UnregisterActiveFile(varPath);
             }
             
             return results;
@@ -1079,223 +981,15 @@ namespace VPM.Services
         }
 
         /// <summary>
-        /// Phase 4: Loads multiple images from the same VAR using parallel archive handles
-        /// Achieves 2-4x throughput improvement for batch operations
+        /// Phase 4: Loads multiple images from the same VAR using lock-free batch reading.
+        /// Uses single file open, reads all entries, closes immediately - no file handles held.
+        /// Falls back to LoadImagesFromVarBatch which also uses lock-free approach.
         /// </summary>
         private Dictionary<string, BitmapImage> LoadImagesFromVarParallel(string varPath, List<string> internalPaths, int maxParallelism = 0, bool cacheOnly = false)
         {
-            var results = new Dictionary<string, BitmapImage>();
-            
-            // Check if file is locked/cancelled
-            if (_asyncPool.IsFileCancelled(varPath))
-            {
-                return results;
-            }
-
-            // Register active file usage
-            _asyncPool.RegisterActiveFile(varPath);
-
-            try
-            {
-                // Check memory pressure before loading new images
-                CheckMemoryPressure();
-                
-                if (maxParallelism <= 0)
-                    maxParallelism = Math.Max(2, Environment.ProcessorCount / 2);
-    
-                var startTime = DateTime.UtcNow;
-    
-                    // Check if file exists before attempting to open
-                    if (!File.Exists(varPath))
-                    {
-                        return results; // Return empty results
-                    }
-    
-                    using var pool = new ArchiveHandlePool(varPath, maxParallelism);
-                    
-                    // Get VAR file signature for disk cache
-                    long fileSize = 0;
-                    long lastWriteTicks = 0;
-                    try
-                    {
-                        var fileInfo = new FileInfo(varPath);
-                        fileSize = fileInfo.Length;
-                        lastWriteTicks = fileInfo.LastWriteTimeUtc.Ticks;
-                    }
-                    catch { }
-    
-                    // Try disk cache first (using batch lookup for efficiency)
-                    var uncachedPaths = new List<string>();
-                    if (fileSize > 0 && lastWriteTicks > 0)
-                    {
-                        // MEDIUM PRIORITY FIX 5: Use batch lookup instead of sequential checks
-                        var (cachedImages, uncached) = _diskCache.TryGetCachedBatch(varPath, internalPaths, fileSize, lastWriteTicks);
-                        
-                        // Add cached images to results
-                        if (!cacheOnly)
-                        {
-                            foreach (var (path, bitmap) in cachedImages)
-                            {
-                                results[path] = bitmap;
-                            }
-                        }
-                        
-                        uncachedPaths = uncached;
-                    }
-                    else
-                    {
-                        uncachedPaths.AddRange(internalPaths);
-                    }
-    
-                    if (uncachedPaths.Count == 0)
-                        return results;
-    
-                    // Phase 4: Parallel loading with archive pool
-                    var tasks = uncachedPaths.Select(internalPath => Task.Run(async () =>
-                    {
-                        // Check cancellation inside task
-                        if (_asyncPool.IsFileCancelled(varPath))
-                            return (internalPath, bitmap: (BitmapImage)null);
-
-                        try
-                        {
-                            var archive = await pool.AcquireHandleAsync();
-                            try
-                            {
-                                // Check cancellation again after acquiring handle
-                                if (_asyncPool.IsFileCancelled(varPath))
-                                    return (internalPath, bitmap: (BitmapImage)null);
-
-                                var entry = SharpCompressHelper.FindEntryByPath(archive, internalPath);
-                            if (entry == null)
-                                return (internalPath, bitmap: (BitmapImage)null);
-
-                            var pathNorm = internalPath.Replace('\\', '/').ToLower();
-                            if (!IsValidImageEntry(entry, pathNorm))
-                                return (internalPath, bitmap: (BitmapImage)null);
-
-                        byte[] imageData;
-                        if (entry.Size > CHUNKED_LOADING_THRESHOLD)
-                        {
-                            int chunkSize = SharpCompressHelper.GetAdaptiveChunkSize(entry.Size);
-                            imageData = SharpCompressHelper.ReadEntryChunked(archive, entry, chunkSize);
-                        }
-                        else
-                        {
-                            using (var entryStream = entry.OpenEntryStream())
-                            {
-                                using (var ms = new MemoryStream())
-                                {
-                                    entryStream.CopyTo(ms);
-                                    ms.Position = 0;
-                                    imageData = ms.ToArray();
-                                }
-                            }
-                        }
-
-                        using (var ms = new MemoryStream(imageData))
-                        {
-                            if (!IsValidImageStream(ms))
-                                return (internalPath, bitmap: (BitmapImage)null);
-                        }
-
-                        MemoryStream memoryStream = null;
-                        try
-                        {
-                            memoryStream = new MemoryStream(imageData);
-                            var bitmap = new BitmapImage();
-                            bitmap.BeginInit();
-                            bitmap.CacheOption = BitmapCacheOption.OnLoad;
-                            bitmap.StreamSource = memoryStream;
-                            bitmap.CreateOptions = BitmapCreateOptions.IgnoreColorProfile | BitmapCreateOptions.PreservePixelFormat;
-                            bitmap.EndInit();
-                            bitmap.Freeze();
-
-                            if (!IsValidImageDimensions(bitmap))
-                            {
-                                memoryStream.Dispose();
-                                return (internalPath, bitmap: (BitmapImage)null);
-                            }
-
-                            memoryStream.Dispose();
-                            return (internalPath, bitmap);
-                        }
-                        catch
-                        {
-                            memoryStream?.Dispose();
-                            throw;
-                        }
-                        }
-                        finally
-                        {
-                            pool.ReleaseHandle(archive);
-                        }
-                    }
-                    catch (FileNotFoundException)
-                    {
-                        return (internalPath, bitmap: (BitmapImage)null);
-                    }
-                    catch (Exception)
-                    {
-                        return (internalPath, bitmap: (BitmapImage)null);
-                    }
-                })).ToArray();
-
-                _parallelMetricsLock.EnterWriteLock();
-                try
-                {
-                    _parallelTasksCreated += tasks.Length;
-                }
-                finally
-                {
-                    _parallelMetricsLock.ExitWriteLock();
-                }
-
-                // Wait for all parallel tasks with 30 second timeout to prevent indefinite hangs
-                if (!Task.WaitAll(tasks, TimeSpan.FromSeconds(30)))
-                {
-                    throw new TimeoutException($"Parallel image loading exceeded 30 second timeout for {varPath}");
-                }
-
-                // Collect results and save to cache
-                foreach (var task in tasks)
-                {
-                    var (path, bitmap) = task.Result;
-                    if (bitmap != null)
-                    {
-                        if (!cacheOnly)
-                        {
-                            results[path] = bitmap;
-                        }
-                        
-                        if (fileSize > 0 && lastWriteTicks > 0)
-                        {
-                            _diskCache.TrySaveToCache(varPath, path, fileSize, lastWriteTicks, bitmap);
-                        }
-                    }
-                }
-
-                _parallelMetricsLock.EnterWriteLock();
-                try
-                {
-                    _parallelBatchesProcessed++;
-                    _parallelTotalTime += (long)(DateTime.UtcNow - startTime).TotalMilliseconds;
-                }
-                finally
-                {
-                    _parallelMetricsLock.ExitWriteLock();
-                }
-            }
-            catch (Exception)
-            {
-                return LoadImagesFromVarBatch(varPath, internalPaths, cacheOnly);
-            }
-            finally
-            {
-                _asyncPool.UnregisterActiveFile(varPath);
-            }
-
-            return results;
+            // Simply delegate to the lock-free batch method
+            // The old ArchiveHandlePool approach held file handles open, causing lock issues
+            return LoadImagesFromVarBatch(varPath, internalPaths, cacheOnly);
         }
 
         /// <summary>
@@ -1331,27 +1025,10 @@ namespace VPM.Services
                     return cachedImage;
                 }
 
-                // 3. Read from Archive (Cache Miss)
-                byte[] imageData = null;
-                
-                // Use shared archive pool to avoid opening/closing file repeatedly
-                // This significantly improves performance for sequential reads (e.g. scrolling)
-                var pool = GetSharedArchivePool(varPath);
-                var archive = await pool.AcquireHandleAsync();
-                
-                try
-                {
-                    var entry = SharpCompressHelper.FindEntryByPath(archive, internalPath);
-                    if (entry != null)
-                    {
-                        int chunkSize = SharpCompressHelper.GetAdaptiveChunkSize(entry.Size);
-                        imageData = SharpCompressHelper.ReadEntryChunked(archive, entry, chunkSize);
-                    }
-                }
-                finally
-                {
-                    pool.ReleaseHandle(archive);
-                }
+                // 3. Read from Archive using LOCK-FREE approach
+                // File is opened, entry is read, file is closed immediately - no handles held
+                var lockFreeReader = _asyncPool.LockFreeReader;
+                byte[] imageData = await Task.Run(() => lockFreeReader.ReadEntryData(varPath, internalPath));
 
                 if (imageData == null || imageData.Length == 0) return null;
 
@@ -2318,6 +1995,16 @@ namespace VPM.Services
             _preloadTask?.Wait(1000); // Wait up to 1 second for cleanup
             _preloadCancellation?.Dispose();
             
+            // Dispose pool cleanup timer
+            _poolCleanupTimer?.Dispose();
+            
+            // Dispose any remaining shared archive pools (legacy cleanup)
+            foreach (var kvp in _sharedArchivePools)
+            {
+                kvp.Value.Dispose();
+            }
+            _sharedArchivePools.Clear();
+            
             // Unsubscribe from async pool events to prevent memory leaks
             if (_asyncPool != null)
             {
@@ -2547,6 +2234,10 @@ namespace VPM.Services
                         pool.Dispose();
                     }
                 }
+                
+                // CRITICAL: Invalidate lock-free archive cache for this file
+                // This ensures no cached directory structure or entry data references the file
+                _asyncPool.LockFreeReader.InvalidateArchive(varPath);
 
                 // Wait for active file operations to complete
                 // Console.WriteLine($"[ImageManager.CloseFileHandlesAsync] Releasing file locks from async pool");

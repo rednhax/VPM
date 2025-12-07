@@ -44,9 +44,13 @@ namespace VPM.Services
         private int _totalValidationChecks = 0;
         private readonly object _validationMetricsLock = new();
         
-        // File locking management
+        // File locking management - FIXED: Use atomic operations for thread safety
         private readonly ConcurrentDictionary<string, int> _activeFiles = new(StringComparer.OrdinalIgnoreCase);
-        private readonly ConcurrentDictionary<string, bool> _cancelledPaths = new(StringComparer.OrdinalIgnoreCase);
+        private readonly ConcurrentDictionary<string, DateTime> _cancelledPaths = new(StringComparer.OrdinalIgnoreCase);
+        private readonly TimeSpan _cancelledPathExpiry = TimeSpan.FromMinutes(1); // Auto-expire cancelled paths
+        
+        // Lock-free archive reader for eliminating file lock issues
+        private readonly LockFreeArchiveReader _lockFreeReader;
         
         // Callbacks and events
         public event Action<int, int> ProgressChanged; // (current, total)
@@ -68,6 +72,9 @@ namespace VPM.Services
             
             _maxConcurrentLoads = maxConcurrentLoads;
             _concurrencySemaphore = new SemaphoreSlim(maxConcurrentLoads, maxConcurrentLoads);
+            
+            // Initialize lock-free archive reader
+            _lockFreeReader = new LockFreeArchiveReader();
             
             // Capture dispatcher from UI thread - must be called from UI thread
             if (Dispatcher.FromThread(Thread.CurrentThread) != null)
@@ -99,18 +106,23 @@ namespace VPM.Services
             
             // 1. Mark paths as cancelled to prevent new operations
             // Also mark the package NAME (without path) to catch both AddonPackages and AllPackages versions
+            var now = DateTime.UtcNow;
             foreach (var path in paths)
             {
                 // Console.WriteLine($"[ImageLoaderAsyncPool.ReleaseFileLocksAsync] Marking path as cancelled: {path}");
-                _cancelledPaths.TryAdd(path, true);
+                _cancelledPaths[path] = now; // Use indexer for atomic update
                 
                 // Also extract package name and mark it (e.g., "Package.Name.1" from full path)
                 var fileName = System.IO.Path.GetFileNameWithoutExtension(path);
                 if (!string.IsNullOrEmpty(fileName))
                 {
-                    _cancelledPaths.TryAdd(fileName, true);
+                    _cancelledPaths[fileName] = now;
                     // Console.WriteLine($"[ImageLoaderAsyncPool.ReleaseFileLocksAsync] Also marked package name: {fileName}");
                 }
+                
+                // CRITICAL: Invalidate lock-free archive cache for this path
+                // This ensures no cached data references the file
+                _lockFreeReader.InvalidateArchive(path);
                 
                 // Also cancel any pending items in the queue for this path
                 CancelPendingForPackage(path);
@@ -195,6 +207,31 @@ namespace VPM.Services
         public void ResetCancellation(string path)
         {
             _cancelledPaths.TryRemove(path, out _);
+            
+            // Also reset by package name
+            var fileName = System.IO.Path.GetFileNameWithoutExtension(path);
+            if (!string.IsNullOrEmpty(fileName))
+            {
+                _cancelledPaths.TryRemove(fileName, out _);
+            }
+        }
+        
+        /// <summary>
+        /// Cleans up expired cancelled paths to prevent memory leaks.
+        /// Called periodically during processing.
+        /// </summary>
+        private void CleanupExpiredCancelledPaths()
+        {
+            var now = DateTime.UtcNow;
+            var keysToRemove = _cancelledPaths
+                .Where(kvp => now - kvp.Value > _cancelledPathExpiry)
+                .Select(kvp => kvp.Key)
+                .ToList();
+                
+            foreach (var key in keysToRemove)
+            {
+                _cancelledPaths.TryRemove(key, out _);
+            }
         }
 
         public void RegisterActiveFile(string path)
@@ -212,8 +249,34 @@ namespace VPM.Services
         public bool IsFileCancelled(string path)
         {
             if (string.IsNullOrEmpty(path)) return false;
-            return _cancelledPaths.ContainsKey(path);
+            
+            // Check if path is cancelled and not expired
+            if (_cancelledPaths.TryGetValue(path, out var cancelTime))
+            {
+                if (DateTime.UtcNow - cancelTime <= _cancelledPathExpiry)
+                    return true;
+                    
+                // Expired - remove it
+                _cancelledPaths.TryRemove(path, out _);
+            }
+            
+            // Also check by package name
+            var fileName = System.IO.Path.GetFileNameWithoutExtension(path);
+            if (!string.IsNullOrEmpty(fileName) && _cancelledPaths.TryGetValue(fileName, out cancelTime))
+            {
+                if (DateTime.UtcNow - cancelTime <= _cancelledPathExpiry)
+                    return true;
+                    
+                _cancelledPaths.TryRemove(fileName, out _);
+            }
+            
+            return false;
         }
+        
+        /// <summary>
+        /// Gets the lock-free archive reader for direct access.
+        /// </summary>
+        public LockFreeArchiveReader LockFreeReader => _lockFreeReader;
 
         /// <summary>
         /// Starts the async processing loop
@@ -242,11 +305,14 @@ namespace VPM.Services
                     {
                         // No images available, wait a bit before checking again
                         await Task.Delay(50, cancellationToken).ConfigureAwait(false);
+                        
+                        // Periodically cleanup expired cancelled paths
+                        CleanupExpiredCancelledPaths();
                         continue;
                     }
                     
-                    // Check if path is cancelled
-                    if (!string.IsNullOrEmpty(queuedImage.VarPath) && _cancelledPaths.ContainsKey(queuedImage.VarPath))
+                    // Check if path is cancelled (uses expiry-aware check)
+                    if (!string.IsNullOrEmpty(queuedImage.VarPath) && IsFileCancelled(queuedImage.VarPath))
                     {
                         queuedImage.HadError = true;
                         queuedImage.ErrorText = "Operation cancelled due to file lock request";
@@ -378,6 +444,7 @@ namespace VPM.Services
         
         /// <summary>
         /// Processes an image (loads from VAR, applies transformations)
+        /// Uses lock-free archive reader to eliminate file locking issues.
         /// </summary>
         private void ProcessImage(QueuedImage qi)
         {
@@ -413,106 +480,99 @@ namespace VPM.Services
                         // Ignore file info errors, proceed to load from VAR
                     }
 
-                    DisposableArchive archive = null;
-                    try
-                    {
-                        archive = SharpCompressHelper.OpenForRead(qi.VarPath, this);
-                    }
-                    catch (OperationCanceledException)
+                    // Check if cancelled before reading
+                    if (IsFileCancelled(qi.VarPath))
                     {
                         qi.HadError = true;
                         qi.ErrorText = "Operation cancelled";
                         return;
                     }
+
+                    // LOCK-FREE APPROACH: Use virtual archive cache instead of holding file handles
+                    // This eliminates file locking issues by reading data into memory and closing the file immediately
                     
-                    using (archive)
+                    // Validation: Check early using header-only reads (50-70% I/O reduction for invalid images)
+                    lock (_validationMetricsLock)
                     {
-                        var entry = SharpCompressHelper.FindEntryByPath(archive.Archive, qi.InternalPath);
-                        if (entry == null)
-                        {
-                            qi.HadError = true;
-                            qi.ErrorText = "Entry not found in archive";
-                            return;
-                        }
+                        _totalValidationChecks++;
+                    }
                     
-                        // Validation: Check early using header-only reads (50-70% I/O reduction for invalid images)
+                    if (!_lockFreeReader.IsValidImageEntry(qi.VarPath, qi.InternalPath))
+                    {
                         lock (_validationMetricsLock)
                         {
-                            _totalValidationChecks++;
+                            _validationRejections++;
                         }
+                        qi.HadError = true;
+                        qi.ErrorText = "Invalid image format";
+                        return;
+                    }
+                    
+                    // Read entry data using lock-free reader (file is opened, read, and closed immediately)
+                    var imageData = _lockFreeReader.ReadEntryData(qi.VarPath, qi.InternalPath);
+                    if (imageData == null || imageData.Length == 0)
+                    {
+                        qi.HadError = true;
+                        qi.ErrorText = "Entry not found in archive or empty";
+                        return;
+                    }
+                    
+                    // Use pooled MemoryStream to avoid allocation and fragmentation
+                    var memoryStream = MemoryStreamPool.Manager.GetStream();
+                    memoryStream.Write(imageData, 0, imageData.Length);
+                    memoryStream.Position = 0;
+                    
+                    // Validate image stream
+                    if (!IsValidImageStream(memoryStream))
+                    {
+                        memoryStream.Dispose();
+                        qi.HadError = true;
+                        qi.ErrorText = "Invalid image stream";
+                        return;
+                    }
+                    
+                    memoryStream.Position = 0;
+                    
+                    // Create BitmapImage on background thread
+                    try
+                    {
+                        var bitmap = new BitmapImage();
+                        bitmap.BeginInit();
+                        bitmap.CacheOption = BitmapCacheOption.OnLoad;
+                        bitmap.StreamSource = memoryStream;
+                        bitmap.CreateOptions = BitmapCreateOptions.IgnoreColorProfile | BitmapCreateOptions.PreservePixelFormat;
                         
-                        if (!SharpCompressHelper.IsValidImageEntry(archive.Archive, entry))
+                        if (qi.DecodeWidth > 0)
                         {
-                            lock (_validationMetricsLock)
-                            {
-                                _validationRejections++;
-                            }
-                            qi.HadError = true;
-                            qi.ErrorText = "Invalid image format";
-                            return;
+                            bitmap.DecodePixelWidth = qi.DecodeWidth;
                         }
-                        
-                        using var entryStream = entry.OpenEntryStream();
-                        // Use pooled MemoryStream to avoid allocation and fragmentation
-                        var memoryStream = MemoryStreamPool.Manager.GetStream();
-                        
-                        entryStream.CopyTo(memoryStream);
-                        memoryStream.Position = 0;
-                        
-                        // Validate image stream (redundant but provides additional safety)
-                        if (!IsValidImageStream(memoryStream))
+                        if (qi.DecodeHeight > 0)
                         {
-                            memoryStream.Dispose();
-                            qi.HadError = true;
-                            qi.ErrorText = "Invalid image stream";
-                            return;
+                            bitmap.DecodePixelHeight = qi.DecodeHeight;
                         }
                         
-                        memoryStream.Position = 0;
+                        bitmap.EndInit();
+                        bitmap.Freeze();
                         
-                        memoryStream.Position = 0;
+                        qi.Texture = bitmap;
+                        qi.Finished = true;
                         
-                        // Create BitmapImage on background thread
-                        try
+                        // Save to disk cache if available
+                        if (_diskCache != null && qi.FileSize > 0 && qi.LastWriteTicks > 0)
                         {
-                            var bitmap = new BitmapImage();
-                            bitmap.BeginInit();
-                            bitmap.CacheOption = BitmapCacheOption.OnLoad;
-                            bitmap.StreamSource = memoryStream;
-                            bitmap.CreateOptions = BitmapCreateOptions.IgnoreColorProfile | BitmapCreateOptions.PreservePixelFormat;
-                            
-                            if (qi.DecodeWidth > 0)
-                            {
-                                bitmap.DecodePixelWidth = qi.DecodeWidth;
-                            }
-                            if (qi.DecodeHeight > 0)
-                            {
-                                bitmap.DecodePixelHeight = qi.DecodeHeight;
-                            }
-                            
-                            bitmap.EndInit();
-                            bitmap.Freeze();
-                            
-                            qi.Texture = bitmap;
-                            qi.Finished = true;
-                            
-                            // Save to disk cache if available
-                            if (_diskCache != null && qi.FileSize > 0 && qi.LastWriteTicks > 0)
-                            {
-                                _diskCache.TrySaveToCache(qi.VarPath, qi.InternalPath, qi.FileSize, qi.LastWriteTicks, bitmap);
-                            }
+                            _diskCache.TrySaveToCache(qi.VarPath, qi.InternalPath, qi.FileSize, qi.LastWriteTicks, bitmap);
                         }
-                        catch (Exception ex)
-                        {
-                            qi.HadError = true;
-                            qi.ErrorText = "Bitmap creation failed: " + ex.Message;
-                        }
-                        finally
-                        {
-                            // Dispose stream after loading
-                            memoryStream.Dispose();
-                            qi.RawDataStream = null;
-                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        qi.HadError = true;
+                        qi.ErrorText = "Bitmap creation failed: " + ex.Message;
+                    }
+                    finally
+                    {
+                        // Dispose stream after loading
+                        memoryStream.Dispose();
+                        qi.RawDataStream = null;
                     }
                 }
             }
@@ -845,6 +905,9 @@ namespace VPM.Services
             _cancellationTokenSource?.Dispose();
             _concurrencySemaphore?.Dispose();
             ClearQueues();
+            
+            // Dispose lock-free reader
+            _lockFreeReader?.Dispose();
             
             lock (_textureTrackingLock)
             {
