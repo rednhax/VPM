@@ -66,8 +66,11 @@ That's it. No installer, no registry entries, no admin rights needed.
 
 ## Built With
 
-- WPF (.NET 10)
-- [NetVips](https://github.com/kleisauke/net-vips) for image processing
-- [SharpCompress](https://github.com/adamhathcock/sharpcompress) for archive handling
-- [ImageListView](https://github.com/oozcitak/imagelistview) for image preview grid
+- **WPF (.NET 10)** — part of the .NET ecosystem, licensed under [MIT License](https://github.com/dotnet/runtime/blob/main/LICENSE.TXT)
+- [**NetVips**](https://github.com/kleisauke/net-vips) — high-performance image processing library (MIT License)
+- [**SharpCompress**](https://github.com/adamhathcock/sharpcompress) — archive handling and compression utilities (MIT License)
+- [**ImageListView**](https://github.com/oozcitak/imagelistview) — customizable image preview grid (MIT License)
 
+## License
+This project is licensed under the Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International License.
+See the LICENSE file for details.
