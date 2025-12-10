@@ -24,6 +24,7 @@ namespace VPM
         private string _currentHubOverviewUrl = null;
         private CancellationTokenSource _hubOverviewCts;
         private bool _imagesNeedRefresh = false; // Track if images need to be loaded when switching to Images tab
+        private bool _isClearing = false; // Track when we're intentionally clearing the WebView
         // Note: _hubService is defined in MainWindow.PackageUpdates.cs and shared across partial classes
         
         #endregion
@@ -75,12 +76,25 @@ namespace VPM
         
         private void HubOverviewWebView_NavigationStarting(object sender, CoreWebView2NavigationStartingEventArgs e)
         {
+            // Don't show loading overlay when we're intentionally clearing
+            if (_isClearing)
+                return;
+                
             HubOverviewLoadingOverlay.Visibility = Visibility.Visible;
             HubOverviewErrorPanel.Visibility = Visibility.Collapsed;
         }
         
         private void HubOverviewWebView_NavigationCompleted(object sender, CoreWebView2NavigationCompletedEventArgs e)
         {
+            Debug.WriteLine($"[HubOverview] NavigationCompleted: IsSuccess={e.IsSuccess}, IsClearing={_isClearing}");
+            
+            // Ignore navigation events when we're intentionally clearing the WebView
+            if (_isClearing)
+            {
+                _isClearing = false;
+                return;
+            }
+            
             HubOverviewLoadingOverlay.Visibility = Visibility.Collapsed;
             
             if (!e.IsSuccess)
@@ -159,8 +173,7 @@ namespace VPM
                 {
                     // Mark that images need refresh when user switches to Images tab
                     _imagesNeedRefresh = true;
-                    // Force reload for new package (clear cached package name to trigger reload)
-                    _currentHubPackageName = null;
+                    // Don't clear _currentHubPackageName here - let LoadHubOverviewForSelectedPackageAsync handle caching
                     await LoadHubOverviewForSelectedPackageAsync();
                 }
             }
@@ -247,20 +260,23 @@ namespace VPM
             }
             
             // Extract package group name (without version and .var extension)
-            var packageName = GetPackageGroupName(selectedPackage.Name);
+            var packageGroupName = GetPackageGroupName(selectedPackage.Name);
             
-            // Skip if same package is already loaded
-            if (_currentHubPackageName == packageName && _currentHubResourceId != null)
+            // Skip if same package is already loaded AND we have a valid resource
+            if (_currentHubPackageName == packageGroupName && _currentHubResourceId != null)
             {
+                Debug.WriteLine($"[HubOverview] Skipping - same package already loaded: {packageGroupName}");
                 return;
             }
             
-            _currentHubPackageName = packageName;
+            Debug.WriteLine($"[HubOverview] Loading Hub overview for: {packageGroupName} (previous: {_currentHubPackageName}, prevResourceId: {_currentHubResourceId})");
+            
+            // Clear previous state when switching packages
+            _currentHubPackageName = packageGroupName;
+            _currentHubResourceId = null;
             
             // Show loading state
-            HubOverviewLoadingOverlay.Visibility = Visibility.Visible;
-            HubOverviewPlaceholder.Visibility = Visibility.Collapsed;
-            HubOverviewErrorPanel.Visibility = Visibility.Collapsed;
+            ShowHubOverviewLoading();
             
             try
             {
@@ -268,17 +284,27 @@ namespace VPM
                 _hubService ??= new HubService();
                 
                 // Look up the package on Hub by name
-                var detail = await _hubService.GetResourceDetailAsync(packageName, isPackageName: true, token);
+                var detail = await _hubService.GetResourceDetailAsync(packageGroupName, isPackageName: true, token);
                 
                 if (token.IsCancellationRequested) return;
                 
                 if (detail == null || string.IsNullOrEmpty(detail.ResourceId))
                 {
-                    ShowHubOverviewPlaceholder($"Package not found on Hub:\n{packageName}");
+                    Debug.WriteLine($"[HubOverview] No detail returned from Hub API");
+                    ShowHubOverviewPlaceholder($"Hub page not available for:\n{packageGroupName}");
+                    return;
+                }
+                
+                // Validate that the returned resource actually matches our package
+                if (!ValidateHubResourceMatch(detail, packageGroupName, selectedPackage.Name))
+                {
+                    Debug.WriteLine($"[HubOverview] Validation failed - showing placeholder");
+                    ShowHubOverviewPlaceholder($"Hub page not available for:\n{packageGroupName}");
                     return;
                 }
                 
                 _currentHubResourceId = detail.ResourceId;
+                Debug.WriteLine($"[HubOverview] Navigating to resource: {detail.ResourceId}");
                 
                 // Navigate to the Hub overview page
                 await NavigateToHubOverviewAsync(detail.ResourceId);
@@ -294,6 +320,174 @@ namespace VPM
                     ShowHubOverviewError($"Failed to load Hub info:\n{ex.Message}");
                 }
             }
+        }
+        
+        /// <summary>
+        /// Validates that a Hub resource detail actually matches the requested package.
+        /// The Hub API can return false positives (unrelated resources), so we verify:
+        /// 1. Creator name matches
+        /// 2. At least one HubFile has a matching package group name
+        /// </summary>
+        /// <param name="detail">The Hub resource detail returned by the API</param>
+        /// <param name="packageGroupName">The package group name (Creator.PackageName without version)</param>
+        /// <param name="fullPackageName">The full package name including version</param>
+        /// <returns>True if the resource is a valid match for the package</returns>
+        private static bool ValidateHubResourceMatch(Models.HubResourceDetail detail, string packageGroupName, string fullPackageName)
+        {
+            Debug.WriteLine($"[HubOverview] ValidateHubResourceMatch called:");
+            Debug.WriteLine($"[HubOverview]   packageGroupName: '{packageGroupName}'");
+            Debug.WriteLine($"[HubOverview]   fullPackageName: '{fullPackageName}'");
+            
+            if (detail == null)
+            {
+                Debug.WriteLine($"[HubOverview]   FAIL: detail is null");
+                return false;
+            }
+            
+            if (string.IsNullOrEmpty(packageGroupName))
+            {
+                Debug.WriteLine($"[HubOverview]   FAIL: packageGroupName is null/empty");
+                return false;
+            }
+            
+            Debug.WriteLine($"[HubOverview]   Hub Resource: ResourceId='{detail.ResourceId}', Title='{detail.Title}', Creator='{detail.Creator}'");
+            Debug.WriteLine($"[HubOverview]   Hub HubFiles count: {detail.HubFiles?.Count ?? 0}");
+            
+            // Extract creator from package group name (first segment before the dot)
+            var packageCreator = ExtractCreatorFromPackageName(packageGroupName);
+            Debug.WriteLine($"[HubOverview]   Extracted packageCreator: '{packageCreator}'");
+            
+            if (string.IsNullOrEmpty(packageCreator))
+            {
+                Debug.WriteLine($"[HubOverview]   FAIL: Could not extract creator from packageGroupName");
+                return false;
+            }
+            
+            // Rule 1: Creator must match (case-insensitive)
+            var creatorMatch = string.Equals(detail.Creator, packageCreator, StringComparison.OrdinalIgnoreCase);
+            Debug.WriteLine($"[HubOverview]   Rule 1 - Creator match: Hub='{detail.Creator}' vs Package='{packageCreator}' => {creatorMatch}");
+            
+            if (string.IsNullOrEmpty(detail.Creator) || !creatorMatch)
+            {
+                Debug.WriteLine($"[HubOverview]   FAIL: Creator mismatch");
+                return false;
+            }
+            
+            // Rule 2: Check if any HubFile matches the package group name
+            if (detail.HubFiles != null && detail.HubFiles.Count > 0)
+            {
+                Debug.WriteLine($"[HubOverview]   Rule 2 - Checking {detail.HubFiles.Count} HubFiles:");
+                foreach (var file in detail.HubFiles)
+                {
+                    Debug.WriteLine($"[HubOverview]     File: '{file.Filename}'");
+                    
+                    if (string.IsNullOrEmpty(file.Filename))
+                    {
+                        Debug.WriteLine($"[HubOverview]       Skipping: filename is null/empty");
+                        continue;
+                    }
+                    
+                    // Get the package group name from the Hub file
+                    var hubFileGroupName = GetPackageGroupName(file.Filename);
+                    Debug.WriteLine($"[HubOverview]       Extracted group name: '{hubFileGroupName}'");
+                    
+                    // Check for exact match of package group name
+                    var fileMatch = string.Equals(hubFileGroupName, packageGroupName, StringComparison.OrdinalIgnoreCase);
+                    Debug.WriteLine($"[HubOverview]       Match with '{packageGroupName}': {fileMatch}");
+                    
+                    if (fileMatch)
+                    {
+                        Debug.WriteLine($"[HubOverview]   SUCCESS: Found matching HubFile");
+                        return true;
+                    }
+                }
+                
+                // Has files but none match - this is a false positive
+                Debug.WriteLine($"[HubOverview]   FAIL: Has {detail.HubFiles.Count} files but none match packageGroupName");
+                return false;
+            }
+            
+            // Rule 3: No HubFiles available (externally hosted?) - fall back to looser matching
+            Debug.WriteLine($"[HubOverview]   Rule 3 - No HubFiles, falling back to title matching");
+            
+            // Check if the package name (without creator prefix) appears in the title
+            var packageNameWithoutCreator = ExtractPackageNameWithoutCreator(packageGroupName);
+            Debug.WriteLine($"[HubOverview]   packageNameWithoutCreator: '{packageNameWithoutCreator}'");
+            
+            if (!string.IsNullOrEmpty(packageNameWithoutCreator) && !string.IsNullOrEmpty(detail.Title))
+            {
+                // Normalize both strings for comparison (remove spaces, underscores, dashes)
+                var normalizedTitle = NormalizeForComparison(detail.Title);
+                var normalizedPackageName = NormalizeForComparison(packageNameWithoutCreator);
+                
+                Debug.WriteLine($"[HubOverview]   Normalized title: '{normalizedTitle}'");
+                Debug.WriteLine($"[HubOverview]   Normalized package: '{normalizedPackageName}'");
+                
+                // Title should contain the package name
+                var titleContains = normalizedTitle.Contains(normalizedPackageName, StringComparison.OrdinalIgnoreCase);
+                Debug.WriteLine($"[HubOverview]   Title contains package name: {titleContains}");
+                
+                if (titleContains)
+                {
+                    Debug.WriteLine($"[HubOverview]   SUCCESS: Title contains package name");
+                    return true;
+                }
+            }
+            
+            // No files and title doesn't match - reject
+            Debug.WriteLine($"[HubOverview]   FAIL: No HubFiles and title doesn't match");
+            return false;
+        }
+        
+        /// <summary>
+        /// Extract the creator name from a package name (first segment before the dot)
+        /// </summary>
+        private static string ExtractCreatorFromPackageName(string packageName)
+        {
+            if (string.IsNullOrEmpty(packageName))
+                return null;
+            
+            var firstDot = packageName.IndexOf('.');
+            if (firstDot > 0)
+            {
+                return packageName.Substring(0, firstDot);
+            }
+            
+            return null;
+        }
+        
+        /// <summary>
+        /// Extract the package name without the creator prefix
+        /// </summary>
+        private static string ExtractPackageNameWithoutCreator(string packageGroupName)
+        {
+            if (string.IsNullOrEmpty(packageGroupName))
+                return null;
+            
+            var firstDot = packageGroupName.IndexOf('.');
+            if (firstDot > 0 && firstDot < packageGroupName.Length - 1)
+            {
+                return packageGroupName.Substring(firstDot + 1);
+            }
+            
+            return null;
+        }
+        
+        /// <summary>
+        /// Normalize a string for fuzzy comparison by removing common separators
+        /// </summary>
+        private static string NormalizeForComparison(string input)
+        {
+            if (string.IsNullOrEmpty(input))
+                return string.Empty;
+            
+            // Remove common separators and convert to lowercase
+            return input
+                .Replace(" ", "")
+                .Replace("_", "")
+                .Replace("-", "")
+                .Replace(".", "")
+                .ToLowerInvariant();
         }
         
         /// <summary>
@@ -344,18 +538,58 @@ namespace VPM
         
         private void ShowHubOverviewPlaceholder(string message)
         {
+            Debug.WriteLine($"[HubOverview] ShowHubOverviewPlaceholder: {message.Replace("\n", " ")}");
             HubOverviewLoadingOverlay.Visibility = Visibility.Collapsed;
             HubOverviewErrorPanel.Visibility = Visibility.Collapsed;
             HubOverviewPlaceholderText.Text = message;
             HubOverviewPlaceholder.Visibility = Visibility.Visible;
+            
+            // Clear the WebView content so old page doesn't show behind placeholder
+            ClearHubOverviewWebView();
         }
         
         private void ShowHubOverviewError(string message)
         {
+            Debug.WriteLine($"[HubOverview] ShowHubOverviewError: {message.Replace("\n", " ")}");
             HubOverviewLoadingOverlay.Visibility = Visibility.Collapsed;
             HubOverviewPlaceholder.Visibility = Visibility.Collapsed;
             HubOverviewErrorText.Text = message;
             HubOverviewErrorPanel.Visibility = Visibility.Visible;
+            
+            // Clear the WebView content so old page doesn't show behind error
+            ClearHubOverviewWebView();
+        }
+        
+        private void ShowHubOverviewLoading()
+        {
+            Debug.WriteLine($"[HubOverview] ShowHubOverviewLoading");
+            HubOverviewLoadingOverlay.Visibility = Visibility.Visible;
+            HubOverviewPlaceholder.Visibility = Visibility.Collapsed;
+            HubOverviewErrorPanel.Visibility = Visibility.Collapsed;
+        }
+        
+        /// <summary>
+        /// Clear the WebView content by navigating to a blank page
+        /// </summary>
+        private void ClearHubOverviewWebView()
+        {
+            Debug.WriteLine($"[HubOverview] ClearHubOverviewWebView called");
+            try
+            {
+                if (_hubOverviewWebViewInitialized && HubOverviewWebView?.CoreWebView2 != null)
+                {
+                    _isClearing = true; // Mark that we're intentionally clearing
+                    HubOverviewWebView.CoreWebView2.NavigateToString("<html><body style='background-color:#1E1E1E;'></body></html>");
+                }
+            }
+            catch (Exception)
+            {
+                _isClearing = false;
+                // Ignore errors when clearing WebView
+            }
+            
+            _currentHubOverviewUrl = null;
+            // Note: Don't clear _currentHubResourceId here - it's managed by LoadHubOverviewForSelectedPackageAsync
         }
         
         private void HubOverviewOpenInBrowser_Click(object sender, RoutedEventArgs e)

@@ -2094,7 +2094,8 @@ namespace VPM
         /// </summary>
         private void DisableHubButtons()
         {
-            Dispatcher.Invoke(() =>
+            // Use BeginInvoke to prevent UI blocking when called from background threads
+            Dispatcher.BeginInvoke(() =>
             {
                 if (VamHubImageButton != null)
                 {
@@ -2116,7 +2117,8 @@ namespace VPM
         /// </summary>
         private void EnableHubButtons()
         {
-            Dispatcher.Invoke(() =>
+            // Use BeginInvoke to prevent UI blocking when called from background threads
+            Dispatcher.BeginInvoke(() =>
             {
                 if (VamHubImageButton != null)
                 {

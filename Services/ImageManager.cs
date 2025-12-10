@@ -38,12 +38,6 @@ namespace VPM.Services
         private readonly Dictionary<string, (long length, long lastWriteTicks)> _imageIndexSignatures = new(StringComparer.OrdinalIgnoreCase);
         private readonly ReaderWriterLockSlim _signatureLock = new ReaderWriterLockSlim();
         
-        // Preloading queue for background image loading
-        private readonly Queue<string> _preloadQueue = new Queue<string>();
-        private readonly HashSet<string> _preloadQueueSet = new HashSet<string>(StringComparer.OrdinalIgnoreCase); // O(1) contains check
-        private readonly SemaphoreSlim _preloadLock = new SemaphoreSlim(1, 1);
-        private Task _preloadTask;
-        private CancellationTokenSource _preloadCancellation;
         
         // BitmapImage cache with weak references and strong cache for recent images
         private readonly Dictionary<string, WeakReference<BitmapImage>> _bitmapCache = new Dictionary<string, WeakReference<BitmapImage>>();
@@ -113,9 +107,6 @@ namespace VPM.Services
             _asyncPool.ProgressChanged += OnThreadPoolProgressChanged;
             _asyncPool.ImageProcessed += OnThreadPoolImageProcessed;
             
-            _preloadCancellation = new CancellationTokenSource();
-            StartPreloadingTask();
-
             // Cleanup unused pools every 3 seconds (reduced from 10 for faster file handle release)
             _poolCleanupTimer = new Timer(CleanupUnusedPools, null, 3000, 3000);
         }
@@ -1702,147 +1693,6 @@ namespace VPM.Services
         }
         
         /// <summary>
-        /// Starts background preloading of images for better performance
-        /// </summary>
-        private void StartPreloadingTask()
-        {
-            _preloadTask = Task.Run(async () =>
-            {
-                while (!_preloadCancellation.Token.IsCancellationRequested)
-                {
-                    try
-                    {
-                        string packageToPreload = null;
-                        
-                        await _preloadLock.WaitAsync(_preloadCancellation.Token);
-                        try
-                        {
-                            if (_preloadQueue.Count > 0)
-                            {
-                                packageToPreload = _preloadQueue.Dequeue();
-                                // Remove from HashSet to allow re-queueing later
-                                _preloadQueueSet.Remove(packageToPreload);
-                            }
-                        }
-                        finally
-                        {
-                            _preloadLock.Release();
-                        }
-                        
-                        if (packageToPreload != null)
-                        {
-                            await PreloadPackageImagesAsync(packageToPreload);
-                        }
-                        else
-                        {
-                            await Task.Delay(100, _preloadCancellation.Token);
-                        }
-                    }
-                    catch (OperationCanceledException)
-                    {
-                        break;
-                    }
-                    catch (Exception)
-                    {
-                        // Continue preloading on error
-                        await Task.Delay(1000, _preloadCancellation.Token);
-                    }
-                }
-            }, _preloadCancellation.Token);
-        }
-        
-        /// <summary>
-        /// Queues a package for background preloading
-        /// </summary>
-        public void QueueForPreloading(string packageName)
-        {
-            if (string.IsNullOrEmpty(packageName)) return;
-            
-            if (!_preloadLock.Wait(TimeSpan.FromSeconds(1)))
-            {
-                return; // Timeout - skip this preload request
-            }
-            try
-            {
-                // Use HashSet for O(1) contains check instead of O(n) Queue.Contains
-                if (_preloadQueueSet.Add(packageName))
-                {
-                    _preloadQueue.Enqueue(packageName);
-                }
-            }
-            finally
-            {
-                _preloadLock.Release();
-            }
-        }
-        
-        /// <summary>
-        /// Preloads images for a package in the background from VAR archives
-        /// </summary>
-        private async Task PreloadPackageImagesAsync(string packageName)
-        {
-            try
-            {
-                // Check memory pressure before preloading
-                CheckMemoryPressure();
-                
-                // Use TryGetValue to avoid double dictionary lookup
-                if (!ImageIndex.TryGetValue(packageName, out var locations)) return;
-                
-                var imageLocations = locations.Take(10).ToList(); // Preload first 10 images
-                
-                // Group by VAR file for efficient batch loading
-                var imagesByVar = imageLocations
-                    .GroupBy(loc => loc.VarFilePath)
-                    .ToDictionary(g => g.Key, g => g.Select(loc => loc.InternalPath).ToList());
-                
-                foreach (var varGroup in imagesByVar)
-                {
-                    if (_preloadCancellation.Token.IsCancellationRequested) break;
-                    
-                    var varPath = varGroup.Key;
-                    var internalPaths = varGroup.Value;
-                    
-                    // Load images from this VAR
-                    var loadedImages = LoadImagesFromVarBatch(varPath, internalPaths);
-                    
-                    foreach (var kvp in loadedImages)
-                    {
-                        if (_preloadCancellation.Token.IsCancellationRequested) break;
-                        
-                        var cacheKey = $"{varPath}::{kvp.Key}";
-                        var bitmap = kvp.Value;
-                        
-                        // Cache the preloaded image
-                        _bitmapCacheLock.EnterWriteLock();
-                        try
-                        {
-                            _bitmapCache[cacheKey] = new WeakReference<BitmapImage>(bitmap);
-                            _cacheAccessTimes[cacheKey] = DateTime.Now;
-                            
-                            // Manage cache size
-                            if (_bitmapCache.Count > MAX_BITMAP_CACHE_SIZE)
-                            {
-                                EvictOldestWeakReferences();
-                            }
-                        }
-                        finally
-                        {
-                            _bitmapCacheLock.ExitWriteLock();
-                        }
-                        
-                        // Small delay to not overwhelm the system
-                        await Task.Delay(20, _preloadCancellation.Token);
-                    }
-                }
-            }
-            catch (Exception)
-            {
-                // Ignore preloading errors
-            }
-        }
-        
-        /// <summary>
         /// Checks memory pressure and performs cleanup if needed
         /// </summary>
         private void CheckMemoryPressure()
@@ -2000,14 +1850,10 @@ namespace VPM.Services
 
         /// <summary>
         /// Disposes resources.
-        /// FIXED: Now properly disposes all ReaderWriterLockSlim instances and SemaphoreSlim.
+        /// FIXED: Now properly disposes all ReaderWriterLockSlim instances.
         /// </summary>
         public void Dispose()
         {
-            _preloadCancellation?.Cancel();
-            _preloadTask?.Wait(1000); // Wait up to 1 second for cleanup
-            _preloadCancellation?.Dispose();
-            
             // Dispose pool cleanup timer
             _poolCleanupTimer?.Dispose();
             
@@ -2034,9 +1880,6 @@ namespace VPM.Services
             _bitmapCacheLock?.Dispose();
             _varArchiveLock?.Dispose();
             _parallelMetricsLock?.Dispose();
-            
-            // FIXED: Dispose SemaphoreSlim
-            _preloadLock?.Dispose();
         }
 
         /// <summary>

@@ -221,7 +221,8 @@ namespace VPM
                 try
                 {
                     // Update progress to show we're acquiring lock
-                    Dispatcher.Invoke(() =>
+                    // Use BeginInvoke to prevent UI blocking
+                    Dispatcher.BeginInvoke(() =>
                     {
                         if (progressTextBlock != null)
                             progressTextBlock.Text = "Acquiring exclusive file access...";
@@ -256,7 +257,8 @@ namespace VPM
                     var repackager = new VarRepackager(_imageManager, _settingsManager);
                     var repackageResult = await repackager.RepackageVarWithStatsAsync(packagePath, archivedFolder, conversions, (message, current, total) =>
                     {
-                        Dispatcher.Invoke(() =>
+                        // Use BeginInvoke to prevent UI blocking during frequent progress updates
+                        Dispatcher.BeginInvoke(() =>
                         {
                             if (progressTextBlock != null)
                                 progressTextBlock.Text = message;
@@ -1553,8 +1555,8 @@ namespace VPM
 
                             processedCount++;
                             
-                            // Update progress on UI thread
-                            Dispatcher.Invoke(() =>
+                            // Update progress on UI thread - use BeginInvoke to prevent blocking
+                            Dispatcher.BeginInvoke(() =>
                             {
                                 if (progressTextBlock != null)
                                 {
@@ -2489,9 +2491,10 @@ namespace VPM
                         var pkgLatestDeps = latestDepsByPackage.ContainsKey(packageName) ? latestDepsByPackage[packageName] : null;
                         
                         // Create progress callback to update UI with detailed operation status
+                        // Use BeginInvoke to prevent UI blocking during frequent progress updates
                         PackageRepackager.ProgressCallback progressCallback = (message, current, total) =>
                         {
-                            Dispatcher.Invoke(() =>
+                            Dispatcher.BeginInvoke(() =>
                             {
                                 if (currentPackageText != null)
                                 {

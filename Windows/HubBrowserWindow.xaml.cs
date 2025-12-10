@@ -131,7 +131,8 @@ namespace VPM.Windows
 
             _hubService.StatusChanged += (s, status) => 
             {
-                Dispatcher.Invoke(() => StatusText.Text = status);
+                // Use BeginInvoke to prevent UI blocking
+                Dispatcher.BeginInvoke(() => StatusText.Text = status);
             };
             
             // Subscribe to download queue events
@@ -2365,7 +2366,8 @@ namespace VPM.Windows
             // After a delay, check if we should show button or "All Installed"
             Task.Delay(1500).ContinueWith(_ =>
             {
-                Dispatcher.Invoke(() =>
+                // Use BeginInvoke to prevent UI blocking
+                Dispatcher.BeginInvoke(() =>
                 {
                     DownloadProgressContainer.Visibility = Visibility.Collapsed;
                     UpdateDownloadAllButton();
@@ -2453,7 +2455,8 @@ namespace VPM.Windows
             // Subscribe to property changes on the queued download to update file UI
             queuedDownload.PropertyChanged += (s, e) =>
             {
-                Dispatcher.Invoke(() =>
+                // Use BeginInvoke to prevent UI blocking - progress updates are frequent
+                Dispatcher.BeginInvoke(() =>
                 {
                     if (e.PropertyName == nameof(QueuedDownload.Status))
                     {
@@ -2777,7 +2780,8 @@ namespace VPM.Windows
         
         private void HubService_DownloadQueued(object sender, QueuedDownload download)
         {
-            Dispatcher.Invoke(() =>
+            // Use BeginInvoke to prevent UI blocking
+            Dispatcher.BeginInvoke(() =>
             {
                 _downloadQueue.Add(download);
                 UpdateDownloadQueueUI();
@@ -2786,7 +2790,8 @@ namespace VPM.Windows
         
         private void HubService_DownloadStarted(object sender, QueuedDownload download)
         {
-            Dispatcher.Invoke(() =>
+            // Use BeginInvoke to prevent UI blocking
+            Dispatcher.BeginInvoke(() =>
             {
                 UpdateDownloadQueueUI();
             });
@@ -2794,7 +2799,8 @@ namespace VPM.Windows
         
         private void HubService_DownloadCompleted(object sender, QueuedDownload download)
         {
-            Dispatcher.Invoke(() =>
+            // Use BeginInvoke to prevent UI blocking
+            Dispatcher.BeginInvoke(() =>
             {
                 // Remove completed/cancelled/failed downloads after a short delay
                 if (download.Status == DownloadStatus.Completed || 
@@ -2804,7 +2810,8 @@ namespace VPM.Windows
                     // Keep in list briefly so user can see final status
                     Task.Delay(2000).ContinueWith(_ =>
                     {
-                        Dispatcher.Invoke(() =>
+                        // Use BeginInvoke to prevent UI blocking
+                        Dispatcher.BeginInvoke(() =>
                         {
                             _downloadQueue.Remove(download);
                             UpdateDownloadQueueUI();

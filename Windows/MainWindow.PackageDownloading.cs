@@ -356,7 +356,9 @@ namespace VPM
         
         private void OnPackageDownloadProgress(object sender, DownloadProgressEventArgs e)
         {
-            Dispatcher.Invoke(() =>
+            // Use BeginInvoke (fire-and-forget) instead of Invoke to prevent UI blocking
+            // Progress updates are non-critical and can be processed asynchronously
+            Dispatcher.BeginInvoke(() =>
             {
                 try
                 {
@@ -407,7 +409,8 @@ namespace VPM
         
         private void OnPackageDownloadError(object sender, DownloadErrorEventArgs e)
         {
-            Dispatcher.Invoke(() =>
+            // Use BeginInvoke to prevent UI blocking - error handling doesn't need to block the caller
+            Dispatcher.BeginInvoke(() =>
             {
                 try
                 {
@@ -682,7 +685,8 @@ namespace VPM
         
         private void OnQueueStatusChanged(object sender, QueueStatusChangedEventArgs e)
         {
-            Dispatcher.Invoke(() =>
+            // Use BeginInvoke to prevent UI blocking
+            Dispatcher.BeginInvoke(() =>
             {
                 // Update UI status bar or queue window if needed
             });
@@ -690,21 +694,24 @@ namespace VPM
         
         private void OnDownloadQueued(object sender, DownloadQueuedEventArgs e)
         {
-            Dispatcher.Invoke(() =>
+            // Use BeginInvoke to prevent UI blocking
+            Dispatcher.BeginInvoke(() =>
             {
             });
         }
         
         private void OnDownloadStartedInQueue(object sender, DownloadStartedEventArgs e)
         {
-            Dispatcher.Invoke(() =>
+            // Use BeginInvoke to prevent UI blocking
+            Dispatcher.BeginInvoke(() =>
             {
             });
         }
         
         private void OnDownloadRemovedFromQueue(object sender, DownloadRemovedEventArgs e)
         {
-            Dispatcher.Invoke(() =>
+            // Use BeginInvoke to prevent UI blocking
+            Dispatcher.BeginInvoke(() =>
             {
             });
         }

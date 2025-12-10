@@ -47,7 +47,8 @@ namespace VPM.Windows
         /// </summary>
         public void AddPackage(string packageName)
         {
-            Dispatcher.Invoke(() =>
+            // Use BeginInvoke to prevent UI blocking - adding packages doesn't need to block caller
+            Dispatcher.BeginInvoke(() =>
             {
                 var item = new DownloadItemViewModel
                 {
@@ -105,7 +106,8 @@ namespace VPM.Windows
         /// </summary>
         public void UpdateProgress(string packageName, long downloadedBytes, long totalBytes, int percentage, string downloadSource = null)
         {
-            Dispatcher.Invoke(() =>
+            // Use BeginInvoke to prevent UI blocking - progress updates are non-critical
+            Dispatcher.BeginInvoke(() =>
             {
                 // Check if package is already marked as completed
                 if (_completedPackages.Contains(packageName))
@@ -149,7 +151,8 @@ namespace VPM.Windows
         /// </summary>
         public void MarkCompleted(string packageName, bool success, string message = null)
         {
-            Dispatcher.Invoke(() =>
+            // Use BeginInvoke to prevent UI blocking - completion updates don't need to block caller
+            Dispatcher.BeginInvoke(() =>
             {
                 // Add to completed packages set to prevent further progress updates
                 _completedPackages.Add(packageName);
@@ -241,7 +244,8 @@ namespace VPM.Windows
         /// </summary>
         public void MarkCancelled(string packageName)
         {
-            Dispatcher.Invoke(() =>
+            // Use BeginInvoke to prevent UI blocking
+            Dispatcher.BeginInvoke(() =>
             {
                 var item = _downloadItems.FirstOrDefault(d => d.PackageName.Equals(packageName, StringComparison.OrdinalIgnoreCase));
                 if (item != null && item.StatusText != "✓ Completed" && item.StatusText != "✗ Failed")

@@ -1051,7 +1051,7 @@ namespace VPM.Services
                 var bitmap = new BitmapImage();
                 bitmap.BeginInit();
                 bitmap.CacheOption = BitmapCacheOption.OnLoad;
-                bitmap.CreateOptions = BitmapCreateOptions.IgnoreColorProfile;
+                bitmap.CreateOptions = BitmapCreateOptions.IgnoreColorProfile | BitmapCreateOptions.PreservePixelFormat;
                 bitmap.StreamSource = new MemoryStream(imageData);
                 bitmap.EndInit();
                 bitmap.Freeze();

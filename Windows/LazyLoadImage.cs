@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
@@ -313,7 +314,7 @@ namespace VPM.Windows
             this.Clip = clipGeometry;
         }
         
-        protected override void OnMouseLeftButtonDown(System.Windows.Input.MouseButtonEventArgs e)
+        protected override async void OnMouseLeftButtonDown(System.Windows.Input.MouseButtonEventArgs e)
         {
             base.OnMouseLeftButtonDown(e);
             
@@ -321,7 +322,7 @@ namespace VPM.Windows
             if (e.ClickCount == 2)
             {
                 e.Handled = true;
-                OpenImageInDefaultViewer();
+                await OpenImageInDefaultViewerAsync();
             }
         }
         
@@ -750,7 +751,7 @@ namespace VPM.Windows
         /// Opens the image in the default image viewer
         /// Extracts the image to a temporary location if it's in an archive
         /// </summary>
-        private void OpenImageInDefaultViewer()
+        private async Task OpenImageInDefaultViewerAsync()
         {
             try
             {
@@ -811,9 +812,17 @@ namespace VPM.Windows
                 }
                 else if (LoadImageCallback != null)
                 {
-                    // Load the image first, then save it
-                    var loadTask = LoadImageAsync();
-                    loadTask.Wait(5000); // Wait up to 5 seconds for image to load
+                    // Load the image asynchronously without blocking UI thread
+                    using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+                    try
+                    {
+                        await LoadImageAsync();
+                    }
+                    catch (OperationCanceledException)
+                    {
+                        MessageBox.Show("Image loading timed out.", "Error", MessageBoxButton.OK, MessageBoxImage.Warning);
+                        return;
+                    }
                     
                     if (_imageControl?.Source is BitmapImage loadedBitmap)
                     {

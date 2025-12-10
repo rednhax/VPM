@@ -682,7 +682,7 @@ namespace VPM.Services
                         var bitmap = new BitmapImage();
                         bitmap.BeginInit();
                         bitmap.CacheOption = BitmapCacheOption.OnLoad;
-                        bitmap.CreateOptions = BitmapCreateOptions.IgnoreColorProfile;
+                        bitmap.CreateOptions = BitmapCreateOptions.IgnoreColorProfile | BitmapCreateOptions.PreservePixelFormat;
                         bitmap.StreamSource = new MemoryStream(imageData);
                         bitmap.EndInit();
                         bitmap.Freeze();
@@ -921,12 +921,25 @@ namespace VPM.Services
             {
                 var tempPath = _imagesCacheMetadataFilePath + ".tmp";
                 
+                // Copy timestamps under lock to avoid blocking during disk I/O
+                List<KeyValuePair<string, DateTime>> timestampsToSave;
+                _cacheLock.EnterReadLock();
+                try
+                {
+                    timestampsToSave = _imageCacheTimestamps.ToList();
+                }
+                finally
+                {
+                    _cacheLock.ExitReadLock();
+                }
+                
+                // Perform disk I/O outside the lock
                 using (var writer = new BinaryWriter(File.Create(tempPath)))
                 {
                     writer.Write(1); // Version
-                    writer.Write(_imageCacheTimestamps.Count);
+                    writer.Write(timestampsToSave.Count);
                     
-                    foreach (var kvp in _imageCacheTimestamps)
+                    foreach (var kvp in timestampsToSave)
                     {
                         writer.Write(kvp.Key);
                         writer.Write(kvp.Value.Ticks);
@@ -952,34 +965,37 @@ namespace VPM.Services
             {
                 var tempPath = _imagesCacheFilePath + ".tmp";
                 
+                // Copy data under lock to avoid blocking UI during disk I/O
+                List<KeyValuePair<string, byte[]>> imagesToSave;
                 _cacheLock.EnterReadLock();
                 try
                 {
-                    
-                    using (var stream = new FileStream(tempPath, FileMode.Create, FileAccess.Write, FileShare.None))
-                    using (var writer = new BinaryWriter(stream))
-                    {
-                        // Write header
-                        writer.Write(Encoding.ASCII.GetBytes("VPHI"));
-                        writer.Write(1); // Version
-                        writer.Write(_imageCache.Count);
-                        
-                        long totalBytes = 0;
-                        // Write images
-                        foreach (var kvp in _imageCache)
-                        {
-                            writer.Write(kvp.Key);
-                            writer.Write(kvp.Value.Length);
-                            writer.Write(kvp.Value);
-                            totalBytes += kvp.Value.Length;
-                        }
-                        
-                        writer.Flush();
-                    }
+                    // Create a snapshot of the cache data
+                    imagesToSave = _imageCache.ToList();
                 }
                 finally
                 {
                     _cacheLock.ExitReadLock();
+                }
+                
+                // Perform disk I/O outside the lock to prevent UI blocking
+                using (var stream = new FileStream(tempPath, FileMode.Create, FileAccess.Write, FileShare.None))
+                using (var writer = new BinaryWriter(stream))
+                {
+                    // Write header
+                    writer.Write(Encoding.ASCII.GetBytes("VPHI"));
+                    writer.Write(1); // Version
+                    writer.Write(imagesToSave.Count);
+                    
+                    // Write images
+                    foreach (var kvp in imagesToSave)
+                    {
+                        writer.Write(kvp.Key);
+                        writer.Write(kvp.Value.Length);
+                        writer.Write(kvp.Value);
+                    }
+                    
+                    writer.Flush();
                 }
                 
                 // Atomic replace
