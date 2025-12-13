@@ -2028,9 +2028,17 @@ namespace VPM
                                 string itemText = item?.ToString() ?? "";
                                 if (!string.IsNullOrEmpty(itemText))
                                 {
-                                    var destName = itemText.Split('(')[0].Trim();
+                                    var destName = itemText.Split('(')[0].Trim().Replace(" [Hidden]", "").Trim();
                                     selectedDestinations.Add(destName);
                                 }
+                            }
+                            
+                            // Build visibility lookup
+                            var destVisibility = new Dictionary<string, bool>(StringComparer.OrdinalIgnoreCase);
+                            foreach (var dest in (_settingsManager?.Settings?.MoveToDestinations ?? new List<MoveToDestination>()))
+                            {
+                                if (dest?.IsValid() == true && !string.IsNullOrWhiteSpace(dest.Name))
+                                    destVisibility[dest.Name] = dest.ShowInMainTable;
                             }
                             
                             DestinationsFilterList.Items.Clear();
@@ -2047,7 +2055,12 @@ namespace VPM
                                 
                                 var totalCount = packagesInDest.Count;
                                 
-                                var displayText = $"{destName} ({totalCount:N0})";
+                                // Append "Hidden" tag if ShowInMainTable is false
+                                bool isHidden = destVisibility.TryGetValue(destName, out var showInTable) && !showInTable;
+                                var displayText = isHidden
+                                    ? $"{destName} ({totalCount:N0}) Hidden"
+                                    : $"{destName} ({totalCount:N0})";
+                                
                                 DestinationsFilterList.Items.Add(displayText);
                                 
                                 if (selectedDestinations.Contains(destName))

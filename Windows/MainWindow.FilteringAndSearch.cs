@@ -1521,7 +1521,43 @@ namespace VPM
             try
             {
                 var destCounts = _filterManager.GetDestinationCounts(_packageManager.PackageMetadata);
-                UpdateFilterListBox(DestinationsFilterList, destCounts);
+                
+                // Build a lookup of destination visibility settings
+                var destVisibility = new Dictionary<string, bool>(StringComparer.OrdinalIgnoreCase);
+                foreach (var dest in (_settingsManager?.Settings?.MoveToDestinations ?? new List<MoveToDestination>()))
+                {
+                    if (dest?.IsValid() == true && !string.IsNullOrWhiteSpace(dest.Name))
+                    {
+                        destVisibility[dest.Name] = dest.ShowInMainTable;
+                        System.Diagnostics.Debug.WriteLine($"[PopulateDestinationsFilterList] {dest.Name}: ShowInMainTable={dest.ShowInMainTable}");
+                    }
+                }
+                
+                // Clear and rebuild the list with Hidden tag for hidden destinations
+                var selectedNames = GetSelectedItemNames(DestinationsFilterList);
+                DestinationsFilterList.Items.Clear();
+                
+                foreach (var key in destCounts.Keys.OrderBy(k => k))
+                {
+                    int count = destCounts[key];
+                    if (count <= 0) continue;
+                    
+                    // Append "Hidden" tag if ShowInMainTable is false
+                    bool isHidden = destVisibility.TryGetValue(key, out var showInTable) && !showInTable;
+                    string displayText = isHidden
+                        ? $"{key} ({count:N0}) Hidden"
+                        : $"{key} ({count:N0})";
+                    
+                    System.Diagnostics.Debug.WriteLine($"[PopulateDestinationsFilterList] Adding: {displayText} (isHidden={isHidden})");
+                    
+                    DestinationsFilterList.Items.Add(displayText);
+                    
+                    // Restore selection if this item was previously selected
+                    if (selectedNames.Contains(key))
+                    {
+                        DestinationsFilterList.SelectedItems.Add(displayText);
+                    }
+                }
             }
             catch (Exception ex)
             {

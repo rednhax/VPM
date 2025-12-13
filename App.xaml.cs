@@ -15,7 +15,7 @@ namespace VPM
         
         public static void LogStartupTiming(string step)
         {
-            Debug.WriteLine($"[STARTUP] {StartupTimer.ElapsedMilliseconds,5}ms - {step}");
+            // Debug timing disabled
         }
         protected override void OnStartup(StartupEventArgs e)
         {

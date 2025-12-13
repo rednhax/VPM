@@ -6064,6 +6064,11 @@ namespace VPM
         {
             try
             {
+                // Store old destination names before opening the dialog
+                var oldDestinations = _settingsManager?.Settings?.MoveToDestinations?
+                    .ToDictionary(d => d.Name, d => d, StringComparer.OrdinalIgnoreCase) 
+                    ?? new Dictionary<string, MoveToDestination>(StringComparer.OrdinalIgnoreCase);
+
                 var window = new Windows.MoveToDestinationsWindow(_settingsManager)
                 {
                     Owner = this
@@ -6072,7 +6077,11 @@ namespace VPM
                 if (window.ShowDialog() == true)
                 {
                     // Settings were saved - update external packages live
-                    UpdateExternalPackagesFromDestinationSettings();
+                    var newDestinations = _settingsManager?.Settings?.MoveToDestinations?
+                        .ToDictionary(d => d.Name, d => d, StringComparer.OrdinalIgnoreCase)
+                        ?? new Dictionary<string, MoveToDestination>(StringComparer.OrdinalIgnoreCase);
+                    
+                    UpdateExternalPackagesFromDestinationSettings(oldDestinations, newDestinations);
                 }
             }
             catch (Exception ex)
@@ -6085,9 +6094,9 @@ namespace VPM
 
         /// <summary>
         /// Updates external packages in the UI based on current destination settings.
-        /// This handles color changes and ShowInMainTable visibility changes.
+        /// This handles color changes, ShowInMainTable visibility changes, and destination renames.
         /// </summary>
-        private void UpdateExternalPackagesFromDestinationSettings()
+        private void UpdateExternalPackagesFromDestinationSettings(Dictionary<string, MoveToDestination> oldDestinations = null, Dictionary<string, MoveToDestination> newDestinations = null)
         {
             if (_packageManager?.PackageMetadata == null || _settingsManager?.Settings?.MoveToDestinations == null)
                 return;
@@ -6095,13 +6104,38 @@ namespace VPM
             var destinations = _settingsManager.Settings.MoveToDestinations;
             var destLookup = destinations.ToDictionary(d => d.Name, d => d, StringComparer.OrdinalIgnoreCase);
 
-            // Update metadata colors for ALL external packages (even hidden ones, so color is ready when shown)
+            // Detect destination renames by matching paths
+            var renamedDestinations = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            if (oldDestinations != null && newDestinations != null)
+            {
+                // Find old destinations that no longer exist by name but have matching paths
+                foreach (var oldDest in oldDestinations.Values)
+                {
+                    var matchingNewDest = newDestinations.Values.FirstOrDefault(d => 
+                        d.Path.Equals(oldDest.Path, StringComparison.OrdinalIgnoreCase) &&
+                        !d.Name.Equals(oldDest.Name, StringComparison.OrdinalIgnoreCase));
+                    
+                    if (matchingNewDest != null)
+                    {
+                        renamedDestinations[oldDest.Name] = matchingNewDest.Name;
+                    }
+                }
+            }
+
+            // Update metadata for ALL external packages (even hidden ones, so color is ready when shown)
             foreach (var kvp in _packageManager.PackageMetadata)
             {
                 var metadata = kvp.Value;
                 if (!metadata.IsExternal || string.IsNullOrEmpty(metadata.ExternalDestinationName))
                     continue;
 
+                // Handle destination rename
+                if (renamedDestinations.TryGetValue(metadata.ExternalDestinationName, out var newName))
+                {
+                    metadata.ExternalDestinationName = newName;
+                }
+
+                // Update color based on current destination name
                 if (destLookup.TryGetValue(metadata.ExternalDestinationName, out var dest))
                 {
                     metadata.ExternalDestinationColorHex = dest.StatusColor ?? "#808080";
@@ -6114,6 +6148,13 @@ namespace VPM
                 if (!package.IsExternal || string.IsNullOrEmpty(package.ExternalDestinationName))
                     continue;
 
+                // Handle destination rename
+                if (renamedDestinations.TryGetValue(package.ExternalDestinationName, out var newName))
+                {
+                    package.ExternalDestinationName = newName;
+                }
+
+                // Update color based on current destination name
                 if (destLookup.TryGetValue(package.ExternalDestinationName, out var dest))
                 {
                     package.ExternalDestinationColorHex = dest.StatusColor ?? "#808080";
@@ -6123,7 +6164,7 @@ namespace VPM
             // Clear the package item cache to force recreation with new visibility settings
             _packageItemCache.Clear();
             
-            // Trigger a full UI refresh which will apply the ShowInMainTable filter
+            // Trigger a full UI refresh which will apply the ShowInMainTable filter and update filter list
             _ = UpdatePackageListAsync();
         }
 
@@ -6357,7 +6398,9 @@ namespace VPM
         {
             int successCount = 0;
             int failureCount = 0;
+            int skippedCount = 0;
             var failedPackages = new List<string>();
+            var skippedPackages = new List<string>();
             var movedPackages = new List<PackageItem>();
 
             SetStatus($"Moving {packages.Count} package(s) to {destinationPath}...");
@@ -6402,6 +6445,15 @@ namespace VPM
 
                         string fileName = Path.GetFileName(metadata.FilePath);
                         string destFilePath = Path.Combine(destinationPath, fileName);
+
+                        // Check if package is already in the destination folder
+                        string sourceDir = Path.GetDirectoryName(metadata.FilePath);
+                        if (sourceDir.Equals(destinationPath, StringComparison.OrdinalIgnoreCase))
+                        {
+                            skippedCount++;
+                            skippedPackages.Add(packageItem.DisplayName);
+                            continue;
+                        }
 
                         // Handle file name conflicts
                         if (File.Exists(destFilePath))
@@ -6486,24 +6538,13 @@ namespace VPM
                 }
 
                 // Update moved packages - check if destination is a configured external destination
-                System.Diagnostics.Debug.WriteLine($"[MovePackage] Looking for configured destination matching path: '{destinationPath}'");
                 var allDests = _settingsManager?.Settings?.MoveToDestinations ?? new List<MoveToDestination>();
-                System.Diagnostics.Debug.WriteLine($"[MovePackage] Total configured destinations: {allDests.Count}");
-                foreach (var d in allDests)
-                {
-                    System.Diagnostics.Debug.WriteLine($"[MovePackage]   - Name: '{d.Name}', Path: '{d.Path}', ShowInMainTable: {d.ShowInMainTable}, PathMatch: {d.Path.Equals(destinationPath, StringComparison.OrdinalIgnoreCase)}");
-                }
-
                 var configuredDestination = allDests.FirstOrDefault(d => d.Path.Equals(destinationPath, StringComparison.OrdinalIgnoreCase));
-                System.Diagnostics.Debug.WriteLine($"[MovePackage] Found configured destination: {configuredDestination?.Name ?? "NULL"}");
 
                 foreach (var package in movedPackages)
                 {
-                    System.Diagnostics.Debug.WriteLine($"[MovePackage] Processing moved package: '{package.Name}', MetadataKey: '{package.MetadataKey}'");
-                    
                     if (configuredDestination != null && configuredDestination.ShowInMainTable)
                     {
-                        System.Diagnostics.Debug.WriteLine($"[MovePackage] Updating package to external destination: Name='{configuredDestination.Name}', Color='{configuredDestination.StatusColor}'");
                         
                         // Package moved to a configured external destination - update status and color
                         package.Status = configuredDestination.Name;
@@ -6518,24 +6559,34 @@ namespace VPM
                             string fileName = Path.GetFileName(metadata.FilePath);
                             string newFilePath = Path.Combine(destinationPath, fileName);
                             
-                            System.Diagnostics.Debug.WriteLine($"[MovePackage] Updating metadata: OldPath='{oldFilePath}', NewPath='{newFilePath}'");
-                            
                             metadata.Status = configuredDestination.Name;
                             metadata.FilePath = newFilePath;
                             metadata.ExternalDestinationName = configuredDestination.Name;
                             metadata.ExternalDestinationColorHex = configuredDestination.StatusColor ?? "#808080";
                             
-                            System.Diagnostics.Debug.WriteLine($"[MovePackage] Metadata updated: Status='{metadata.Status}', FilePath='{metadata.FilePath}', IsExternal={metadata.IsExternal}");
+                            // Update image index to point to new file path
+                            if (_imageManager != null)
+                            {
+                                var packageBase = Path.GetFileNameWithoutExtension(fileName);
+                                if (_imageManager.ImageIndex.TryGetValue(packageBase, out var locations))
+                                {
+                                    // Update all image locations to point to the new file path
+                                    foreach (var location in locations)
+                                    {
+                                        location.VarFilePath = newFilePath;
+                                    }
+                                }
+                                
+                                // Invalidate image cache for this package so previews reload from new location
+                                _imageManager.InvalidatePackageCache(package.Name);
+                            }
                         }
                         else
                         {
-                            System.Diagnostics.Debug.WriteLine($"[MovePackage] WARNING: Could not find metadata for key '{package.MetadataKey}'");
                         }
                     }
                     else
                     {
-                        System.Diagnostics.Debug.WriteLine($"[MovePackage] Removing package from table (no configured destination or ShowInMainTable=false)");
-                        
                         // Package moved to non-configured destination - remove from table
                         package.Status = "Missing";
                         Packages.Remove(package);
@@ -6603,16 +6654,63 @@ namespace VPM
                     }
                 });
 
-                // Only show message if there are errors
+                // Show summary message with results
+                var summaryParts = new List<string>();
+                
+                if (successCount > 0)
+                    summaryParts.Add($"✓ Successfully moved {successCount} package(s)");
+                
+                if (skippedCount > 0)
+                    summaryParts.Add($"⊘ Skipped {skippedCount} package(s) (already in destination)");
+                
                 if (failureCount > 0)
+                    summaryParts.Add($"✗ Failed to move {failureCount} package(s)");
+                
+                if (summaryParts.Count > 0)
                 {
-                    var errorMessage = $"Failed to move {failureCount} package(s):\n" +
-                        string.Join("\n", failedPackages.Take(10));
-                    if (failedPackages.Count > 10)
+                    var summaryMessage = string.Join("\n", summaryParts);
+                    
+                    // Add details if there are skipped or failed packages
+                    if (skippedCount > 0 || failureCount > 0)
                     {
-                        errorMessage += $"\n... and {failedPackages.Count - 10} more";
+                        summaryMessage += "\n\n";
+                        
+                        if (skippedPackages.Count > 0)
+                        {
+                            summaryMessage += "Skipped:\n" + string.Join("\n", skippedPackages.Take(5).Select(p => $"  • {p}"));
+                            if (skippedPackages.Count > 5)
+                                summaryMessage += $"\n  ... and {skippedPackages.Count - 5} more";
+                            summaryMessage += "\n\n";
+                        }
+                        
+                        if (failedPackages.Count > 0)
+                        {
+                            summaryMessage += "Failed:\n" + string.Join("\n", failedPackages.Take(5));
+                            if (failedPackages.Count > 5)
+                                summaryMessage += $"\n  ... and {failedPackages.Count - 5} more";
+                        }
                     }
-                    DarkMessageBox.Show(errorMessage, "Move Error", MessageBoxButton.OK, MessageBoxImage.Warning);
+                    
+                    var messageType = failureCount > 0 ? MessageBoxImage.Warning : MessageBoxImage.Information;
+                    DarkMessageBox.Show(summaryMessage, "Move Operation Complete", MessageBoxButton.OK, messageType);
+                }
+                
+                SetStatus($"Move complete: {successCount} moved, {skippedCount} skipped, {failureCount} failed");
+                
+                // Refresh the UI to reflect the moved packages and update filter counts
+                if (successCount > 0)
+                {
+                    // Clear the package item cache to force re-evaluation of visibility filters
+                    _packageItemCache.Clear();
+                    
+                    // Update the external destination filter counts
+                    await Application.Current.Dispatcher.InvokeAsync(() =>
+                    {
+                        PopulateDestinationsFilterList();
+                    });
+                    
+                    // Refresh the main package list to apply ShowInMainTable filtering
+                    _ = UpdatePackageListAsync();
                 }
             }
             catch (Exception ex)
