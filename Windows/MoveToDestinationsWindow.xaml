@@ -97,7 +97,7 @@
                             </Style>
                         </DataGridCheckBoxColumn.ElementStyle>
                     </DataGridCheckBoxColumn>
-                    <DataGridTextColumn Header="Name" Width="120" Binding="{Binding Name, UpdateSourceTrigger=PropertyChanged}">
+                    <DataGridTextColumn Header="Name" Width="100" Binding="{Binding Name, UpdateSourceTrigger=PropertyChanged}">
                         <DataGridTextColumn.ElementStyle>
                             <Style TargetType="TextBlock">
                                 <Setter Property="TextAlignment" Value="Center"/>
@@ -113,7 +113,38 @@
                             </Style>
                         </DataGridTextColumn.ElementStyle>
                     </DataGridTextColumn>
-                    <DataGridTextColumn Header="Description" Width="150" Binding="{Binding Description, UpdateSourceTrigger=PropertyChanged}">
+                    <DataGridCheckBoxColumn Header="Show" Width="50" Binding="{Binding ShowInMainTable, UpdateSourceTrigger=PropertyChanged}">
+                        <DataGridCheckBoxColumn.ElementStyle>
+                            <Style TargetType="CheckBox">
+                                <Setter Property="HorizontalAlignment" Value="Center"/>
+                                <Setter Property="VerticalAlignment" Value="Center"/>
+                                <Setter Property="ToolTip" Value="Show packages from this destination in main table"/>
+                            </Style>
+                        </DataGridCheckBoxColumn.ElementStyle>
+                    </DataGridCheckBoxColumn>
+                    <DataGridTemplateColumn Header="Color" Width="60">
+                        <DataGridTemplateColumn.CellTemplate>
+                            <DataTemplate>
+                                <Button Width="32" Height="22" 
+                                        Background="{Binding StatusColorBrush}" 
+                                        BorderBrush="{DynamicResource {x:Static SystemColors.ActiveBorderBrushKey}}"
+                                        BorderThickness="1"
+                                        ToolTip="Click to change status color"
+                                        Click="ColorPickerButton_Click"
+                                        Cursor="Hand">
+                                    <Button.Template>
+                                        <ControlTemplate TargetType="Button">
+                                            <Border Background="{TemplateBinding Background}" 
+                                                    BorderBrush="{TemplateBinding BorderBrush}" 
+                                                    BorderThickness="{TemplateBinding BorderThickness}"
+                                                    CornerRadius="3"/>
+                                        </ControlTemplate>
+                                    </Button.Template>
+                                </Button>
+                            </DataTemplate>
+                        </DataGridTemplateColumn.CellTemplate>
+                    </DataGridTemplateColumn>
+                    <DataGridTextColumn Header="Description" Width="120" Binding="{Binding Description, UpdateSourceTrigger=PropertyChanged}">
                         <DataGridTextColumn.ElementStyle>
                             <Style TargetType="TextBlock">
                                 <Setter Property="TextAlignment" Value="Center"/>

@@ -215,6 +215,10 @@ namespace VPM
                 CollectSelectedFilters(LicenseTypeList, _filterManager.SelectedLicenseTypes);
                 CollectSelectedFilters(FileSizeFilterList, _filterManager.SelectedFileSizeRanges, stripCount: false);
                 CollectSelectedFilters(SubfoldersFilterList, _filterManager.SelectedSubfolders);
+                
+                // Update destinations filter
+                _filterManager.SelectedDestinations.Clear();
+                CollectSelectedFilters(DestinationsFilterList, _filterManager.SelectedDestinations);
 
                 // Update damaged filter
                 if (DamagedFilterList?.SelectedItem != null)
@@ -1273,6 +1277,9 @@ namespace VPM
                 PopulateSubfoldersFilterList();
                 System.Diagnostics.Debug.WriteLine("[REFRESH_FILTERS] PopulateSubfoldersFilterList completed");
                 
+                // Populate destinations filter list
+                PopulateDestinationsFilterList();
+                
                 // Populate damaged filter list
                 PopulateDamagedFilterList();
                 
@@ -1401,6 +1408,22 @@ namespace VPM
             catch (Exception ex)
             {
                 System.Diagnostics.Debug.WriteLine($"[PopulateSubfoldersFilterList] Error: {ex.Message}");
+            }
+        }
+
+        private void PopulateDestinationsFilterList()
+        {
+            if (DestinationsFilterList == null || _filterManager == null || _packageManager?.PackageMetadata == null)
+                return;
+
+            try
+            {
+                var destCounts = _filterManager.GetDestinationCounts(_packageManager.PackageMetadata);
+                UpdateFilterListBox(DestinationsFilterList, destCounts);
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[PopulateDestinationsFilterList] Error: {ex.Message}");
             }
         }
 

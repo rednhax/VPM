@@ -40,6 +40,8 @@ namespace VPM.Models
         private bool _isDamaged = false;
         private string _damageReason = "";
         private int _missingDependencyCount = 0;
+        private string _externalDestinationName = "";
+        private string _externalDestinationColorHex = "";
 
         public event PropertyChangedEventHandler PropertyChanged;
 
@@ -296,6 +298,33 @@ namespace VPM.Models
             }
         }
 
+        public string ExternalDestinationName
+        {
+            get => _externalDestinationName ?? "";
+            set
+            {
+                if (SetProperty(ref _externalDestinationName, value ?? ""))
+                {
+                    OnPropertyChanged(nameof(StatusIcon));
+                    OnPropertyChanged(nameof(StatusColor));
+                }
+            }
+        }
+
+        public string ExternalDestinationColorHex
+        {
+            get => _externalDestinationColorHex ?? "";
+            set
+            {
+                if (SetProperty(ref _externalDestinationColorHex, value ?? ""))
+                {
+                    OnPropertyChanged(nameof(StatusColor));
+                }
+            }
+        }
+
+        public bool IsExternal => !string.IsNullOrEmpty(_externalDestinationName);
+
         // Display properties for the modern UI
         public string DisplayName
         {
@@ -350,6 +379,12 @@ namespace VPM.Models
                 {
                     return "⚡"; // Lightning bolt for duplicates
                 }
+
+                // Show external icon for external destinations
+                if (IsExternal)
+                {
+                    return "📤"; // Outbox icon for external
+                }
                 
                 return Status switch
                 {
@@ -372,6 +407,20 @@ namespace VPM.Models
                 if (IsDuplicate)
                 {
                     return System.Windows.Media.Color.FromRgb(255, 235, 59); // Yellow for duplicates
+                }
+
+                // Use external destination color if this is an external package
+                if (IsExternal && !string.IsNullOrEmpty(_externalDestinationColorHex))
+                {
+                    try
+                    {
+                        var color = (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString(_externalDestinationColorHex);
+                        return color;
+                    }
+                    catch
+                    {
+                        return System.Windows.Media.Color.FromRgb(128, 128, 128); // Gray fallback
+                    }
                 }
                 
                 return Status switch

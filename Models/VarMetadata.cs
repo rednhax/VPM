@@ -125,6 +125,11 @@ namespace VPM.Models
         public int DependencyCount { get; set; } = 0;  // Number of packages this one depends on
         public int DependentsCount { get; set; } = 0;  // Number of packages that depend on this one
 
+        // External destination tracking
+        public string ExternalDestinationName { get; set; } = "";  // Name of the external destination (e.g., "Backup")
+        public string ExternalDestinationColorHex { get; set; } = "";  // Color hex for the external destination
+        public bool IsExternal => !string.IsNullOrEmpty(ExternalDestinationName);
+
         // Content tags extracted from .vam files (clothing and hair)
         // Tags are comma-separated strings like "head,torso,dress,formal"
         public HashSet<string> ClothingTags 

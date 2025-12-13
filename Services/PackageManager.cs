@@ -1154,6 +1154,50 @@ namespace VPM.Services
         }
 
         /// <summary>
+        /// Scans VAR files including external destinations
+        /// </summary>
+        public async Task<(List<string> installed, List<string> available, Dictionary<string, List<string>> external)> ScanVarFilesWithExternalAsync(
+            string installedFolder, 
+            string allPackagesFolder, 
+            List<MoveToDestination> externalDestinations)
+        {
+            var (installed, available) = await ScanVarFilesAsync(installedFolder, allPackagesFolder);
+            var external = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
+
+            if (externalDestinations == null || externalDestinations.Count == 0)
+                return (installed, available, external);
+
+            // Scan external destinations in parallel
+            var externalTasks = externalDestinations
+                .Where(d => d.IsValid() && d.PathExists())
+                .Select(async dest =>
+                {
+                    try
+                    {
+                        var files = await Task.Run(() => 
+                            Directory.EnumerateFiles(dest.Path, "*.var", SearchOption.AllDirectories).ToList());
+                        
+                        lock (external)
+                        {
+                            external[dest.Name] = files;
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        System.Diagnostics.Debug.WriteLine($"Error scanning external destination {dest.Name}: {ex.Message}");
+                        lock (external)
+                        {
+                            external[dest.Name] = new List<string>();
+                        }
+                    }
+                });
+
+            await Task.WhenAll(externalTasks);
+
+            return (installed, available, external);
+        }
+
+        /// <summary>
         /// Creates a clone of VarMetadata. Optimized to avoid allocating empty collections
         /// since VarMetadata now uses lazy initialization.
         /// </summary>
@@ -1381,6 +1425,95 @@ namespace VPM.Services
             // Save binary cache asynchronously after scanning completes (fire-and-forget)
             // Don't await to avoid blocking the UI
             _ = SaveBinaryCacheAsync();
+        }
+
+        /// <summary>
+        /// Updates package mapping including external destination packages.
+        /// External packages are marked with their destination name and color.
+        /// </summary>
+        public void UpdatePackageMappingFast(
+            List<string> installedFiles, 
+            List<string> availableFiles, 
+            Dictionary<string, List<string>> externalFiles,
+            List<MoveToDestination> externalDestinations,
+            IProgress<(int current, int total)> progress = null)
+        {
+            // First, process installed and available files normally
+            UpdatePackageMappingFast(installedFiles, availableFiles, progress);
+
+            // Then, add external packages
+            if (externalFiles == null || externalFiles.Count == 0 || externalDestinations == null)
+                return;
+
+            // Build a lookup for destination info
+            var destLookup = externalDestinations.ToDictionary(
+                d => d.Name, 
+                d => d, 
+                StringComparer.OrdinalIgnoreCase);
+
+            foreach (var kvp in externalFiles)
+            {
+                var destName = kvp.Key;
+                var files = kvp.Value;
+
+                if (!destLookup.TryGetValue(destName, out var destination))
+                    continue;
+
+                foreach (var filePath in files)
+                {
+                    try
+                    {
+                        var fileInfo = new FileInfo(filePath);
+                        if (!fileInfo.Exists)
+                            continue;
+
+                        var fileName = Path.GetFileNameWithoutExtension(filePath);
+                        var match = _varPattern.Match(Path.GetFileName(filePath));
+                        if (!match.Success)
+                            continue;
+
+                        var creator = match.Groups[1].Value;
+                        var packageName = match.Groups[2].Value;
+                        var version = int.TryParse(match.Groups[3].Value, out var v) ? v : 0;
+                        var packageKey = $"{creator}.{packageName}.{version}";
+
+                        // Check if this package already exists (e.g., in AddonPackages or AllPackages)
+                        if (PackageMetadata.ContainsKey(packageKey))
+                        {
+                            // Package exists elsewhere - mark as duplicate location
+                            var existingMeta = PackageMetadata[packageKey];
+                            existingMeta.DuplicateLocationCount++;
+                            continue;
+                        }
+
+                        // Parse or get from cache
+                        var (metadata, metaHash) = ParseVarMetadata(filePath);
+                        metadata.Status = destName; // Status is the destination name
+                        metadata.VariantRole = "External";
+                        metadata.FilePath = filePath;
+                        metadata.FileSize = fileInfo.Length;
+                        metadata.ExternalDestinationName = destName;
+                        metadata.ExternalDestinationColorHex = destination.StatusColor ?? "#808080";
+                        
+                        if (!metadata.IsOptimized)
+                        {
+                            metadata.ModifiedDate = fileInfo.LastWriteTime;
+                        }
+
+                        PackageMetadata[packageKey] = metadata;
+                    }
+                    catch (Exception ex)
+                    {
+                        System.Diagnostics.Debug.WriteLine($"Error processing external package {filePath}: {ex.Message}");
+                    }
+                }
+            }
+
+            // Re-detect old versions and dependencies after adding external packages
+            DetectOldVersions();
+            DetectMissingDependencies();
+            _dependencyGraph.Build(PackageMetadata);
+            PopulateDependencyCounts();
         }
 
         /// <summary>

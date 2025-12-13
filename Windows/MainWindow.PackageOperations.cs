@@ -35,12 +35,12 @@ namespace VPM
                 if (!EnsureVamFolderSelected()) return;
 
                 var selectedPackages = PackageDataGrid.SelectedItems.Cast<PackageItem>()
-                    .Where(p => p.Status == "Available")
+                    .Where(p => p.Status == "Available" || p.IsExternal)
                     .ToList();
 
                 if (selectedPackages.Count == 0)
                 {
-                    MessageBox.Show("No available packages selected.", "No Packages",
+                    MessageBox.Show("No available or external packages selected.", "No Packages",
                                    MessageBoxButton.OK, MessageBoxImage.Information);
                     return;
                 }
@@ -409,19 +409,16 @@ namespace VPM
                 if (!EnsureVamFolderSelected()) return;
 
                 var selectedPackages = PackageDataGrid.SelectedItems.Cast<PackageItem>()
-                    .Where(p => p.Status == "Loaded")
+                    .Where(p => p.Status == "Loaded" || p.IsExternal)
                     .ToList();
-
-
 
                 if (selectedPackages.Count == 0)
                 {
-                    MessageBox.Show("No loaded packages selected.", "No Packages",
+                    MessageBox.Show("No loaded or external packages selected.", "No Packages",
                                    MessageBoxButton.OK, MessageBoxImage.Information);
                     return;
                 }
 
-                // Only show confirmation for large batches (100+ packages)
                 if (selectedPackages.Count >= 100)
                 {
                     var packageNames = selectedPackages.Take(10).Select(p => p.Name).ToList();
@@ -1744,7 +1741,9 @@ namespace VPM
                         IsDuplicate = metadata.IsDuplicate,
                         DuplicateLocationCount = metadata.DuplicateLocationCount,
                         IsOldVersion = metadata.IsOldVersion,
-                        LatestVersionNumber = metadata.LatestVersionNumber
+                        LatestVersionNumber = metadata.LatestVersionNumber,
+                        ExternalDestinationName = metadata.ExternalDestinationName,
+                        ExternalDestinationColorHex = metadata.ExternalDestinationColorHex
                     };
                     
                     packagesToAdd.Add(packageItem);

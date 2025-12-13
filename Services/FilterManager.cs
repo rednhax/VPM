@@ -45,6 +45,9 @@ namespace VPM.Services
         public HashSet<string> SelectedHairTags { get; set; } = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         public bool RequireAllTags { get; set; } = false;
 
+        // External destination filtering
+        public HashSet<string> SelectedDestinations { get; set; } = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
         public void ClearAllFilters()
         {
             SelectedStatus = null;
@@ -71,6 +74,7 @@ namespace VPM.Services
             SelectedClothingTags.Clear();
             SelectedHairTags.Clear();
             RequireAllTags = false;
+            SelectedDestinations.Clear();
         }
 
         public void ClearCategoryFilter()
@@ -118,8 +122,11 @@ namespace VPM.Services
         public void ClearTagFilters()
         {
             SelectedClothingTags.Clear();
-            SelectedHairTags.Clear();
-            RequireAllTags = false;
+        }
+
+        public void ClearDestinationFilter()
+        {
+            SelectedDestinations.Clear();
         }
 
         public void ClearClothingTagFilter()
@@ -191,7 +198,8 @@ namespace VPM.Services
                 FileSizeMediumMax = FileSizeMediumMax,
                 SelectedClothingTags = new HashSet<string>(SelectedClothingTags, StringComparer.OrdinalIgnoreCase),
                 SelectedHairTags = new HashSet<string>(SelectedHairTags, StringComparer.OrdinalIgnoreCase),
-                RequireAllTags = RequireAllTags
+                RequireAllTags = RequireAllTags,
+                SelectedDestinations = new HashSet<string>(SelectedDestinations, StringComparer.OrdinalIgnoreCase)
             };
         }
 
@@ -413,6 +421,15 @@ namespace VPM.Services
             if (state.SelectedHairTags.Count > 0)
             {
                 if (!MatchesTagFilter(metadata.HairTags, state.SelectedHairTags, state.RequireAllTags))
+                    return false;
+            }
+
+            // 20. External destination filter
+            if (state.SelectedDestinations.Count > 0)
+            {
+                if (!metadata.IsExternal || string.IsNullOrEmpty(metadata.ExternalDestinationName))
+                    return false;
+                if (!state.SelectedDestinations.Contains(metadata.ExternalDestinationName))
                     return false;
             }
 
@@ -1153,6 +1170,35 @@ namespace VPM.Services
         public bool HasActiveTagFilters()
         {
             return SelectedClothingTags.Count > 0 || SelectedHairTags.Count > 0;
+        }
+
+        /// <summary>
+        /// Get external destination counts from packages
+        /// </summary>
+        public Dictionary<string, int> GetDestinationCounts(Dictionary<string, VarMetadata> packages)
+        {
+            var counts = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+            
+            foreach (var package in packages.Values)
+            {
+                if (!package.IsExternal || string.IsNullOrEmpty(package.ExternalDestinationName))
+                    continue;
+                
+                if (counts.TryGetValue(package.ExternalDestinationName, out var count))
+                    counts[package.ExternalDestinationName] = count + 1;
+                else
+                    counts[package.ExternalDestinationName] = 1;
+            }
+            
+            return counts;
+        }
+
+        /// <summary>
+        /// Check if any destination filters are active
+        /// </summary>
+        public bool HasActiveDestinationFilters()
+        {
+            return SelectedDestinations.Count > 0;
         }
     }
 }

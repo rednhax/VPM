@@ -680,6 +680,7 @@ namespace VPM
         private void SubfoldersSortButton_Click(object sender, RoutedEventArgs e) =>
             ShowFilterSortMenu("Subfolders", SubfoldersFilterList, SubfoldersSortButton);
 
+
         private void ShowFilterSortMenu(string filterType, ListBox listBox, Button sortButton)
         {
             try

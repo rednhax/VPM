@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Concurrent;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq.Expressions;
 using System.Reflection;
@@ -133,6 +134,9 @@ namespace VPM.Services
                     if (loadedSettings != null)
                     {
                         Settings = loadedSettings;
+                        
+                        // Apply migrations based on settings version
+                        MigrateSettings(Settings);
                     }
                     else
                     {
@@ -150,6 +154,63 @@ namespace VPM.Services
             catch (Exception)
             {
                 Settings = AppSettings.CreateDefault();
+            }
+        }
+
+        /// <summary>
+        /// Applies migrations to settings based on version
+        /// </summary>
+        private void MigrateSettings(AppSettings settings)
+        {
+            if (settings == null)
+                return;
+
+            // Ensure all required filters are present in filter orders
+            EnsureAllFiltersInOrder(settings);
+
+            // Update version to current
+            if (settings.SettingsVersion < 2)
+            {
+                settings.SettingsVersion = 2;
+            }
+        }
+
+        /// <summary>
+        /// Ensures all required filters are present in all filter order lists
+        /// </summary>
+        private void EnsureAllFiltersInOrder(AppSettings settings)
+        {
+            if (settings == null)
+                return;
+
+            // Ensure Package filters
+            if (settings.PackageFilterOrder != null)
+            {
+                FilterConfiguration.EnsureFiltersInOrder(settings.PackageFilterOrder, FilterConfiguration.PackageFilters);
+            }
+            else
+            {
+                settings.PackageFilterOrder = new List<string>(FilterConfiguration.PackageFilters);
+            }
+
+            // Ensure Scene filters
+            if (settings.SceneFilterOrder != null)
+            {
+                FilterConfiguration.EnsureFiltersInOrder(settings.SceneFilterOrder, FilterConfiguration.SceneFilters);
+            }
+            else
+            {
+                settings.SceneFilterOrder = new List<string>(FilterConfiguration.SceneFilters);
+            }
+
+            // Ensure Preset filters
+            if (settings.PresetFilterOrder != null)
+            {
+                FilterConfiguration.EnsureFiltersInOrder(settings.PresetFilterOrder, FilterConfiguration.PresetFilters);
+            }
+            else
+            {
+                settings.PresetFilterOrder = new List<string>(FilterConfiguration.PresetFilters);
             }
         }
 

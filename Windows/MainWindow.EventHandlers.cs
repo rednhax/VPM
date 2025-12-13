@@ -253,6 +253,16 @@ namespace VPM
             ApplyFilters();
         }
 
+        private void DestinationsFilterList_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            // Prevent recursion during programmatic updates
+            if (_suppressSelectionEvents) return;
+
+            // Apply filters immediately when selection changes
+            ApplyFilters();
+        }
+
+
         private void DependenciesDataGrid_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
             // Skip if selection events are suppressed
@@ -554,9 +564,9 @@ namespace VPM
                 }
 
                 // Handle based on status
-                if (selectedPackage.Status == "Loaded" || selectedPackage.Status == "Available" || selectedPackage.Status == "Archived")
+                if (selectedPackage.Status == "Loaded" || selectedPackage.Status == "Available" || selectedPackage.Status == "Archived" || selectedPackage.IsExternal)
                 {
-                    // Open folder path for loaded/available/archived packages
+                    // Open folder path for loaded/available/archived/external packages
                     OpenPackageFolderPath(selectedPackage);
                 }
                 else if (selectedPackage.Status == "Missing")
@@ -582,6 +592,20 @@ namespace VPM
                 {
                     SetStatus("Package file manager not initialized");
                     return;
+                }
+
+                // For external packages, use metadata FilePath directly (same as context menu)
+                if (package.IsExternal && _packageManager?.PackageMetadata != null)
+                {
+                    if (_packageManager.PackageMetadata.TryGetValue(package.MetadataKey, out var metadata))
+                    {
+                        if (!string.IsNullOrEmpty(metadata.FilePath) && System.IO.File.Exists(metadata.FilePath))
+                        {
+                            OpenFolderAndSelectFile(metadata.FilePath);
+                            SetStatus($"Opened folder for: {package.Name}");
+                            return;
+                        }
+                    }
                 }
 
                 // Get the file path for this package
@@ -3462,7 +3486,9 @@ namespace VPM
                 ScriptsCount = metadata.ScriptsCount,
                 PluginsCount = metadata.PluginsCount,
                 SubScenesCount = metadata.SubScenesCount,
-                SkinsCount = metadata.SkinsCount
+                SkinsCount = metadata.SkinsCount,
+                ExternalDestinationName = metadata.ExternalDestinationName,
+                ExternalDestinationColorHex = metadata.ExternalDestinationColorHex
             };
         }
 
@@ -3537,6 +3563,10 @@ namespace VPM
                             if (DamagedFilterList != null)
                                 _settingsManager.Settings.DamagedFilterHeight = DamagedFilterList.ActualHeight;
                             break;
+                        case "DestinationsFilter":
+                            if (DestinationsFilterList != null)
+                                _settingsManager.Settings.DestinationsFilterHeight = DestinationsFilterList.ActualHeight;
+                            break;
                     }
                 }
                 catch (Exception)
@@ -3558,6 +3588,7 @@ namespace VPM
                 "LicenseTypeFilter" => LicenseTypeList,
                 "FileSizeFilter" => FileSizeFilterList,
                 "DamagedFilter" => DamagedFilterList,
+                "DestinationsFilter" => DestinationsFilterList,
                 _ => null
             };
         }
@@ -3712,6 +3743,13 @@ namespace VPM
                             expandedGrid = PresetStatusFilterExpandedGrid;
                             collapsedGrid = PresetStatusFilterCollapsedGrid;
                             break;
+                        case "DestinationsFilter":
+                            newVisibility = !_settingsManager.Settings.DestinationsFilterVisible;
+                            _settingsManager.Settings.DestinationsFilterVisible = newVisibility;
+                            targetList = DestinationsFilterList;
+                            textBoxGrid = DestinationsFilterTextBoxGrid;
+                            collapsedGrid = DestinationsFilterCollapsedGrid;
+                            break;
                     }
                     
                     // Update UI elements
@@ -3780,15 +3818,29 @@ namespace VPM
                 if (filterOrder == null)
                     return;
 
+                // Ensure filter exists in order (migration for old settings)
+                if (!filterOrder.Contains(filterType))
+                {
+                    System.Diagnostics.Debug.WriteLine($"[MoveFilter] Filter '{filterType}' not found in order, adding it");
+                    filterOrder.Add(filterType);
+                    SaveCurrentFilterOrder(filterOrder);
+                }
+
                 // Find current index
                 int currentIndex = filterOrder.IndexOf(filterType);
                 if (currentIndex == -1)
+                {
+                    System.Diagnostics.Debug.WriteLine($"[MoveFilter] Filter '{filterType}' could not be found after migration attempt");
                     return;
+                }
 
                 // Calculate new index
                 int newIndex = currentIndex + direction;
                 if (newIndex < 0 || newIndex >= filterOrder.Count)
+                {
+                    System.Diagnostics.Debug.WriteLine($"[MoveFilter] Cannot move filter '{filterType}' beyond bounds (index {currentIndex}, direction {direction})");
                     return; // Can't move beyond bounds
+                }
 
                 // Swap positions
                 filterOrder.RemoveAt(currentIndex);
@@ -3797,10 +3849,12 @@ namespace VPM
                 // Save the new order and refresh the UI
                 SaveCurrentFilterOrder(filterOrder);
                 RefreshFilterOrder();
+                
+                System.Diagnostics.Debug.WriteLine($"[MoveFilter] Successfully moved filter '{filterType}' from index {currentIndex} to {newIndex}");
             }
-            catch (Exception)
+            catch (Exception ex)
             {
-                // Ignore move errors
+                System.Diagnostics.Debug.WriteLine($"[MoveFilter] Error moving filter '{filterType}': {ex.Message}");
             }
         }
 
@@ -3882,11 +3936,15 @@ namespace VPM
                     {
                         filterContainer.Children.Add(filterElements[filterType]);
                     }
+                    else
+                    {
+                        System.Diagnostics.Debug.WriteLine($"[RefreshFilterOrder] Warning: Filter '{filterType}' in order list but not found in container");
+                    }
                 }
             }
-            catch (Exception)
+            catch (Exception ex)
             {
-                // Ignore refresh errors
+                System.Diagnostics.Debug.WriteLine($"[RefreshFilterOrder] Error refreshing filter order: {ex.Message}");
             }
         }
 
@@ -5946,7 +6004,12 @@ namespace VPM
                 {
                     Owner = this
                 };
-                window.ShowDialog();
+                
+                if (window.ShowDialog() == true)
+                {
+                    // Settings were saved - update external packages live
+                    UpdateExternalPackagesFromDestinationSettings();
+                }
             }
             catch (Exception ex)
             {
@@ -5954,6 +6017,50 @@ namespace VPM
                     MessageBoxButton.OK, MessageBoxImage.Error);
                 System.Diagnostics.Debug.WriteLine($"ConfigureMoveToDestinations error: {ex}");
             }
+        }
+
+        /// <summary>
+        /// Updates external packages in the UI based on current destination settings.
+        /// This handles color changes and ShowInMainTable visibility changes.
+        /// </summary>
+        private void UpdateExternalPackagesFromDestinationSettings()
+        {
+            if (_packageManager?.PackageMetadata == null || _settingsManager?.Settings?.MoveToDestinations == null)
+                return;
+
+            var destinations = _settingsManager.Settings.MoveToDestinations;
+            var destLookup = destinations.ToDictionary(d => d.Name, d => d, StringComparer.OrdinalIgnoreCase);
+
+            // Update metadata colors for ALL external packages (even hidden ones, so color is ready when shown)
+            foreach (var kvp in _packageManager.PackageMetadata)
+            {
+                var metadata = kvp.Value;
+                if (!metadata.IsExternal || string.IsNullOrEmpty(metadata.ExternalDestinationName))
+                    continue;
+
+                if (destLookup.TryGetValue(metadata.ExternalDestinationName, out var dest))
+                {
+                    metadata.ExternalDestinationColorHex = dest.StatusColor ?? "#808080";
+                }
+            }
+
+            // Update colors for currently visible PackageItems
+            foreach (var package in Packages)
+            {
+                if (!package.IsExternal || string.IsNullOrEmpty(package.ExternalDestinationName))
+                    continue;
+
+                if (destLookup.TryGetValue(package.ExternalDestinationName, out var dest))
+                {
+                    package.ExternalDestinationColorHex = dest.StatusColor ?? "#808080";
+                }
+            }
+
+            // Clear the package item cache to force recreation with new visibility settings
+            _packageItemCache.Clear();
+            
+            // Trigger a full UI refresh which will apply the ShowInMainTable filter
+            _ = UpdatePackageListAsync();
         }
 
         private void PackageContextMenu_Opened(object sender, RoutedEventArgs e)
@@ -6314,18 +6421,66 @@ namespace VPM
                     }
                 }
 
-                // Mark moved packages as missing and remove from UI
+                // Update moved packages - check if destination is a configured external destination
+                System.Diagnostics.Debug.WriteLine($"[MovePackage] Looking for configured destination matching path: '{destinationPath}'");
+                var allDests = _settingsManager?.Settings?.MoveToDestinations ?? new List<MoveToDestination>();
+                System.Diagnostics.Debug.WriteLine($"[MovePackage] Total configured destinations: {allDests.Count}");
+                foreach (var d in allDests)
+                {
+                    System.Diagnostics.Debug.WriteLine($"[MovePackage]   - Name: '{d.Name}', Path: '{d.Path}', ShowInMainTable: {d.ShowInMainTable}, PathMatch: {d.Path.Equals(destinationPath, StringComparison.OrdinalIgnoreCase)}");
+                }
+
+                var configuredDestination = allDests.FirstOrDefault(d => d.Path.Equals(destinationPath, StringComparison.OrdinalIgnoreCase));
+                System.Diagnostics.Debug.WriteLine($"[MovePackage] Found configured destination: {configuredDestination?.Name ?? "NULL"}");
+
                 foreach (var package in movedPackages)
                 {
-                    // Mark as missing since package is no longer in game folders
-                    package.Status = "Missing";
+                    System.Diagnostics.Debug.WriteLine($"[MovePackage] Processing moved package: '{package.Name}', MetadataKey: '{package.MetadataKey}'");
                     
-                    Packages.Remove(package);
-                    
-                    // Also remove from package metadata
-                    if (_packageManager?.PackageMetadata != null && _packageManager.PackageMetadata.ContainsKey(package.MetadataKey))
+                    if (configuredDestination != null && configuredDestination.ShowInMainTable)
                     {
-                        _packageManager.PackageMetadata.Remove(package.MetadataKey);
+                        System.Diagnostics.Debug.WriteLine($"[MovePackage] Updating package to external destination: Name='{configuredDestination.Name}', Color='{configuredDestination.StatusColor}'");
+                        
+                        // Package moved to a configured external destination - update status and color
+                        package.Status = configuredDestination.Name;
+                        package.ExternalDestinationName = configuredDestination.Name;
+                        package.ExternalDestinationColorHex = configuredDestination.StatusColor ?? "#808080";
+                        
+                        // Update metadata as well
+                        if (_packageManager?.PackageMetadata != null && 
+                            _packageManager.PackageMetadata.TryGetValue(package.MetadataKey, out var metadata))
+                        {
+                            string oldFilePath = metadata.FilePath;
+                            string fileName = Path.GetFileName(metadata.FilePath);
+                            string newFilePath = Path.Combine(destinationPath, fileName);
+                            
+                            System.Diagnostics.Debug.WriteLine($"[MovePackage] Updating metadata: OldPath='{oldFilePath}', NewPath='{newFilePath}'");
+                            
+                            metadata.Status = configuredDestination.Name;
+                            metadata.FilePath = newFilePath;
+                            metadata.ExternalDestinationName = configuredDestination.Name;
+                            metadata.ExternalDestinationColorHex = configuredDestination.StatusColor ?? "#808080";
+                            
+                            System.Diagnostics.Debug.WriteLine($"[MovePackage] Metadata updated: Status='{metadata.Status}', FilePath='{metadata.FilePath}', IsExternal={metadata.IsExternal}");
+                        }
+                        else
+                        {
+                            System.Diagnostics.Debug.WriteLine($"[MovePackage] WARNING: Could not find metadata for key '{package.MetadataKey}'");
+                        }
+                    }
+                    else
+                    {
+                        System.Diagnostics.Debug.WriteLine($"[MovePackage] Removing package from table (no configured destination or ShowInMainTable=false)");
+                        
+                        // Package moved to non-configured destination - remove from table
+                        package.Status = "Missing";
+                        Packages.Remove(package);
+                        
+                        // Also remove from package metadata
+                        if (_packageManager?.PackageMetadata != null && _packageManager.PackageMetadata.ContainsKey(package.MetadataKey))
+                        {
+                            _packageManager.PackageMetadata.Remove(package.MetadataKey);
+                        }
                     }
                 }
 

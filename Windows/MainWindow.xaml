@@ -609,7 +609,7 @@
                                             x:Name="DateFilterToggleButtonCollapsed"
                                             Grid.Column="0"
                                             Click="ToggleFilterVisibility_Click"
-                                            Content="👁️‍🗨️"
+                                            Content="➕"
                                             Style="{StaticResource FilterToggleButtonStyle}"
                                             Tag="DateFilter" />
                                         <Label Grid.Column="1" Content="📅 Filter by Date" />
@@ -637,7 +637,7 @@
                                             x:Name="DateFilterToggleButton"
                                             Grid.Column="0"
                                             Click="ToggleFilterVisibility_Click"
-                                            Content="👁"
+                                            Content="➖"
                                             Style="{StaticResource FilterToggleButtonStyle}"
                                             Tag="DateFilter" />
                                         <Label Grid.Column="1" Content="📅 Filter by Date" />
@@ -706,7 +706,7 @@
                                             x:Name="StatusFilterToggleButton"
                                             Grid.Column="0"
                                             Click="ToggleFilterVisibility_Click"
-                                            Content="👁️‍🗨️"
+                                            Content="➕"
                                             Style="{StaticResource FilterToggleButtonStyle}"
                                             Tag="StatusFilter" />
                                         <Label Grid.Column="1" Content="📊 Filter by Status" />
@@ -735,7 +735,7 @@
                                             x:Name="StatusFilterToggleButtonExpanded"
                                             Grid.Column="0"
                                             Click="ToggleFilterVisibility_Click"
-                                            Content="👁"
+                                            Content="➖"
                                             Style="{StaticResource FilterToggleButtonStyle}"
                                             Tag="StatusFilter" />
                                         <Label Grid.Column="1" Content="📊 Filter by Status" />
@@ -778,7 +778,7 @@
                                             x:Name="ContentTypesFilterToggleButton"
                                             Grid.Column="0"
                                             Click="ToggleFilterVisibility_Click"
-                                            Content="👁️‍🗨️"
+                                            Content="➕"
                                             Style="{StaticResource FilterToggleButtonStyle}"
                                             Tag="ContentTypesFilter" />
                                         <Label Grid.Column="1" Content="📦 Filter content types" />
@@ -809,7 +809,7 @@
                                             Grid.Column="0"
                                             Height="{Binding ElementName=ContentTypesFilterBox, Path=ActualHeight}"
                                             Click="ToggleFilterVisibility_Click"
-                                            Content="👁"
+                                            Content="➖"
                                             Style="{StaticResource FilterToggleButtonStyle}"
                                             Tag="ContentTypesFilter" />
                                         <TextBox
@@ -866,7 +866,7 @@
                                             x:Name="CreatorsFilterToggleButton"
                                             Grid.Column="0"
                                             Click="ToggleFilterVisibility_Click"
-                                            Content="👁️‍🗨️"
+                                            Content="➕"
                                             Style="{StaticResource FilterToggleButtonStyle}"
                                             Tag="CreatorsFilter" />
                                         <Label Grid.Column="1" Content="👤 Filter creators" />
@@ -897,7 +897,7 @@
                                             Grid.Column="0"
                                             Height="{Binding ElementName=CreatorsFilterBox, Path=ActualHeight}"
                                             Click="ToggleFilterVisibility_Click"
-                                            Content="👁"
+                                            Content="➖"
                                             Style="{StaticResource FilterToggleButtonStyle}"
                                             Tag="CreatorsFilter" />
                                         <TextBox
@@ -938,6 +938,75 @@
                                         Tag="CreatorsFilter" />
                                 </StackPanel>
 
+                                <!--  Destinations Filter Section  -->
+                                <StackPanel x:Name="DestinationsFilterSection" Margin="0,6,0,0">
+                                    <!--  Collapsed state (shown when hidden)  -->
+                                    <Grid
+                                        x:Name="DestinationsFilterCollapsedGrid"
+                                        Margin="0,0,0,6"
+                                        Visibility="Collapsed">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto" />
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+                                        <Button
+                                            x:Name="DestinationsFilterToggleButton"
+                                            Grid.Column="0"
+                                            Click="ToggleFilterVisibility_Click"
+                                            Content="➕"
+                                            Style="{StaticResource FilterToggleButtonStyle}"
+                                            Tag="DestinationsFilter" />
+                                        <Label Grid.Column="1" Content="📤 Filter external locations" />
+                                        <Button
+                                            x:Name="DestinationsFilterMoveUpButton"
+                                            Grid.Column="2"
+                                            Click="FilterMoveUp_Click"
+                                            Style="{StaticResource FilterMoveUpButtonStyle}"
+                                            Tag="DestinationsFilter" />
+                                        <Button
+                                            x:Name="DestinationsFilterMoveDownButton"
+                                            Grid.Column="3"
+                                            Click="FilterMoveDown_Click"
+                                            Style="{StaticResource FilterMoveDownButtonStyle}"
+                                            Tag="DestinationsFilter" />
+                                    </Grid>
+
+                                    <!--  Label Grid with eye button (shown when expanded)  -->
+                                    <Grid x:Name="DestinationsFilterTextBoxGrid" Margin="0,0,0,6">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto" />
+                                            <ColumnDefinition Width="*" MinWidth="110" />
+                                        </Grid.ColumnDefinitions>
+                                        <Button
+                                            x:Name="DestinationsFilterToggleButtonExpanded"
+                                            Grid.Column="0"
+                                            Click="ToggleFilterVisibility_Click"
+                                            Content="➖"
+                                            Style="{StaticResource FilterToggleButtonStyle}"
+                                            Tag="DestinationsFilter" />
+                                        <Label
+                                            Grid.Column="1"
+                                            VerticalAlignment="Center"
+                                            Content="📤 Filter external locations" />
+                                    </Grid>
+
+                                    <ListBox
+                                        x:Name="DestinationsFilterList"
+                                        Height="{Binding DestinationsFilterHeight, Mode=TwoWay}"
+                                        MinHeight="80"
+                                        MouseLeftButtonDown="FilterList_MouseLeftButtonDown"
+                                        SelectionChanged="DestinationsFilterList_SelectionChanged"
+                                        SelectionMode="Multiple"
+                                        Style="{StaticResource FilterListBoxStyle}" />
+                                    <Thumb
+                                        DragCompleted="FilterResizeThumb_DragCompleted"
+                                        DragDelta="FilterResizeThumb_DragDelta"
+                                        Style="{StaticResource FilterResizeThumbStyle}"
+                                        Tag="DestinationsFilter" />
+                                </StackPanel>
+
                                 <!--  Subfolders Filter Section  -->
                                 <StackPanel Margin="0,6,0,0">
                                     <!--  Collapsed state (shown when hidden)  -->
@@ -955,7 +1024,7 @@
                                             x:Name="SubfoldersFilterToggleButton"
                                             Grid.Column="0"
                                             Click="ToggleFilterVisibility_Click"
-                                            Content="👁️‍🗨️"
+                                            Content="➕"
                                             Style="{StaticResource FilterToggleButtonStyle}"
                                             Tag="SubfoldersFilter" />
                                         <Label Grid.Column="1" Content="📁 Filter by subfolders" />
@@ -986,7 +1055,7 @@
                                             Grid.Column="0"
                                             Height="{Binding ElementName=SubfoldersFilterBox, Path=ActualHeight}"
                                             Click="ToggleFilterVisibility_Click"
-                                            Content="👁"
+                                            Content="➖"
                                             Style="{StaticResource FilterToggleButtonStyle}"
                                             Tag="SubfoldersFilter" />
                                         <TextBox
@@ -1043,7 +1112,7 @@
                                             x:Name="LicenseTypeFilterToggleButton"
                                             Grid.Column="0"
                                             Click="ToggleFilterVisibility_Click"
-                                            Content="👁️‍🗨️"
+                                            Content="➕"
                                             Style="{StaticResource FilterToggleButtonStyle}"
                                             Tag="LicenseTypeFilter" />
                                         <Label Grid.Column="1" Content="⚖️ Filter license types" />
@@ -1074,7 +1143,7 @@
                                             Grid.Column="0"
                                             Height="{Binding ElementName=LicenseTypeFilterBox, Path=ActualHeight}"
                                             Click="ToggleFilterVisibility_Click"
-                                            Content="👁"
+                                            Content="➖"
                                             Style="{StaticResource FilterToggleButtonStyle}"
                                             Tag="LicenseTypeFilter" />
                                         <TextBox
@@ -1131,7 +1200,7 @@
                                             x:Name="FileSizeFilterToggleButton"
                                             Grid.Column="0"
                                             Click="ToggleFilterVisibility_Click"
-                                            Content="👁️‍🗨️"
+                                            Content="➕"
                                             Style="{StaticResource FilterToggleButtonStyle}"
                                             Tag="FileSizeFilter" />
                                         <Label Grid.Column="1" Content="📦 Filter by size" />
@@ -1159,7 +1228,7 @@
                                             x:Name="FileSizeFilterToggleButtonExpanded"
                                             Grid.Column="0"
                                             Click="ToggleFilterVisibility_Click"
-                                            Content="👁"
+                                            Content="➖"
                                             Style="{StaticResource FilterToggleButtonStyle}"
                                             Tag="FileSizeFilter" />
                                         <Label Grid.Column="1" Content="📦 Filter by size" />
@@ -1196,7 +1265,7 @@
                                             x:Name="DamagedFilterToggleButton"
                                             Grid.Column="0"
                                             Click="ToggleFilterVisibility_Click"
-                                            Content="👁️‍🗨️"
+                                            Content="➕"
                                             Style="{StaticResource FilterToggleButtonStyle}"
                                             Tag="DamagedFilter" />
                                         <Label Grid.Column="1" Content="⚠️ Filter damaged packages" />
@@ -1223,7 +1292,7 @@
                                             x:Name="DamagedFilterToggleButtonExpanded"
                                             Grid.Column="0"
                                             Click="ToggleFilterVisibility_Click"
-                                            Content="👁"
+                                            Content="➖"
                                             Style="{StaticResource FilterToggleButtonStyle}"
                                             Tag="DamagedFilter" />
                                         <Label Grid.Column="1" Content="⚠️ Filter damaged packages" />
@@ -1269,7 +1338,7 @@
                                             x:Name="SceneTypeFilterToggleButton"
                                             Grid.Column="0"
                                             Click="ToggleFilterVisibility_Click"
-                                            Content="👁️‍🗨️"
+                                            Content="➕"
                                             Style="{StaticResource FilterToggleButtonStyle}"
                                             Tag="SceneTypeFilter" />
                                         <Label Grid.Column="1" Content="🎬 Filter scene types" />
@@ -1300,7 +1369,7 @@
                                             Grid.Column="0"
                                             Height="{Binding ElementName=SceneTypeFilterBox, Path=ActualHeight}"
                                             Click="ToggleFilterVisibility_Click"
-                                            Content="👁"
+                                            Content="➖"
                                             Style="{StaticResource FilterToggleButtonStyle}"
                                             Tag="SceneTypeFilter" />
                                         <TextBox
@@ -1355,7 +1424,7 @@
                                             x:Name="SceneCreatorFilterToggleButton"
                                             Grid.Column="0"
                                             Click="ToggleFilterVisibility_Click"
-                                            Content="👁️‍🗨️"
+                                            Content="➕"
                                             Style="{StaticResource FilterToggleButtonStyle}"
                                             Tag="SceneCreatorFilter" />
                                         <Label Grid.Column="1" Content="👤 Filter scene creators" />
@@ -1386,7 +1455,7 @@
                                             Grid.Column="0"
                                             Height="{Binding ElementName=SceneCreatorFilterBox, Path=ActualHeight}"
                                             Click="ToggleFilterVisibility_Click"
-                                            Content="👁"
+                                            Content="➖"
                                             Style="{StaticResource FilterToggleButtonStyle}"
                                             Tag="SceneCreatorFilter" />
                                         <TextBox
@@ -1440,7 +1509,7 @@
                                             x:Name="SceneStatusFilterToggleButton"
                                             Grid.Column="0"
                                             Click="ToggleFilterVisibility_Click"
-                                            Content="👁️‍🗨️"
+                                            Content="➕"
                                             Style="{StaticResource FilterToggleButtonStyle}"
                                             Tag="SceneStatusFilter" />
                                         <Label Grid.Column="1" Content="❤️ Filter by status" />
@@ -1467,7 +1536,7 @@
                                             x:Name="SceneStatusFilterToggleButtonExpanded"
                                             Grid.Column="0"
                                             Click="ToggleFilterVisibility_Click"
-                                            Content="👁"
+                                            Content="➖"
                                             Style="{StaticResource FilterToggleButtonStyle}"
                                             Tag="SceneStatusFilter" />
                                         <Label Grid.Column="1" Content="❤️ Filter by status" />
@@ -1502,7 +1571,7 @@
                                             x:Name="SceneSourceFilterToggleButton"
                                             Grid.Column="0"
                                             Click="ToggleFilterVisibility_Click"
-                                            Content="👁️‍🗨️"
+                                            Content="➕"
                                             Style="{StaticResource FilterToggleButtonStyle}"
                                             Tag="SceneSourceFilter" />
                                         <Label Grid.Column="1" Content="📁 Filter scene source" />
@@ -1530,7 +1599,7 @@
                                             x:Name="SceneSourceFilterToggleButtonExpanded"
                                             Grid.Column="0"
                                             Click="ToggleFilterVisibility_Click"
-                                            Content="👁"
+                                            Content="➖"
                                             Style="{StaticResource FilterToggleButtonStyle}"
                                             Tag="SceneSourceFilter" />
                                         <Label Grid.Column="1" Content="📁 Filter scene source" />
@@ -1566,7 +1635,7 @@
                                             x:Name="SceneDateFilterToggleButton"
                                             Grid.Column="0"
                                             Click="ToggleFilterVisibility_Click"
-                                            Content="👁️‍🗨️"
+                                            Content="➕"
                                             Style="{StaticResource FilterToggleButtonStyle}"
                                             Tag="SceneDateFilter" />
                                         <Label Grid.Column="1" Content="📅 Filter by date" />
@@ -1593,7 +1662,7 @@
                                             x:Name="SceneDateFilterToggleButtonExpanded"
                                             Grid.Column="0"
                                             Click="ToggleFilterVisibility_Click"
-                                            Content="👁"
+                                            Content="➖"
                                             Style="{StaticResource FilterToggleButtonStyle}"
                                             Tag="SceneDateFilter" />
                                         <Label Grid.Column="1" Content="📅 Filter by date" />
@@ -1628,7 +1697,7 @@
                                             x:Name="SceneFileSizeFilterToggleButton"
                                             Grid.Column="0"
                                             Click="ToggleFilterVisibility_Click"
-                                            Content="👁️‍🗨️"
+                                            Content="➕"
                                             Style="{StaticResource FilterToggleButtonStyle}"
                                             Tag="SceneFileSizeFilter" />
                                         <Label Grid.Column="1" Content="💾 Filter by file size" />
@@ -1655,7 +1724,7 @@
                                             x:Name="SceneFileSizeFilterToggleButtonExpanded"
                                             Grid.Column="0"
                                             Click="ToggleFilterVisibility_Click"
-                                            Content="👁"
+                                            Content="➖"
                                             Style="{StaticResource FilterToggleButtonStyle}"
                                             Tag="SceneFileSizeFilter" />
                                         <Label Grid.Column="1" Content="💾 Filter by file size" />
@@ -1696,7 +1765,7 @@
                                             x:Name="PresetCategoryFilterToggleButton"
                                             Grid.Column="0"
                                             Click="ToggleFilterVisibility_Click"
-                                            Content="👁️‍🗨️"
+                                            Content="➕"
                                             Style="{StaticResource FilterToggleButtonStyle}"
                                             Tag="PresetCategoryFilter" />
                                         <Label Grid.Column="1" Content="📂 Filter by category" />
@@ -1727,7 +1796,7 @@
                                             Grid.Column="0"
                                             Height="{Binding ElementName=PresetCategoryFilterBox, Path=ActualHeight}"
                                             Click="ToggleFilterVisibility_Click"
-                                            Content="👁"
+                                            Content="➖"
                                             Style="{StaticResource FilterToggleButtonStyle}"
                                             Tag="PresetCategoryFilter" />
                                         <TextBox
@@ -1783,7 +1852,7 @@
                                             x:Name="PresetSubfolderFilterToggleButton"
                                             Grid.Column="0"
                                             Click="ToggleFilterVisibility_Click"
-                                            Content="👁️‍🗨️"
+                                            Content="➕"
                                             Style="{StaticResource FilterToggleButtonStyle}"
                                             Tag="PresetSubfolderFilter" />
                                         <Label Grid.Column="1" Content="📁 Filter by subfolder" />
@@ -1814,7 +1883,7 @@
                                             Grid.Column="0"
                                             Height="{Binding ElementName=PresetSubfolderFilterBox, Path=ActualHeight}"
                                             Click="ToggleFilterVisibility_Click"
-                                            Content="👁"
+                                            Content="➖"
                                             Style="{StaticResource FilterToggleButtonStyle}"
                                             Tag="PresetSubfolderFilter" />
                                         <TextBox
@@ -1869,7 +1938,7 @@
                                             x:Name="PresetStatusFilterToggleButton"
                                             Grid.Column="0"
                                             Click="ToggleFilterVisibility_Click"
-                                            Content="👁️‍🗨️"
+                                            Content="➕"
                                             Style="{StaticResource FilterToggleButtonStyle}"
                                             Tag="PresetStatusFilter" />
                                         <Label Grid.Column="1" Content="❤️ Filter by status" />
@@ -1896,7 +1965,7 @@
                                             x:Name="PresetStatusFilterToggleButtonExpanded"
                                             Grid.Column="0"
                                             Click="ToggleFilterVisibility_Click"
-                                            Content="👁"
+                                            Content="➖"
                                             Style="{StaticResource FilterToggleButtonStyle}"
                                             Tag="PresetStatusFilter" />
                                         <Label Grid.Column="1" Content="❤️ Filter by status" />
@@ -1931,7 +2000,7 @@
                                             x:Name="PresetDateFilterToggleButton"
                                             Grid.Column="0"
                                             Click="ToggleFilterVisibility_Click"
-                                            Content="👁️‍🗨️"
+                                            Content="➕"
                                             Style="{StaticResource FilterToggleButtonStyle}"
                                             Tag="PresetDateFilter" />
                                         <Label Grid.Column="1" Content="📅 Filter by date" />
@@ -1958,7 +2027,7 @@
                                             x:Name="PresetDateFilterToggleButtonExpanded"
                                             Grid.Column="0"
                                             Click="ToggleFilterVisibility_Click"
-                                            Content="👁"
+                                            Content="➖"
                                             Style="{StaticResource FilterToggleButtonStyle}"
                                             Tag="PresetDateFilter" />
                                         <Label Grid.Column="1" Content="📅 Filter by date" />
@@ -1993,7 +2062,7 @@
                                             x:Name="PresetFileSizeFilterToggleButton"
                                             Grid.Column="0"
                                             Click="ToggleFilterVisibility_Click"
-                                            Content="👁️‍🗨️"
+                                            Content="➕"
                                             Style="{StaticResource FilterToggleButtonStyle}"
                                             Tag="PresetFileSizeFilter" />
                                         <Label Grid.Column="1" Content="💾 Filter by file size" />
@@ -2020,7 +2089,7 @@
                                             x:Name="PresetFileSizeFilterToggleButtonExpanded"
                                             Grid.Column="0"
                                             Click="ToggleFilterVisibility_Click"
-                                            Content="👁"
+                                            Content="➖"
                                             Style="{StaticResource FilterToggleButtonStyle}"
                                             Tag="PresetFileSizeFilter" />
                                         <Label Grid.Column="1" Content="💾 Filter by file size" />
@@ -2453,7 +2522,10 @@
                                     <MenuItem Click="DiscardSelected_Click" Header="🗑️ Discard Selected" />
                                     <MenuItem Click="OpenDiscardLocation_Click" Header="📂 Open Discard Location" />
                                     <Separator />
-                                    <MenuItem x:Name="RestoreOriginalMenuItem" Click="RestoreOriginal_Click" Header="🔄 Restore Original" />
+                                    <MenuItem
+                                        x:Name="RestoreOriginalMenuItem"
+                                        Click="RestoreOriginal_Click"
+                                        Header="🔄 Restore Original" />
                                 </ContextMenu>
                             </DataGrid.ContextMenu>
 
@@ -4740,10 +4812,10 @@
                                                 BorderBrush="{TemplateBinding BorderBrush}"
                                                 BorderThickness="{TemplateBinding BorderThickness}">
                                                 <ScrollViewer
+                                                    CanContentScroll="False"
                                                     Focusable="false"
                                                     HorizontalScrollBarVisibility="Disabled"
-                                                    VerticalScrollBarVisibility="Auto"
-                                                    CanContentScroll="False">
+                                                    VerticalScrollBarVisibility="Auto">
                                                     <ItemsPresenter />
                                                 </ScrollViewer>
                                             </Border>

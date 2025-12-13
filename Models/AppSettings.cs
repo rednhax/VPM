@@ -61,6 +61,7 @@ namespace VPM.Models
         private double _fileSizeFilterHeight = 120;
         private double _subfoldersFilterHeight = 120;
         private double _damagedFilterHeight = 80;
+        private double _destinationsFilterHeight = 120;
         
         // Filter Section Visibility
         private bool _dateFilterVisible = true;
@@ -83,6 +84,7 @@ namespace VPM.Models
         private bool _presetFileSizeFilterVisible = true;
         private bool _sceneStatusFilterVisible = true;
         private bool _presetStatusFilterVisible = true;
+        private bool _destinationsFilterVisible = true;
         
         // File Size Filter Settings (in MB)
         private double _fileSizeTinyMax = 1;
@@ -114,10 +116,13 @@ namespace VPM.Models
         private bool _minifyJsonFiles = true;
         private long _textureCompressionQuality = 90L;
         
+        // Settings versioning for migrations
+        private int _settingsVersion = 2;
+        
         // Filter Position Settings
-        private List<string> _packageFilterOrder = new List<string> { "DateFilter", "StatusFilter", "ContentTypesFilter", "CreatorsFilter", "LicenseTypeFilter", "FileSizeFilter", "SubfoldersFilter", "DamagedFilter" };
-        private List<string> _sceneFilterOrder = new List<string> { "SceneTypeFilter", "SceneCreatorFilter", "SceneSourceFilter", "SceneDateFilter", "SceneFileSizeFilter", "SceneStatusFilter" };
-        private List<string> _presetFilterOrder = new List<string> { "PresetCategoryFilter", "PresetSubfolderFilter", "PresetDateFilter", "PresetFileSizeFilter", "PresetStatusFilter" };
+        private List<string> _packageFilterOrder = new List<string>(FilterConfiguration.PackageFilters);
+        private List<string> _sceneFilterOrder = new List<string>(FilterConfiguration.SceneFilters);
+        private List<string> _presetFilterOrder = new List<string>(FilterConfiguration.PresetFilters);
 
         // Sorting Settings
         private Dictionary<string, SerializableSortingState> _sortingStates = new Dictionary<string, SerializableSortingState>();
@@ -389,6 +394,12 @@ namespace VPM.Models
             set => SetProperty(ref _damagedFilterHeight, Math.Max(60, Math.Min(200, value)));
         }
 
+        public double DestinationsFilterHeight
+        {
+            get => _destinationsFilterHeight;
+            set => SetProperty(ref _destinationsFilterHeight, Math.Max(80, Math.Min(400, value)));
+        }
+
         // Filter Section Visibility Properties
         public bool DateFilterVisible
         {
@@ -510,6 +521,12 @@ namespace VPM.Models
             set => SetProperty(ref _presetStatusFilterVisible, value);
         }
 
+        public bool DestinationsFilterVisible
+        {
+            get => _destinationsFilterVisible;
+            set => SetProperty(ref _destinationsFilterVisible, value);
+        }
+
         // File Size Filter Settings Properties
         public double FileSizeTinyMax
         {
@@ -605,24 +622,30 @@ namespace VPM.Models
             get => _textureCompressionQuality;
             set => SetProperty(ref _textureCompressionQuality, Math.Max(10, Math.Min(100, value)));
         }
+
+        public int SettingsVersion
+        {
+            get => _settingsVersion;
+            set => SetProperty(ref _settingsVersion, value);
+        }
         
         // Filter Position Settings Properties
         public List<string> PackageFilterOrder
         {
             get => _packageFilterOrder;
-            set => SetProperty(ref _packageFilterOrder, value ?? new List<string> { "DateFilter", "StatusFilter", "ContentTypesFilter", "CreatorsFilter", "LicenseTypeFilter", "FileSizeFilter", "SubfoldersFilter", "DamagedFilter" });
+            set => SetProperty(ref _packageFilterOrder, value ?? new List<string>(FilterConfiguration.PackageFilters));
         }
 
         public List<string> SceneFilterOrder
         {
             get => _sceneFilterOrder;
-            set => SetProperty(ref _sceneFilterOrder, value ?? new List<string> { "SceneTypeFilter", "SceneCreatorFilter", "SceneSourceFilter", "SceneDateFilter", "SceneFileSizeFilter", "SceneStatusFilter" });
+            set => SetProperty(ref _sceneFilterOrder, value ?? new List<string>(FilterConfiguration.SceneFilters));
         }
 
         public List<string> PresetFilterOrder
         {
             get => _presetFilterOrder;
-            set => SetProperty(ref _presetFilterOrder, value ?? new List<string> { "PresetCategoryFilter", "PresetSubfolderFilter", "PresetDateFilter", "PresetFileSizeFilter", "PresetStatusFilter" });
+            set => SetProperty(ref _presetFilterOrder, value ?? new List<string>(FilterConfiguration.PresetFilters));
         }
 
         // Sorting Settings Properties
@@ -704,6 +727,7 @@ namespace VPM.Models
                 FileSizeFilterHeight = 120,
                 SubfoldersFilterHeight = 120,
                 DamagedFilterHeight = 80,
+                DestinationsFilterHeight = 100,
                 DateFilterVisible = true,
                 StatusFilterVisible = true,
                 OptimizationFilterVisible = true,
@@ -713,6 +737,7 @@ namespace VPM.Models
                 FileSizeFilterVisible = true,
                 SubfoldersFilterVisible = true,
                 DamagedFilterVisible = true,
+                DestinationsFilterVisible = true,
                 SceneTypeFilterVisible = true,
                 SceneCreatorFilterVisible = true,
                 SceneSourceFilterVisible = true,
@@ -736,9 +761,10 @@ namespace VPM.Models
                 EnableAutoDownload = false,
                 HideArchivedPackages = true,
                 MinifyJsonFiles = true,
-                PackageFilterOrder = new List<string> { "DateFilter", "StatusFilter", "ContentTypesFilter", "CreatorsFilter", "LicenseTypeFilter", "FileSizeFilter", "SubfoldersFilter", "DamagedFilter" },
-                SceneFilterOrder = new List<string> { "SceneTypeFilter", "SceneCreatorFilter", "SceneSourceFilter", "SceneDateFilter", "SceneFileSizeFilter", "SceneStatusFilter" },
-                PresetFilterOrder = new List<string> { "PresetCategoryFilter", "PresetSubfolderFilter", "PresetDateFilter", "PresetFileSizeFilter", "PresetStatusFilter" },
+                SettingsVersion = 2,
+                PackageFilterOrder = new List<string>(FilterConfiguration.PackageFilters),
+                SceneFilterOrder = new List<string>(FilterConfiguration.SceneFilters),
+                PresetFilterOrder = new List<string>(FilterConfiguration.PresetFilters),
                 SortingStates = new Dictionary<string, SerializableSortingState>()
             };
         }

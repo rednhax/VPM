@@ -34,6 +34,16 @@ namespace VPM.Models
         public int SortOrder { get; set; } = 0;
 
         /// <summary>
+        /// Whether packages in this destination should be shown in the main table
+        /// </summary>
+        public bool ShowInMainTable { get; set; } = true;
+
+        /// <summary>
+        /// Color used for status display in the main table (hex format, e.g., "#808080")
+        /// </summary>
+        public string StatusColor { get; set; } = "#808080";
+
+        /// <summary>
         /// Creates a new empty MoveToDestination
         /// </summary>
         public MoveToDestination()

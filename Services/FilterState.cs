@@ -43,5 +43,8 @@ namespace VPM.Services
         /// If false, package must match ANY selected tag (OR logic).
         /// </summary>
         public bool RequireAllTags { get; set; } = false;
+
+        // External destination filtering
+        public HashSet<string> SelectedDestinations { get; set; } = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
     }
 }

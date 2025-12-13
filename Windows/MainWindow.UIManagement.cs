@@ -489,6 +489,14 @@ namespace VPM
                     DamagedFilterExpandedGrid.Visibility = settings.DamagedFilterVisible ? System.Windows.Visibility.Visible : System.Windows.Visibility.Collapsed;
                     DamagedFilterCollapsedGrid.Visibility = settings.DamagedFilterVisible ? System.Windows.Visibility.Collapsed : System.Windows.Visibility.Visible;
                 }
+                
+                // Destinations Filter
+                if (DestinationsFilterList != null && DestinationsFilterTextBoxGrid != null && DestinationsFilterCollapsedGrid != null)
+                {
+                    DestinationsFilterList.Visibility = settings.DestinationsFilterVisible ? System.Windows.Visibility.Visible : System.Windows.Visibility.Collapsed;
+                    DestinationsFilterTextBoxGrid.Visibility = settings.DestinationsFilterVisible ? System.Windows.Visibility.Visible : System.Windows.Visibility.Collapsed;
+                    DestinationsFilterCollapsedGrid.Visibility = settings.DestinationsFilterVisible ? System.Windows.Visibility.Collapsed : System.Windows.Visibility.Visible;
+                }
             }
             
             // Only apply scene filters in Scenes mode
@@ -719,8 +727,12 @@ namespace VPM
                     {
                         if (gridChild is Button button && button.Tag is string tag)
                         {
-                            // Look for the toggle button specifically (contains eye emoji)
-                            if (button.Content?.ToString()?.Contains("👁") == true)
+                            // Look for the toggle button specifically (contains eye emoji or is a toggle button)
+                            string buttonContent = button.Content?.ToString() ?? "";
+                            // Check for eye emoji in various forms, or check if it's a toggle button by looking at the button name
+                            if (buttonContent.Contains("👁") || 
+                                buttonContent.Contains("👁️") || 
+                                button.Name?.Contains("Toggle") == true)
                             {
                                 return tag;
                             }
@@ -816,12 +828,23 @@ namespace VPM
                 string addonPackagesFolder = Path.Combine(_selectedFolder, "AddonPackages");
                 string allPackagesFolder = Path.Combine(_selectedFolder, "AllPackages");
 
-                // Scan for VAR files from multiple sources
-                List<string> installedFiles, availableFiles;
-                (installedFiles, availableFiles) = await _packageManager.ScanVarFilesAsync(
-                    addonPackagesFolder, allPackagesFolder);
+                // Get ALL external destinations for scanning (we always scan all, visibility is controlled in UI)
+                var allDestinations = _settingsManager?.Settings?.MoveToDestinations ?? new List<MoveToDestination>();
 
-                SetStatus($"Found {installedFiles.Count + availableFiles.Count} VAR files. Processing...");
+                // Always scan ALL valid destinations - ShowInMainTable only controls UI visibility, not scanning
+                var externalDestinations = allDestinations
+                    .Where(d => d.IsValid() && d.PathExists())
+                    .ToList();
+
+                // Scan for VAR files from multiple sources including external destinations
+                List<string> installedFiles, availableFiles;
+                Dictionary<string, List<string>> externalFiles;
+                (installedFiles, availableFiles, externalFiles) = await _packageManager.ScanVarFilesWithExternalAsync(
+                    addonPackagesFolder, allPackagesFolder, externalDestinations);
+
+
+                var externalCount = externalFiles.Values.Sum(l => l.Count);
+                SetStatus($"Found {installedFiles.Count + availableFiles.Count + externalCount} VAR files. Processing...");
 
                 // Update package mapping with progress
                 var progress = new Progress<(int current, int total)>(p =>
@@ -832,7 +855,7 @@ namespace VPM
                 // Use synchronous fast method with proper progress reporting
                 await Task.Run(() =>
                 {
-                    _packageManager.UpdatePackageMappingFast(installedFiles, availableFiles, progress);
+                    _packageManager.UpdatePackageMappingFast(installedFiles, availableFiles, externalFiles, externalDestinations, progress);
                 });
 
                 // Initialize reactive filter manager with all packages for live count updates
@@ -1162,7 +1185,9 @@ namespace VPM
                 ClothingCount = metadata.ClothingCount,
                 SceneCount = metadata.SceneCount,
                 IsDamaged = metadata.IsDamaged,
-                DamageReason = metadata.DamageReason
+                DamageReason = metadata.DamageReason,
+                ExternalDestinationName = metadata.ExternalDestinationName,
+                ExternalDestinationColorHex = metadata.ExternalDestinationColorHex
             };
         }
 
@@ -1269,13 +1294,25 @@ namespace VPM
                     // This prevents creating 10+ new HashSets for every single package
                     var filterSnapshot = _filterManager.GetSnapshot();
                     
+                    // Build lookup for external destination visibility
+                    var destVisibility = (_settingsManager?.Settings?.MoveToDestinations ?? new List<MoveToDestination>())
+                        .ToDictionary(d => d.Name, d => d.ShowInMainTable, StringComparer.OrdinalIgnoreCase);
+                    
                     // Process and filter packages - REUSE cached PackageItem objects
                     // MEMORY FIX: Use WithCancellation to stop PLINQ early if cancelled
                     var filteredItems = _packageManager.PackageMetadata
                         .AsParallel()
                         .WithCancellation(filterToken)
                         .WithDegreeOfParallelism(Environment.ProcessorCount)
-                        .Where(kvp => _filterManager.MatchesFilters(kvp.Value, filterSnapshot, kvp.Key))
+                        .Where(kvp => {
+                            // Filter out external packages from hidden destinations
+                            if (kvp.Value.IsExternal && !string.IsNullOrEmpty(kvp.Value.ExternalDestinationName))
+                            {
+                                if (!destVisibility.TryGetValue(kvp.Value.ExternalDestinationName, out var showInTable) || !showInTable)
+                                    return false;
+                            }
+                            return _filterManager.MatchesFilters(kvp.Value, filterSnapshot, kvp.Key);
+                        })
                         .Select(kvp => 
                         {
                             var metadataKey = kvp.Key;
@@ -1326,7 +1363,9 @@ namespace VPM
                                 PluginsCount = metadata.PluginsCount,
                                 SubScenesCount = metadata.SubScenesCount,
                                 SkinsCount = metadata.SkinsCount,
-                                MissingDependencyCount = metadata.MissingDependencyCount
+                                MissingDependencyCount = metadata.MissingDependencyCount,
+                                ExternalDestinationName = metadata.ExternalDestinationName,
+                                ExternalDestinationColorHex = metadata.ExternalDestinationColorHex
                             };
                             
                             // Cache the new item for reuse
@@ -1634,6 +1673,7 @@ namespace VPM
                 var fileSizeCounts = _filterManager.GetFileSizeCounts(packagesToCount);
                 var subfolderCounts = _filterManager.GetSubfolderCounts(packagesToCount);
                 var dateCounts = GetDateFilterCounts(packagesToCount);
+                var destinationCounts = _filterManager.GetDestinationCounts(packagesToCount);
                 
                 // Get favorites and autoinstall counts
                 int favoriteCount = 0;
@@ -1940,6 +1980,41 @@ namespace VPM
                                     }
                                 }
                             }
+                        }
+
+                        // Update destinations filter list
+                        if (DestinationsFilterList != null)
+                        {
+                            System.Diagnostics.Debug.WriteLine($"[RefreshFilterLists] Updating DestinationsFilterList with {destinationCounts.Count} destinations");
+                            
+                            var selectedDestinations = new List<string>();
+                            foreach (var item in DestinationsFilterList.SelectedItems)
+                            {
+                                string itemText = item?.ToString() ?? "";
+                                if (!string.IsNullOrEmpty(itemText))
+                                {
+                                    var destName = itemText.Split('(')[0].Trim();
+                                    selectedDestinations.Add(destName);
+                                }
+                            }
+                            
+                            DestinationsFilterList.Items.Clear();
+                            
+                            foreach (var dest in destinationCounts.OrderBy(d => d.Key))
+                            {
+                                if (dest.Value > 0)
+                                {
+                                    var displayText = $"{dest.Key} ({dest.Value:N0})";
+                                    DestinationsFilterList.Items.Add(displayText);
+                                    
+                                    if (selectedDestinations.Contains(dest.Key))
+                                    {
+                                        DestinationsFilterList.SelectedItems.Add(displayText);
+                                    }
+                                }
+                            }
+                            
+                            System.Diagnostics.Debug.WriteLine($"[RefreshFilterLists] DestinationsFilterList now has {DestinationsFilterList.Items.Count} items");
                         }
                         
                         // Restore filter list sorting after lists are populated
