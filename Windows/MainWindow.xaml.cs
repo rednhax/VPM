@@ -59,28 +59,27 @@ namespace VPM
         public ICollectionView CustomAtomItemsView { get; set; }
         
         // Service managers
-        private PackageManager _packageManager;
-        private ImageManager _imageManager;
+        private readonly PackageManager _packageManager;
+        private readonly ImageManager _imageManager;
         private FilterManager _filterManager;
-        private ReactiveFilterManager _reactiveFilterManager;
-        private SettingsManager _settingsManager;
-        private KeyboardNavigationManager _keyboardNavigationManager;
+        private readonly ReactiveFilterManager _reactiveFilterManager;
+        private readonly SettingsManager _settingsManager;
+        private readonly KeyboardNavigationManager _keyboardNavigationManager;
         private PackageFileManager _packageFileManager;
-        private SceneScanner _sceneScanner;
-        private UnifiedCustomContentScanner _unifiedCustomContentScanner;
-        private IncrementalPackageRefresh _incrementalRefresh;
+        private readonly SceneScanner _sceneScanner;
+        private readonly UnifiedCustomContentScanner _unifiedCustomContentScanner;
 
-        private string _cacheFolder;
+        private readonly string _cacheFolder;
         
         // Suppress selection handling when programmatically updating lists/filters
         private bool _suppressSelectionEvents = false;
-        private bool _suppressDependenciesSelectionEvents = false;
+        private readonly bool _suppressDependenciesSelectionEvents = false;
         
         // Cascade filtering setting (enabled by default for better UX)
         private bool _cascadeFiltering = true;
         
         // Store original dependencies for filtering
-        private List<DependencyItem> _originalDependencies = [];
+        private readonly List<DependencyItem> _originalDependencies = [];
         
         // Track whether we're showing dependencies or dependents
         private bool _showingDependents = false;
@@ -127,10 +126,10 @@ namespace VPM
             }
 
             // Initialize collections
-            Packages = new();
-            Dependencies = new();
-            Scenes = new();
-            CustomAtomItems = new();
+            Packages = [];
+            Dependencies = [];
+            Scenes = [];
+            CustomAtomItems = [];
 
             var packagesSource = (CollectionViewSource)FindResource("PackagesView");
             packagesSource.Source = Packages;
@@ -167,11 +166,6 @@ namespace VPM
 
             _filterManager = new FilterManager();
             _reactiveFilterManager = new ReactiveFilterManager(_filterManager);
-            
-            // Incremental refresh disabled - using full refresh only
-            // _incrementalRefresh = new IncrementalPackageRefresh(_packageManager);
-            // _incrementalRefresh.PackagesUpdated += OnIncrementalPackagesUpdated;
-            // _incrementalRefresh.FullRefreshRecommended += OnFullRefreshRecommended;
             
             // Sync file size filter settings from AppSettings to FilterManager
             _filterManager.FileSizeTinyMax = _settingsManager.Settings.FileSizeTinyMax;

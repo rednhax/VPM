@@ -28,6 +28,25 @@ namespace VPM
 
         #region Package Load/Unload Operations
 
+        private async Task PrepareForPackageFileOperationsAsync(IEnumerable<string> names)
+        {
+            var namesList = names?.Where(n => !string.IsNullOrWhiteSpace(n)).Distinct(StringComparer.OrdinalIgnoreCase).ToList() ?? new List<string>();
+
+            _imageLoadingCts?.Cancel();
+            _imageLoadingCts = new System.Threading.CancellationTokenSource();
+            PreviewImages.Clear();
+
+            if (_imageManager != null && namesList.Count > 0)
+            {
+                await _imageManager.ReleasePackagesAsync(namesList);
+            }
+        }
+
+        private static Progress<(int completed, int total, string currentPackage)> CreateStatusProgress(Action<(int completed, int total, string currentPackage)> onProgress)
+        {
+            return new Progress<(int completed, int total, string currentPackage)>(p => onProgress?.Invoke(p));
+        }
+
         private async void LoadPackages_Click(object sender, RoutedEventArgs e)
         {
             try
@@ -75,16 +94,8 @@ namespace VPM
                     var regularPackages = selectedPackages.Where(p => !p.IsExternal && p.Status == "Available").ToList();
                     
                     var packageNames = selectedPackages.Select(p => p.Name).ToList();
-                    
-                    // Cancel any pending image loading operations to free up file handles
-                    _imageLoadingCts?.Cancel();
-                    _imageLoadingCts = new System.Threading.CancellationTokenSource();
-                    
-                    // Clear image preview grid before processing
-                    PreviewImages.Clear();
-                    
-                    // Release file locks before operation to prevent conflicts with image grid
-                    await _imageManager.ReleasePackagesAsync(packageNames);
+
+                    await PrepareForPackageFileOperationsAsync(packageNames);
 
                     var results = new List<(string packageName, bool success, string error)>();
                     var totalCount = externalPackages.Count + regularPackages.Count;
@@ -115,7 +126,7 @@ namespace VPM
                     if (regularPackages.Count > 0)
                     {
                         var regularNames = regularPackages.Select(p => p.Name).ToList();
-                        var progress = new Progress<(int completed, int total, string currentPackage)>(p =>
+                        var progress = CreateStatusProgress(p =>
                         {
                             SetStatus(totalCount > 1
                                 ? $"Loading packages... {completed + p.completed}/{totalCount} ({(completed + p.completed) * 100 / totalCount}%)"
@@ -351,16 +362,8 @@ namespace VPM
                     var allPackagesToLoad = new List<string>(packagesToLoad);
                     allPackagesToLoad.AddRange(availableDependencies);
                     allPackagesToLoad.AddRange(externalDependencies.Select(e => e.name));
-                    
-                    // Cancel any pending image loading operations to free up file handles
-                    _imageLoadingCts?.Cancel();
-                    _imageLoadingCts = new System.Threading.CancellationTokenSource();
-                    
-                    // Clear image preview grid before processing
-                    PreviewImages.Clear();
 
-                    // Release file locks before operation to prevent conflicts with image grid
-                    await _imageManager.ReleasePackagesAsync(allPackagesToLoad);
+                    await PrepareForPackageFileOperationsAsync(allPackagesToLoad);
 
                     var results = new List<(string packageName, bool success, string error)>();
                     var totalCount = externalPackages.Count + regularPackages.Count + availableDependencies.Count + externalDependencies.Count;
@@ -402,7 +405,7 @@ namespace VPM
                     var regularAndDeps = regularPackages.Select(p => p.Name).Concat(availableDependencies).ToList();
                     if (regularAndDeps.Count > 0)
                     {
-                        var progress = new Progress<(int completed, int total, string currentPackage)>(p =>
+                        var progress = CreateStatusProgress(p =>
                         {
                             SetStatus(totalCount > 1
                                 ? $"Loading packages and dependencies... {completed + p.completed}/{totalCount} ({(completed + p.completed) * 100 / totalCount}%)"
@@ -557,20 +560,11 @@ namespace VPM
                 {
                     // Use enhanced batch operation with progress reporting
                     var packageNames = selectedPackages.Select(p => p.Name).ToList();
+
+                    await PrepareForPackageFileOperationsAsync(packageNames);
                     
-                    // Cancel any pending image loading operations to free up file handles
-                    _imageLoadingCts?.Cancel();
-                    _imageLoadingCts = new System.Threading.CancellationTokenSource();
-                    
-                    // Clear image preview grid before processing
-                    PreviewImages.Clear();
-                    
-                    // Release file locks before operation to prevent conflicts with image grid
-                    await _imageManager.ReleasePackagesAsync(packageNames);
-                    
-                    var progress = new Progress<(int completed, int total, string currentPackage)>(p =>
+                    var progress = CreateStatusProgress(p =>
                     {
-                        // Update status with progress
                         SetStatus(p.total > 1
                             ? $"Unloading packages... {p.completed}/{p.total} ({p.completed * 100 / p.total}%)"
                             : $"Unloading {p.currentPackage}...");
@@ -717,16 +711,8 @@ namespace VPM
                     var regularDeps = selectedDependencies.Where(d => d.Status == "Available").ToList();
                     
                     var dependencyNames = selectedDependencies.Select(d => d.Name).ToList();
-                    
-                    // Cancel any pending image loading operations to free up file handles
-                    _imageLoadingCts?.Cancel();
-                    _imageLoadingCts = new System.Threading.CancellationTokenSource();
-                    
-                    // Clear image preview grid before processing
-                    PreviewImages.Clear();
-                    
-                    // Release file locks before operation to prevent conflicts with image grid
-                    await _imageManager.ReleasePackagesAsync(dependencyNames);
+
+                    await PrepareForPackageFileOperationsAsync(dependencyNames);
 
                     var results = new List<(string packageName, bool success, string error)>();
                     var totalCount = externalDeps.Count + regularDeps.Count;
@@ -762,7 +748,7 @@ namespace VPM
                     if (regularDeps.Count > 0)
                     {
                         var regularNames = regularDeps.Select(d => d.Name).ToList();
-                        var progress = new Progress<(int completed, int total, string currentPackage)>(p =>
+                        var progress = CreateStatusProgress(p =>
                         {
                             SetStatus(totalCount > 1
                                 ? $"Loading dependencies... {completed + p.completed}/{totalCount} ({(completed + p.completed) * 100 / totalCount}%)"
@@ -909,20 +895,11 @@ namespace VPM
                 {
                     // Use enhanced batch operation with progress reporting
                     var dependencyNames = selectedDependencies.Select(d => d.Name).ToList();
+
+                    await PrepareForPackageFileOperationsAsync(dependencyNames);
                     
-                    // Cancel any pending image loading operations to free up file handles
-                    _imageLoadingCts?.Cancel();
-                    _imageLoadingCts = new System.Threading.CancellationTokenSource();
-                    
-                    // Clear image preview grid before processing
-                    PreviewImages.Clear();
-                    
-                    // Release file locks before operation to prevent conflicts with image grid
-                    await _imageManager.ReleasePackagesAsync(dependencyNames);
-                    
-                    var progress = new Progress<(int completed, int total, string currentPackage)>(p =>
+                    var progress = CreateStatusProgress(p =>
                     {
-                        // Update status with progress
                         SetStatus(p.total > 1
                             ? $"Unloading dependencies... {p.completed}/{p.total} ({p.completed * 100 / p.total}%)"
                             : $"Unloading {p.currentPackage}...");
@@ -1159,20 +1136,11 @@ namespace VPM
                 {
                     // Use enhanced batch operation with progress reporting
                     var dependencyNames = allAvailableDependencies.Select(d => d.Name).ToList();
-                    
-                    // Cancel any pending image loading operations to free up file handles
-                    _imageLoadingCts?.Cancel();
-                    _imageLoadingCts = new System.Threading.CancellationTokenSource();
-                    
-                    // Clear image preview grid before processing
-                    PreviewImages.Clear();
-                    
-                    // Release file locks before operation to prevent conflicts with image grid
-                    await _imageManager.ReleasePackagesAsync(dependencyNames);
-                    
-                    var progress = new Progress<(int completed, int total, string currentPackage)>(p =>
+
+                    await PrepareForPackageFileOperationsAsync(dependencyNames);
+
+                    var progress = CreateStatusProgress(p =>
                     {
-                        // Update status with progress
                         SetStatus(p.total > 1
                             ? $"Loading dependencies... {p.completed}/{p.total} ({p.completed * 100 / p.total}%)"
                             : $"Loading {p.currentPackage}...");
@@ -1934,17 +1902,8 @@ namespace VPM
                 });
                 
                 // Cancel any pending image loading operations to free up file handles
-                _imageLoadingCts?.Cancel();
-                _imageLoadingCts = new System.Threading.CancellationTokenSource();
-                
-                // Clear image preview grid before processing
-                PreviewImages.Clear();
-                
-                // Get package names/paths to release
                 var packagesToRelease = oldVersions.Select(v => Path.GetFileNameWithoutExtension(v.FilePath)).ToList();
-
-                // Release file locks before operation to prevent conflicts with image grid
-                await _imageManager.ReleasePackagesAsync(packagesToRelease);
+                await PrepareForPackageFileOperationsAsync(packagesToRelease);
                 
                 int movedCount = 0;
                 int failedCount = 0;
@@ -1967,8 +1926,82 @@ namespace VPM
                                 {
                                     File.Delete(destFile);
                                 }
-                                
-                                File.Move(sourceFile, destFile);
+
+                                var sourceInfo = new FileInfo(sourceFile);
+                                var originalCreationTime = sourceInfo.CreationTime;
+                                var originalLastWriteTime = sourceInfo.LastWriteTime;
+
+                                bool moved = false;
+                                string lastError = null;
+
+                                // Fast path: try rename move with short retries for transient locks.
+                                for (int attempt = 1; attempt <= 5; attempt++)
+                                {
+                                    try
+                                    {
+                                        File.Move(sourceFile, destFile);
+                                        moved = true;
+                                        break;
+                                    }
+                                    catch (IOException ex) when (attempt < 5)
+                                    {
+                                        lastError = ex.Message;
+                                        System.Threading.Thread.Sleep(50 * attempt);
+                                    }
+                                    catch (UnauthorizedAccessException ex) when (attempt < 5)
+                                    {
+                                        lastError = ex.Message;
+                                        System.Threading.Thread.Sleep(50 * attempt);
+                                    }
+                                }
+
+                                // Fallback: copy+delete (cross-volume or persistent lock)
+                                if (!moved)
+                                {
+                                    File.Copy(sourceFile, destFile, overwrite: false);
+                                    try
+                                    {
+                                        File.SetLastWriteTime(destFile, originalLastWriteTime);
+                                        File.SetCreationTime(destFile, originalCreationTime);
+                                    }
+                                    catch
+                                    {
+                                    }
+
+                                    for (int attempt = 1; attempt <= 5; attempt++)
+                                    {
+                                        try
+                                        {
+                                            File.Delete(sourceFile);
+                                            moved = true;
+                                            break;
+                                        }
+                                        catch (IOException ex) when (attempt < 5)
+                                        {
+                                            lastError = ex.Message;
+                                            System.Threading.Thread.Sleep(50 * attempt);
+                                        }
+                                        catch (UnauthorizedAccessException ex) when (attempt < 5)
+                                        {
+                                            lastError = ex.Message;
+                                            System.Threading.Thread.Sleep(50 * attempt);
+                                        }
+                                    }
+                                }
+
+                                if (!moved)
+                                {
+                                    throw new IOException(lastError ?? "Failed to move file");
+                                }
+
+                                try
+                                {
+                                    File.SetLastWriteTime(destFile, originalLastWriteTime);
+                                }
+                                catch
+                                {
+                                }
+
                                 movedCount++;
                             }
                         }

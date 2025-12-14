@@ -20,6 +20,166 @@ namespace VPM
     /// </summary>
     public partial class MainWindow
     {
+        private static bool IsTextBoxActiveFilter(TextBox textBox, Brush placeholderBrush)
+        {
+            if (textBox == null)
+                return false;
+
+            if (placeholderBrush != null && textBox.Foreground != null && textBox.Foreground.Equals(placeholderBrush))
+                return false;
+
+            return !string.IsNullOrWhiteSpace(textBox.Text);
+        }
+
+        private bool HasAnyPackageFiltersActive()
+        {
+            if (!IsLoaded)
+                return false;
+
+            try
+            {
+                var grayBrush = (SolidColorBrush)FindResource(SystemColors.GrayTextBrushKey);
+
+                if (StatusFilterList?.SelectedItems?.Count > 0)
+                    return true;
+                if (CreatorsList?.SelectedItems?.Count > 0)
+                    return true;
+                if (ContentTypesList?.SelectedItems?.Count > 0)
+                    return true;
+                if (LicenseTypeList?.SelectedItems?.Count > 0)
+                    return true;
+                if (FileSizeFilterList?.SelectedItems?.Count > 0)
+                    return true;
+                if (SubfoldersFilterList?.SelectedItems?.Count > 0)
+                    return true;
+                if (DamagedFilterList?.SelectedItem != null)
+                {
+                    var selected = DamagedFilterList.SelectedItem.ToString();
+                    if (!string.IsNullOrEmpty(selected) && !selected.StartsWith("All Packages", StringComparison.OrdinalIgnoreCase))
+                        return true;
+                }
+                if (DestinationsFilterList?.SelectedItems?.Count > 0)
+                    return true;
+
+                if (DateFilterList?.SelectedIndex > 0)
+                    return true;
+                if (StartDatePicker?.SelectedDate != null)
+                    return true;
+                if (EndDatePicker?.SelectedDate != null)
+                    return true;
+
+                if (IsTextBoxActiveFilter(PackageSearchBox, grayBrush))
+                    return true;
+                if (IsTextBoxActiveFilter(CreatorsFilterBox, grayBrush))
+                    return true;
+                if (IsTextBoxActiveFilter(ContentTypesFilterBox, grayBrush))
+                    return true;
+                if (IsTextBoxActiveFilter(LicenseTypeFilterBox, grayBrush))
+                    return true;
+                if (IsTextBoxActiveFilter(SubfoldersFilterBox, grayBrush))
+                    return true;
+
+                return false;
+            }
+            catch (Exception)
+            {
+                return false;
+            }
+        }
+
+        private bool HasAnySceneFiltersActive()
+        {
+            if (!IsLoaded)
+                return false;
+
+            try
+            {
+                var grayBrush = (SolidColorBrush)FindResource(SystemColors.GrayTextBrushKey);
+
+                if (SceneTypeFilterList?.SelectedItems?.Count > 0)
+                    return true;
+                if (SceneCreatorFilterList?.SelectedItems?.Count > 0)
+                    return true;
+                if (SceneStatusFilterList?.SelectedItems?.Count > 0)
+                    return true;
+                if (SceneSourceFilterList?.SelectedItems?.Count > 0)
+                    return true;
+                if (SceneDateFilterList?.SelectedItems?.Count > 0)
+                    return true;
+                if (SceneFileSizeFilterList?.SelectedItems?.Count > 0)
+                    return true;
+
+                if (IsTextBoxActiveFilter(SceneSearchBox, grayBrush))
+                    return true;
+                if (IsTextBoxActiveFilter(SceneTypeFilterBox, grayBrush))
+                    return true;
+                if (IsTextBoxActiveFilter(SceneCreatorFilterBox, grayBrush))
+                    return true;
+
+                return false;
+            }
+            catch (Exception)
+            {
+                return false;
+            }
+        }
+
+        private bool HasAnyCustomFiltersActive()
+        {
+            if (!IsLoaded)
+                return false;
+
+            try
+            {
+                var grayBrush = (SolidColorBrush)FindResource(SystemColors.GrayTextBrushKey);
+
+                if (PresetCategoryFilterList?.SelectedItems?.Count > 0)
+                    return true;
+                if (PresetSubfolderFilterList?.SelectedItems?.Count > 0)
+                    return true;
+                if (PresetDateFilterList?.SelectedItems?.Count > 0)
+                    return true;
+                if (PresetFileSizeFilterList?.SelectedItems?.Count > 0)
+                    return true;
+                if (PresetStatusFilterList?.SelectedItems?.Count > 0)
+                    return true;
+
+                if (IsTextBoxActiveFilter(CustomAtomSearchBox, grayBrush))
+                    return true;
+                if (IsTextBoxActiveFilter(PresetCategoryFilterBox, grayBrush))
+                    return true;
+                if (IsTextBoxActiveFilter(PresetSubfolderFilterBox, grayBrush))
+                    return true;
+
+                return false;
+            }
+            catch (Exception)
+            {
+                return false;
+            }
+        }
+
+        private bool HasAnyFiltersActive()
+        {
+            return _currentContentMode switch
+            {
+                "Scenes" => HasAnySceneFiltersActive(),
+                "Custom" => HasAnyCustomFiltersActive(),
+                _ => HasAnyPackageFiltersActive()
+            };
+        }
+
+        private void UpdateClearAllFiltersButtonVisibility()
+        {
+            if (!IsLoaded)
+                return;
+
+            if (ClearAllFiltersButton == null)
+                return;
+
+            ClearAllFiltersButton.Visibility = HasAnyFiltersActive() ? Visibility.Visible : Visibility.Collapsed;
+        }
+
         #region Filter Application
 
         private void ApplyFilters()
@@ -561,6 +721,7 @@ namespace VPM
             UpdateContentTypesClearButton();
             UpdateLicenseTypeClearButton();
             UpdateSubfoldersClearButton();
+            UpdateClearAllFiltersButtonVisibility();
         }
 
         private void UpdatePackageSearchClearButton()
@@ -1334,11 +1495,11 @@ namespace VPM
                 
                 // Populate damaged filter list
                 PopulateDamagedFilterList();
-                
+
                 // Populate date filter list
                 PopulateDateFilterList();
             }
-            catch (Exception ex)
+            catch (Exception)
             {
             }
         }

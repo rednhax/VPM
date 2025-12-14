@@ -103,7 +103,7 @@ namespace VPM.Windows
                     GraphLayout.LayoutAlgorithmType = _layoutAlgorithm;
                     
                     // Trigger relayout
-                    Dispatcher.BeginInvoke(new Action(() =>
+                    _ = Dispatcher.BeginInvoke(new Action(() =>
                     {
                         try
                         {

@@ -117,10 +117,22 @@ namespace VPM
                     if (metadata.Status != "Loaded" && metadata.Status != "Available")
                         continue;
                     
+                    // Skip corrupted entries; they often have unreliable creator/package parsing
+                    if (metadata.IsCorrupted)
+                        continue;
+                    
                     // Use PackageBaseName if available, otherwise construct from CreatorName.PackageName
                     var baseName = !string.IsNullOrEmpty(metadata.PackageBaseName) 
                         ? metadata.PackageBaseName 
                         : $"{metadata.CreatorName}.{metadata.PackageName}";
+                    
+                    // Guard against bogus base names (e.g. "Unknown" creator, empty pieces)
+                    if (string.IsNullOrWhiteSpace(baseName) ||
+                        baseName.StartsWith("Unknown.", StringComparison.OrdinalIgnoreCase) ||
+                        baseName.EndsWith(".Unknown", StringComparison.OrdinalIgnoreCase))
+                    {
+                        continue;
+                    }
                     
                     var version = metadata.Version;
                     
@@ -226,10 +238,20 @@ namespace VPM
                     if (metadata.Status != "Loaded" && metadata.Status != "Available")
                         continue;
                     
+                    if (metadata.IsCorrupted)
+                        continue;
+                    
                     // Use PackageBaseName if available, otherwise construct from CreatorName.PackageName
                     var baseName = !string.IsNullOrEmpty(metadata.PackageBaseName) 
                         ? metadata.PackageBaseName 
                         : $"{metadata.CreatorName}.{metadata.PackageName}";
+                    
+                    if (string.IsNullOrWhiteSpace(baseName) ||
+                        baseName.StartsWith("Unknown.", StringComparison.OrdinalIgnoreCase) ||
+                        baseName.EndsWith(".Unknown", StringComparison.OrdinalIgnoreCase))
+                    {
+                        continue;
+                    }
                     
                     var version = metadata.Version;
                     

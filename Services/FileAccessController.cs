@@ -627,9 +627,6 @@ namespace VPM.Services
             // Acquire read semaphore first to serialize reader entry
             await _readSemaphore.WaitAsync(ct).ConfigureAwait(false);
             
-            bool acquiredWriteSemaphore = false;
-            bool incrementedReaderCount = false;
-            
             try
             {
                 // CRITICAL FIX: Check writer state INSIDE the lock to prevent race condition
@@ -644,20 +641,13 @@ namespace VPM.Services
                     
                     if (++_readerCount == 1)
                     {
-                        incrementedReaderCount = true;
                         // First reader acquires write semaphore to block writers
                         if (!_writeSemaphore.Wait(0))
                         {
                             // Writer has the lock, revert and fail
                             _readerCount--;
-                            incrementedReaderCount = false;
                             throw new OperationCanceledException("Writer has exclusive access");
                         }
-                        acquiredWriteSemaphore = true;
-                    }
-                    else
-                    {
-                        incrementedReaderCount = true;
                     }
                 }
             }

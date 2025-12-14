@@ -17,13 +17,24 @@ namespace VPM
         {
             InitializeComponent();
             DarkTitleBarHelper.Apply(this);
-            BuildConfirmationMessage(packagesToMove, packagesToDelete);
+            BuildConfirmationMessage(packagesToMove, packagesToDelete, null);
         }
 
-        private void BuildConfirmationMessage(Dictionary<string, string> packagesToMove, List<string> packagesToDelete)
+        public DuplicateFixConfirmationWindow(Dictionary<string, string> packagesToMove, List<string> packagesToDelete, List<string> packagesToKeep)
+        {
+            InitializeComponent();
+            DarkTitleBarHelper.Apply(this);
+            BuildConfirmationMessage(packagesToMove, packagesToDelete, packagesToKeep);
+        }
+
+        private void BuildConfirmationMessage(Dictionary<string, string> packagesToMove, List<string> packagesToDelete, List<string> packagesToKeep)
         {
             // Group all files by package name
             var packageGroups = new Dictionary<string, PackageOperationInfo>(StringComparer.OrdinalIgnoreCase);
+
+            packagesToMove ??= new Dictionary<string, string>();
+            packagesToDelete ??= new List<string>();
+            packagesToKeep ??= new List<string>();
             
             // Process files to be deleted
             foreach (var filePath in packagesToDelete)
@@ -38,6 +49,21 @@ namespace VPM
                 }
                 
                 info.FilesToDelete.Add(filePath);
+            }
+
+            // Process files to be kept
+            foreach (var filePath in packagesToKeep)
+            {
+                var packageName = Path.GetFileNameWithoutExtension(filePath);
+                var baseName = ExtractBasePackageName(packageName);
+
+                if (!packageGroups.TryGetValue(baseName, out var info))
+                {
+                    info = new PackageOperationInfo { BaseName = baseName };
+                    packageGroups[baseName] = info;
+                }
+
+                info.FilesToKeep.Add(filePath);
             }
             
             // Process files to be moved
@@ -58,6 +84,7 @@ namespace VPM
             // Find files that will be kept (exist but not in delete or move lists)
             var allDeletePaths = new HashSet<string>(packagesToDelete, StringComparer.OrdinalIgnoreCase);
             var allMovePaths = new HashSet<string>(packagesToMove.Keys, StringComparer.OrdinalIgnoreCase);
+            var allKeepPaths = new HashSet<string>(packagesToKeep, StringComparer.OrdinalIgnoreCase);
             
             // Build the message
             var message = new StringBuilder();
@@ -65,6 +92,7 @@ namespace VPM
             int totalPackages = packageGroups.Count;
             int totalFilesToDelete = packagesToDelete.Count;
             int totalFilesToMove = packagesToMove.Count;
+            int totalFilesToKeep = packagesToKeep.Count;
             
             // Calculate total space
             foreach (var path in packagesToDelete)
@@ -79,7 +107,7 @@ namespace VPM
             }
             
             // Update summary
-            SummaryText.Text = $"{totalPackages} package(s) affected | {totalFilesToDelete} file(s) to delete | {totalFilesToMove} file(s) to move | {FormatHelper.FormatFileSize(totalSpaceFreed)} to be freed";
+            SummaryText.Text = $"{totalPackages} package(s) affected | {totalFilesToKeep} file(s) to keep | {totalFilesToDelete} file(s) to delete | {totalFilesToMove} file(s) to move | {FormatHelper.FormatFileSize(totalSpaceFreed)} to be freed";
             
             // Build detailed content grouped by package
             int packageNum = 0;
@@ -95,6 +123,13 @@ namespace VPM
                 
                 // Files to keep - these are files that will remain after the operation
                 var filesToKeep = new List<string>();
+
+                // If the caller supplied an explicit keep list, prefer it.
+                // This supports external destinations and avoids expensive re-scans.
+                if (info.FilesToKeep.Count > 0)
+                {
+                    filesToKeep.AddRange(info.FilesToKeep);
+                }
                 
                 // Find all files for this package base name in both folders
                 var addonPath = Path.GetDirectoryName(info.FilesToDelete.FirstOrDefault() ?? info.FilesToMove.FirstOrDefault().Key ?? "");
@@ -133,10 +168,11 @@ namespace VPM
                 }
                 catch { }
                 
-                // Files to keep are: existing files NOT in delete list, NOT in move source list
+                // Files to keep are: existing files NOT in delete list, NOT in move source list.
+                // Only add them if they weren't already explicitly specified.
                 foreach (var file in foundFiles.Distinct(StringComparer.OrdinalIgnoreCase))
                 {
-                    if (!allDeletePaths.Contains(file) && !allMovePaths.Contains(file))
+                    if (!allDeletePaths.Contains(file) && !allMovePaths.Contains(file) && !allKeepPaths.Contains(file))
                     {
                         filesToKeep.Add(file);
                     }
@@ -220,6 +256,7 @@ namespace VPM
         private class PackageOperationInfo
         {
             public string BaseName { get; set; }
+            public List<string> FilesToKeep { get; set; } = new List<string>();
             public List<string> FilesToDelete { get; set; } = new List<string>();
             public List<KeyValuePair<string, string>> FilesToMove { get; set; } = new List<KeyValuePair<string, string>>();
         }
@@ -228,14 +265,17 @@ namespace VPM
         {
             if (string.IsNullOrEmpty(displayName))
                 return displayName;
-                
-            var parts = displayName.Split('.');
-            if (parts.Length >= 3) // Creator.PackageName.Version format
+
+            // VaM .var files are typically "Creator.PackageName.Version".
+            // PackageName itself may contain additional dots, so stripping only the final segment
+            // (after the last '.') is safer than assuming exactly 3 segments.
+            var lastDot = displayName.LastIndexOf('.');
+            if (lastDot > 0 && lastDot < displayName.Length - 1)
             {
-                return $"{parts[0]}.{parts[1]}"; // Return Creator.PackageName
+                return displayName.Substring(0, lastDot);
             }
-            
-            return displayName; // Return as-is if format doesn't match
+
+            return displayName;
         }
 
         private string CalculateFileSHA256(string filePath)

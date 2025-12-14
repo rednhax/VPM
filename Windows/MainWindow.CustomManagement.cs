@@ -128,6 +128,8 @@ namespace VPM
                     if (CustomAtomSearchClearButton != null)
                         CustomAtomSearchClearButton.Visibility = Visibility.Collapsed;
                 }
+
+                UpdateClearAllFiltersButtonVisibility();
             }
         }
 
@@ -144,6 +146,8 @@ namespace VPM
             FilterCustomAtomItems("");
             if (CustomAtomSearchClearButton != null)
                 CustomAtomSearchClearButton.Visibility = Visibility.Collapsed;
+
+            UpdateClearAllFiltersButtonVisibility();
         }
 
         /// <summary>

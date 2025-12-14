@@ -1187,6 +1187,8 @@ namespace VPM
                     if (PresetCategoryClearButton != null)
                         PresetCategoryClearButton.Visibility = Visibility.Collapsed;
                 }
+
+                UpdateClearAllFiltersButtonVisibility();
             }
         }
 
@@ -1241,6 +1243,8 @@ namespace VPM
 
             // Use CollectionView.Filter instead of ReplaceAll for O(1) memory
             ApplyPresetFilters();
+
+            UpdateClearAllFiltersButtonVisibility();
         }
 
         /// <summary>
@@ -1288,6 +1292,8 @@ namespace VPM
                     // Repopulate the full list when text is cleared
                     PopulatePresetSubfolderFilter();
                 }
+
+                UpdateClearAllFiltersButtonVisibility();
             }
         }
 
@@ -1358,6 +1364,7 @@ namespace VPM
         private void SceneDateFilterList_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
             ApplySceneFilters();
+            UpdateClearAllFiltersButtonVisibility();
         }
 
         /// <summary>
@@ -1366,6 +1373,7 @@ namespace VPM
         private void SceneFileSizeFilterList_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
             ApplySceneFilters();
+            UpdateClearAllFiltersButtonVisibility();
         }
 
         /// <summary>
@@ -1374,6 +1382,7 @@ namespace VPM
         private void PresetDateFilterList_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
             ApplyPresetFilters();
+            UpdateClearAllFiltersButtonVisibility();
         }
 
         /// <summary>
@@ -1382,6 +1391,7 @@ namespace VPM
         private void PresetFileSizeFilterList_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
             ApplyPresetFilters();
+            UpdateClearAllFiltersButtonVisibility();
         }
 
         /// <summary>
@@ -1390,6 +1400,7 @@ namespace VPM
         private void SceneStatusFilterList_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
             ApplySceneFilters();
+            UpdateClearAllFiltersButtonVisibility();
         }
 
         /// <summary>
@@ -1398,6 +1409,7 @@ namespace VPM
         private void PresetStatusFilterList_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
             ApplyPresetFilters();
+            UpdateClearAllFiltersButtonVisibility();
         }
 
         /// <summary>
@@ -1406,6 +1418,7 @@ namespace VPM
         private void PresetSubfolderFilterList_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
             ApplyPresetFilters();
+            UpdateClearAllFiltersButtonVisibility();
         }
 
         /// <summary>

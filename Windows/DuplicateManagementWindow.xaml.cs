@@ -22,6 +22,7 @@ namespace VPM
         private ObservableCollection<DuplicatePackageItem> _duplicatePackages;
         private string _addonPackagesPath;
         private string _allPackagesPath;
+        private List<MoveToDestination> _externalDestinations;
 
         // Drag selection fields
         private bool _duplicateDragging = false;
@@ -30,12 +31,13 @@ namespace VPM
         private System.Windows.Controls.CheckBox _duplicateDragStartCheckbox;
         private bool? _duplicateDragCheckState;
 
-        public DuplicateManagementWindow(List<PackageItem> duplicatePackages, string addonPackagesPath, string allPackagesPath)
+        public DuplicateManagementWindow(List<PackageItem> duplicatePackages, string addonPackagesPath, string allPackagesPath, List<MoveToDestination> externalDestinations)
         {
             InitializeComponent();
             
             _addonPackagesPath = addonPackagesPath;
             _allPackagesPath = allPackagesPath;
+            _externalDestinations = externalDestinations ?? new List<MoveToDestination>();
             
             // Apply dark theme to window chrome
             try
@@ -91,6 +93,7 @@ namespace VPM
                 var fileInstances = new List<FileInstance>();
                 var addonInstances = GetPackageInstancesInAddonPackages(baseName);
                 var allInstances = GetPackageInstancesInAllPackages(baseName);
+                var externalInstances = GetPackageInstancesInExternalDestinations(baseName);
                 
                 
                 // Log all found files
@@ -103,6 +106,7 @@ namespace VPM
                 
                 AppendFileInstances(fileInstances, addonInstances, FileLocation.AddonPackages);
                 AppendFileInstances(fileInstances, allInstances, FileLocation.AllPackages);
+                AppendFileInstances(fileInstances, externalInstances, FileLocation.External);
 
                 if (fileInstances.Count == 0)
                 {
@@ -122,18 +126,23 @@ namespace VPM
                     // Now: Single O(n) pass with categorization
                     var addonFileInstances = new List<FileInstance>();
                     var allFileInstances = new List<FileInstance>();
+                    var externalFileInstances = new List<FileInstance>();
                     foreach (var inst in instances)
                     {
                         if (inst.Location == FileLocation.AddonPackages)
                             addonFileInstances.Add(inst);
                         else if (inst.Location == FileLocation.AllPackages)
                             allFileInstances.Add(inst);
+                        else if (inst.Location == FileLocation.External)
+                            externalFileInstances.Add(inst);
                     }
                     
                     bool hasAddon = addonFileInstances.Count > 0;
                     bool hasAll = allFileInstances.Count > 0;
+                    bool hasExternal = externalFileInstances.Count > 0;
                     int addonCount = addonFileInstances.Count;
                     int allCount = allFileInstances.Count;
+                    int externalCount = externalFileInstances.Count;
                     
                     // Get file sizes for logging
                     var fileSizes = instances.Select(f => f.FileSize).Distinct().ToList();
@@ -141,7 +150,8 @@ namespace VPM
                     
 
                     // We care about duplicates that exist in more than one location OR multiple times in the same location
-                    bool isDuplicate = (hasAddon && hasAll) || addonCount > 1 || allCount > 1;
+                    int locationCount = (hasAddon ? 1 : 0) + (hasAll ? 1 : 0) + (hasExternal ? 1 : 0);
+                    bool isDuplicate = locationCount > 1 || addonCount > 1 || allCount > 1 || externalCount > 1;
                     
                     if (!isDuplicate)
                     {
@@ -164,20 +174,16 @@ namespace VPM
                     {
                         PackageName = displayName,
                         // Enable both checkboxes - user can choose to move to the other location
-                        ExistsInAddonPackages = true,
-                        ExistsInAllPackages = true,
-                        KeepInAddonPackages = hasAddon, // default to keeping addon copy if it exists there
+                        ExistsInAddonPackages = hasAddon,
+                        ExistsInAllPackages = hasAll,
+                        ExistsInExternal = hasExternal,
+                        KeepInAddonPackages = hasAddon,
                         KeepInAllPackages = !hasAddon && hasAll,
+                        KeepInExternal = !hasAddon && !hasAll && hasExternal,
                         LoadedPackageItem = addonMetadata ?? allMetadata ?? metadataItems.FirstOrDefault(),
                         AvailablePackageItem = allMetadata ?? addonMetadata ?? metadataItems.FirstOrDefault(),
                         FileSizeBytes = maxFileSize
                     };
-
-                    if (hasAddon && hasAll)
-                    {
-                        duplicateItem.KeepInAddonPackages = true;
-                        duplicateItem.KeepInAllPackages = false;
-                    }
 
                     duplicateItem.PropertyChanged += DuplicateItem_PropertyChanged;
                     _duplicatePackages.Add(duplicateItem);
@@ -201,7 +207,8 @@ namespace VPM
         private enum FileLocation
         {
             AddonPackages,
-            AllPackages
+            AllPackages,
+            External
         }
 
         private readonly struct FileInstance
@@ -338,6 +345,44 @@ namespace VPM
             }
             return instances;
         }
+
+        private List<string> GetPackageInstancesInExternalDestinations(string baseName)
+        {
+            var instances = new List<string>();
+            try
+            {
+                if (_externalDestinations == null || _externalDestinations.Count == 0)
+                    return instances;
+
+                var validDestinations = _externalDestinations
+                    .Where(d => d != null && d.IsEnabled && d.IsValid() && d.PathExists())
+                    .ToList();
+
+                if (validDestinations.Count == 0)
+                    return instances;
+
+                var pattern = $"{baseName}.*.var";
+                foreach (var dest in validDestinations)
+                {
+                    try
+                    {
+                        var files = Directory.GetFiles(dest.Path, pattern, SearchOption.AllDirectories);
+                        foreach (var file in files)
+                        {
+                            if (!file.Contains("ArchivedPackages", StringComparison.OrdinalIgnoreCase))
+                            {
+                                instances.Add(file);
+                            }
+                        }
+                    }
+                    catch { }
+                }
+            }
+            catch (Exception)
+            {
+            }
+            return instances;
+        }
         
         /// <summary>
         /// Get all instances of a package in AllPackages folder (including subfolders)
@@ -377,14 +422,17 @@ namespace VPM
         {
             if (string.IsNullOrEmpty(displayName))
                 return displayName;
-                
-            var parts = displayName.Split('.');
-            if (parts.Length >= 3) // Creator.PackageName.Version format
+
+            // VaM .var files are typically "Creator.PackageName.Version".
+            // PackageName itself may contain additional dots, so stripping only the final segment
+            // (after the last '.') is safer than assuming exactly 3 segments.
+            var lastDot = displayName.LastIndexOf('.');
+            if (lastDot > 0 && lastDot < displayName.Length - 1)
             {
-                return $"{parts[0]}.{parts[1]}"; // Return Creator.PackageName
+                return displayName.Substring(0, lastDot);
             }
-            
-            return displayName; // Return as-is if format doesn't match
+
+            return displayName;
         }
         
         /// <summary>
@@ -446,7 +494,8 @@ namespace VPM
         private void DuplicateItem_PropertyChanged(object sender, PropertyChangedEventArgs e)
         {
             if (e.PropertyName == nameof(DuplicatePackageItem.KeepInAddonPackages) || 
-                e.PropertyName == nameof(DuplicatePackageItem.KeepInAllPackages))
+                e.PropertyName == nameof(DuplicatePackageItem.KeepInAllPackages) ||
+                e.PropertyName == nameof(DuplicatePackageItem.KeepInExternal))
             {
                 UpdateFixButtonCounter();
             }
@@ -460,7 +509,7 @@ namespace VPM
             foreach (var item in _duplicatePackages)
             {
                 // If both options are unchecked, this duplicate is excluded from processing
-                if (!item.KeepInAddonPackages && !item.KeepInAllPackages)
+                if (!item.KeepInAddonPackages && !item.KeepInAllPackages && !item.KeepInExternal)
                     continue;
 
                 hasSelection = true;
@@ -468,6 +517,8 @@ namespace VPM
                 if (item.ExistsInAddonPackages && !item.KeepInAddonPackages)
                     deleteCount++;
                 if (item.ExistsInAllPackages && !item.KeepInAllPackages)
+                    deleteCount++;
+                if (item.ExistsInExternal && !item.KeepInExternal)
                     deleteCount++;
             }
             
@@ -482,17 +533,9 @@ namespace VPM
 
         private void DuplicatesDataGrid_SelectionChanged(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
         {
-            // Show Archive button only when exactly one item is selected
-            if (DuplicatesDataGrid.SelectedItems.Count == 1)
-            {
-                FixDuplicatesPanel.Visibility = Visibility.Collapsed;
-                ArchivePanel.Visibility = Visibility.Visible;
-            }
-            else
-            {
-                FixDuplicatesPanel.Visibility = Visibility.Visible;
-                ArchivePanel.Visibility = Visibility.Collapsed;
-            }
+            // Always keep the Fix Duplicates mode visible.
+            // Archive mode is a legacy path and is not part of the duplicate-fixing workflow.
+            FixDuplicatesPanel.Visibility = Visibility.Visible;
         }
 
         private void KeepAllPackages_Click(object sender, RoutedEventArgs e)
@@ -503,6 +546,7 @@ namespace VPM
                 {
                     item.KeepInAllPackages = true;
                     item.KeepInAddonPackages = false;
+                    item.KeepInExternal = false;
                 }
             }
         }
@@ -515,45 +559,27 @@ namespace VPM
                 {
                     item.KeepInAddonPackages = true;
                     item.KeepInAllPackages = false;
+                    item.KeepInExternal = false;
                 }
             }
-        }
-
-        private void Archive_Click(object sender, RoutedEventArgs e)
-        {
-            // Get the selected item
-            if (DuplicatesDataGrid.SelectedItems.Count != 1)
-            {
-                return;
-            }
-
-            var selectedItem = DuplicatesDataGrid.SelectedItems[0] as DuplicatePackageItem;
-            if (selectedItem == null)
-            {
-                return;
-            }
-
-            // TODO: Implement archive functionality for the selected package
-            DarkMessageBox.Show($"Archive functionality for '{selectedItem.PackageName}' is not yet implemented.", 
-                "Archive", MessageBoxButton.OK, MessageBoxImage.Information);
         }
 
         private async void FixDuplicates_Click(object sender, RoutedEventArgs e)
         {
             var packagesToDelete = new List<string>();
-            var packagesToMove = new Dictionary<string, string>(); // source -> destination
+            var packagesToKeep = new List<string>();
             var packagesRequiringSelection = new List<DuplicatePackageItem>();
             
             // PERFORMANCE FIX: Cache all disk I/O results upfront to avoid repeated filesystem scans
             // Previously: GetPackageInstances* called 2-4 times per package (O(n) disk scans each)
             // Now: Single scan per unique baseName, cached for reuse
-            var instanceCache = new Dictionary<string, (List<string> addon, List<string> all)>(StringComparer.OrdinalIgnoreCase);
+            var instanceCache = new Dictionary<string, (List<string> addon, List<string> all, List<string> external)>(StringComparer.OrdinalIgnoreCase);
             
             List<string> GetCachedAddonInstances(string baseName)
             {
                 if (!instanceCache.TryGetValue(baseName, out var cached))
                 {
-                    cached = (GetPackageInstancesInAddonPackages(baseName), GetPackageInstancesInAllPackages(baseName));
+                    cached = (GetPackageInstancesInAddonPackages(baseName), GetPackageInstancesInAllPackages(baseName), GetPackageInstancesInExternalDestinations(baseName));
                     instanceCache[baseName] = cached;
                 }
                 return cached.addon;
@@ -563,20 +589,34 @@ namespace VPM
             {
                 if (!instanceCache.TryGetValue(baseName, out var cached))
                 {
-                    cached = (GetPackageInstancesInAddonPackages(baseName), GetPackageInstancesInAllPackages(baseName));
+                    cached = (GetPackageInstancesInAddonPackages(baseName), GetPackageInstancesInAllPackages(baseName), GetPackageInstancesInExternalDestinations(baseName));
                     instanceCache[baseName] = cached;
                 }
                 return cached.all;
+            }
+
+            List<string> GetCachedExternalInstances(string baseName)
+            {
+                if (!instanceCache.TryGetValue(baseName, out var cached))
+                {
+                    cached = (GetPackageInstancesInAddonPackages(baseName), GetPackageInstancesInAllPackages(baseName), GetPackageInstancesInExternalDestinations(baseName));
+                    instanceCache[baseName] = cached;
+                }
+                return cached.external;
             }
             
             // First pass: identify packages that need subfolder selection
             foreach (var item in _duplicatePackages)
             {
+                var expectedFileName = item.PackageName + ".var";
+
                 if (item.KeepInAddonPackages && !item.KeepInAllPackages)
                 {
                     // Check if there are multiple instances in AddonPackages that need selection
                     var baseName = ExtractBasePackageName(item.PackageName);
-                    var addonInstances = GetCachedAddonInstances(baseName);
+                    var addonInstances = GetCachedAddonInstances(baseName)
+                        .Where(path => Path.GetFileName(path).Equals(expectedFileName, StringComparison.OrdinalIgnoreCase))
+                        .ToList();
                     if (addonInstances.Count > 1)
                     {
                         packagesRequiringSelection.Add(item);
@@ -586,8 +626,21 @@ namespace VPM
                 {
                     // Check if there are multiple instances in AllPackages that need selection
                     var baseName = ExtractBasePackageName(item.PackageName);
-                    var allInstances = GetCachedAllInstances(baseName);
+                    var allInstances = GetCachedAllInstances(baseName)
+                        .Where(path => Path.GetFileName(path).Equals(expectedFileName, StringComparison.OrdinalIgnoreCase))
+                        .ToList();
                     if (allInstances.Count > 1)
+                    {
+                        packagesRequiringSelection.Add(item);
+                    }
+                }
+                else if (item.KeepInExternal && !item.KeepInAddonPackages && !item.KeepInAllPackages)
+                {
+                    var baseName = ExtractBasePackageName(item.PackageName);
+                    var externalInstances = GetCachedExternalInstances(baseName)
+                        .Where(path => Path.GetFileName(path).Equals(expectedFileName, StringComparison.OrdinalIgnoreCase))
+                        .ToList();
+                    if (externalInstances.Count > 1)
                     {
                         packagesRequiringSelection.Add(item);
                     }
@@ -602,6 +655,7 @@ namespace VPM
             {
                 List<string> instances;
                 var baseName = ExtractBasePackageName(item.PackageName);
+                var expectedFileName = item.PackageName + ".var";
                 
                 if (item.KeepInAddonPackages)
                 {
@@ -609,11 +663,10 @@ namespace VPM
                 }
                 else
                 {
-                    instances = GetCachedAllInstances(baseName);
+                    instances = item.KeepInExternal ? GetCachedExternalInstances(baseName) : GetCachedAllInstances(baseName);
                 }
                 
                 // Filter to only the specific version the user selected
-                var expectedFileName = item.PackageName + ".var";
                 instances = instances.Where(path => 
                     Path.GetFileName(path).Equals(expectedFileName, StringComparison.OrdinalIgnoreCase))
                     .ToList();
@@ -649,82 +702,72 @@ namespace VPM
             foreach (var item in _duplicatePackages)
             {
                 var baseName = ExtractBasePackageName(item.PackageName);
-                
-                if (item.KeepInAddonPackages && !item.KeepInAllPackages)
+                var expectedFileName = item.PackageName + ".var";
+                var addonPackageInstances = GetCachedAddonInstances(baseName)
+                    .Where(path => Path.GetFileName(path).Equals(expectedFileName, StringComparison.OrdinalIgnoreCase))
+                    .ToList();
+                var allPackageInstances = GetCachedAllInstances(baseName)
+                    .Where(path => Path.GetFileName(path).Equals(expectedFileName, StringComparison.OrdinalIgnoreCase))
+                    .ToList();
+                var externalPackageInstances = GetCachedExternalInstances(baseName)
+                    .Where(path => Path.GetFileName(path).Equals(expectedFileName, StringComparison.OrdinalIgnoreCase))
+                    .ToList();
+
+                if (!item.KeepInAddonPackages && !item.KeepInAllPackages && !item.KeepInExternal)
                 {
-                    // Want to keep in AddonPackages
-                    // PERFORMANCE FIX: Use cached instances instead of repeated disk scans
-                    var allPackageInstances = GetCachedAllInstances(baseName);
-                    var addonPackageInstances = GetCachedAddonInstances(baseName);
-                    
-                    // If file doesn't exist in AddonPackages but exists in AllPackages, move it
-                    if (addonPackageInstances.Count == 0 && allPackageInstances.Count > 0)
-                    {
-                        string sourceFile = selectedFilesToKeep.ContainsKey(item.PackageName) 
-                            ? selectedFilesToKeep[item.PackageName] 
-                            : allPackageInstances[0];
-                        string destPath = BuildDestinationPath(sourceFile, _allPackagesPath, _addonPackagesPath);
-                        packagesToMove[sourceFile] = destPath;
-                        
-                        // Delete other instances in AllPackages
-                        var instancesToDelete = allPackageInstances.Where(path => 
-                            !string.Equals(path, sourceFile, StringComparison.OrdinalIgnoreCase)).ToList();
-                        packagesToDelete.AddRange(instancesToDelete);
-                    }
-                    else
-                    {
-                        // Delete all AllPackages instances
-                        packagesToDelete.AddRange(allPackageInstances);
-                        
-                        // If multiple AddonPackages instances, delete the non-selected ones
-                        if (selectedFilesToKeep.ContainsKey(item.PackageName))
-                        {
-                            var instancesToDelete = addonPackageInstances.Where(path => 
-                                !string.Equals(path, selectedFilesToKeep[item.PackageName], StringComparison.OrdinalIgnoreCase))
-                                .ToList();
-                            packagesToDelete.AddRange(instancesToDelete);
-                        }
-                    }
+                    continue;
                 }
-                else if (item.KeepInAllPackages && !item.KeepInAddonPackages)
+
+                // Determine which exact file will be kept for this package (for confirmation UX)
+                if (selectedFilesToKeep.TryGetValue(item.PackageName, out var selectedKeepPath) && !string.IsNullOrEmpty(selectedKeepPath))
                 {
-                    // Want to keep in AllPackages
-                    // PERFORMANCE FIX: Use cached instances instead of repeated disk scans
-                    var allPackageInstances = GetCachedAllInstances(baseName);
-                    var addonPackageInstances = GetCachedAddonInstances(baseName);
-                    
-                    // If file doesn't exist in AllPackages but exists in AddonPackages, move it
-                    if (allPackageInstances.Count == 0 && addonPackageInstances.Count > 0)
-                    {
-                        string sourceFile = selectedFilesToKeep.ContainsKey(item.PackageName) 
-                            ? selectedFilesToKeep[item.PackageName] 
-                            : addonPackageInstances[0];
-                        string destPath = BuildDestinationPath(sourceFile, _addonPackagesPath, _allPackagesPath);
-                        packagesToMove[sourceFile] = destPath;
-                        
-                        // Delete other instances in AddonPackages
-                        var instancesToDelete = addonPackageInstances.Where(path => 
-                            !string.Equals(path, sourceFile, StringComparison.OrdinalIgnoreCase)).ToList();
-                        packagesToDelete.AddRange(instancesToDelete);
-                    }
-                    else
-                    {
-                        // Delete all AddonPackages instances
-                        packagesToDelete.AddRange(addonPackageInstances);
-                        
-                        // If multiple AllPackages instances, delete the non-selected ones
-                        if (selectedFilesToKeep.ContainsKey(item.PackageName))
-                        {
-                            var instancesToDelete = allPackageInstances.Where(path => 
-                                !string.Equals(path, selectedFilesToKeep[item.PackageName], StringComparison.OrdinalIgnoreCase))
-                                .ToList();
-                            packagesToDelete.AddRange(instancesToDelete);
-                        }
-                    }
+                    packagesToKeep.Add(selectedKeepPath);
+                }
+                else if (item.KeepInAddonPackages && addonPackageInstances.Count > 0)
+                {
+                    packagesToKeep.Add(addonPackageInstances[0]);
+                }
+                else if (item.KeepInAllPackages && allPackageInstances.Count > 0)
+                {
+                    packagesToKeep.Add(allPackageInstances[0]);
+                }
+                else if (item.KeepInExternal && externalPackageInstances.Count > 0)
+                {
+                    packagesToKeep.Add(externalPackageInstances[0]);
+                }
+
+                if (!item.KeepInAddonPackages)
+                {
+                    packagesToDelete.AddRange(addonPackageInstances);
+                }
+                else if (selectedFilesToKeep.ContainsKey(item.PackageName))
+                {
+                    packagesToDelete.AddRange(addonPackageInstances.Where(p => !string.Equals(p, selectedFilesToKeep[item.PackageName], StringComparison.OrdinalIgnoreCase)));
+                }
+
+                if (!item.KeepInAllPackages)
+                {
+                    packagesToDelete.AddRange(allPackageInstances);
+                }
+                else if (selectedFilesToKeep.ContainsKey(item.PackageName))
+                {
+                    packagesToDelete.AddRange(allPackageInstances.Where(p => !string.Equals(p, selectedFilesToKeep[item.PackageName], StringComparison.OrdinalIgnoreCase)));
+                }
+
+                if (!item.KeepInExternal)
+                {
+                    packagesToDelete.AddRange(externalPackageInstances);
+                }
+                else if (selectedFilesToKeep.ContainsKey(item.PackageName))
+                {
+                    packagesToDelete.AddRange(externalPackageInstances.Where(p => !string.Equals(p, selectedFilesToKeep[item.PackageName], StringComparison.OrdinalIgnoreCase)));
                 }
             }
             
-            if (packagesToDelete.Count == 0 && packagesToMove.Count == 0)
+            packagesToDelete = packagesToDelete.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+            packagesToKeep = packagesToKeep.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+
+            if (packagesToDelete.Count == 0)
             {
                 DarkMessageBox.Show("No packages selected for deletion or moving.", "Fix Duplicates", 
                     MessageBoxButton.OK, MessageBoxImage.Information);
@@ -732,7 +775,7 @@ namespace VPM
             }
             
             // Show confirmation window with detailed information grouped by package
-            var confirmationWindow = new DuplicateFixConfirmationWindow(packagesToMove, packagesToDelete)
+            var confirmationWindow = new DuplicateFixConfirmationWindow(new Dictionary<string, string>(), packagesToDelete, packagesToKeep)
             {
                 Owner = this
             };
@@ -742,8 +785,8 @@ namespace VPM
             if (result != true || !confirmationWindow.Confirmed)
                 return;
             
-            // Perform safe move and deletion
-            await PerformSafeOperations(packagesToMove, packagesToDelete);
+            // Perform safe deletion
+            await PerformSafeDeletion(packagesToDelete);
         }
         
         private async System.Threading.Tasks.Task PerformSafeDeletion(List<string> filesToDelete)
@@ -1166,8 +1209,10 @@ namespace VPM
     {
         private bool _keepInAddonPackages;
         private bool _keepInAllPackages;
+        private bool _keepInExternal;
         private bool _existsInAddonPackages;
         private bool _existsInAllPackages;
+        private bool _existsInExternal;
         private long _fileSizeBytes;
         private bool _isUpdating;
 
@@ -1185,6 +1230,12 @@ namespace VPM
             set => SetField(ref _existsInAllPackages, value);
         }
 
+        public bool ExistsInExternal
+        {
+            get => _existsInExternal;
+            set => SetField(ref _existsInExternal, value);
+        }
+
         public bool KeepInAddonPackages
         {
             get => _keepInAddonPackages;
@@ -1196,12 +1247,13 @@ namespace VPM
                 if (_isUpdating)
                     return;
 
-                if (value && ExistsInAddonPackages && ExistsInAllPackages)
+                if (value)
                 {
                     try
                     {
                         _isUpdating = true;
                         KeepInAllPackages = false;
+                        KeepInExternal = false;
                     }
                     finally
                     {
@@ -1222,12 +1274,40 @@ namespace VPM
                 if (_isUpdating)
                     return;
 
-                if (value && ExistsInAddonPackages && ExistsInAllPackages)
+                if (value)
                 {
                     try
                     {
                         _isUpdating = true;
                         KeepInAddonPackages = false;
+                        KeepInExternal = false;
+                    }
+                    finally
+                    {
+                        _isUpdating = false;
+                    }
+                }
+            }
+        }
+
+        public bool KeepInExternal
+        {
+            get => _keepInExternal;
+            set
+            {
+                if (!SetField(ref _keepInExternal, value))
+                    return;
+
+                if (_isUpdating)
+                    return;
+
+                if (value)
+                {
+                    try
+                    {
+                        _isUpdating = true;
+                        KeepInAddonPackages = false;
+                        KeepInAllPackages = false;
                     }
                     finally
                     {

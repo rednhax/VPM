@@ -6,6 +6,7 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using VPM.Models;
+using VPM.Services;
 
 namespace VPM.Services
 {
@@ -128,9 +129,7 @@ namespace VPM.Services
             {
                 try
                 {
-                    var files = Directory.EnumerateFiles(destination.Path, "*.var", SearchOption.AllDirectories)
-                        .ToList();
-                    return files;
+                    return SafeFileEnumerator.EnumerateFiles(destination.Path, "*.var", recursive: true).ToList();
                 }
                 catch (Exception ex)
                 {

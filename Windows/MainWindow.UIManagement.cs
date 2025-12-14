@@ -905,7 +905,6 @@ namespace VPM
                 }
 
                 SetStatus("Ready");
-                App.LogStartupTiming("RefreshPackages completed - app is now idle");
             }
             catch (Exception ex)
             {
@@ -918,47 +917,7 @@ namespace VPM
                 // Re-enable Hub buttons after loading completes
                 // NOTE: _isLoadingPackages is now set to false in UpdatePackageListAsync after packages are loaded
                 EnableHubButtons();
-                
-                // Incremental refresh disabled - using full refresh only
-                // if (!string.IsNullOrEmpty(_selectedFolder))
-                // {
-                //     _incrementalRefresh?.StartMonitoring(_selectedFolder);
-                // }
             }
-        }
-
-        /// <summary>
-        /// Incremental refresh disabled - using full refresh only
-        /// </summary>
-        private async void RefreshPackagesIncremental()
-        {
-            // Incremental refresh disabled - always use full refresh
-            RefreshPackages();
-        }
-
-        /// <summary>
-        /// Incremental refresh disabled - using full refresh only
-        /// </summary>
-        private void OnIncrementalPackagesUpdated(object sender, IncrementalRefreshResult result)
-        {
-            // Incremental refresh disabled
-        }
-
-        /// <summary>
-        /// Incremental refresh disabled - using full refresh only
-        /// </summary>
-        private void OnFullRefreshRecommended(object sender, EventArgs e)
-        {
-            // Incremental refresh disabled
-        }
-
-        /// <summary>
-        /// Incremental refresh disabled - using full refresh only
-        /// </summary>
-        private void ApplyIncrementalUpdates(IncrementalRefreshResult result)
-        {
-            // Incremental refresh disabled - not applying incremental updates
-            return;
         }
 
         /// <summary>
@@ -2094,24 +2053,6 @@ namespace VPM
             }
         }
 
-
-        private Task UpdateImageDisplayAsync()
-        {
-            try
-            {
-                // Get total image count from index
-                var totalImages = _imageManager.GetTotalImageCount();
-
-                // TODO: Implement image display in the Images panel
-                // This would involve creating image controls and adding them to the ImagesPanel
-            }
-            catch (Exception)
-            {
-                // Error updating image display - silently handled
-            }
-
-            return Task.CompletedTask;
-        }
 
         #endregion
 

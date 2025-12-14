@@ -307,7 +307,7 @@ namespace VPM.Services
                 IEnumerable<string> files;
                 try
                 {
-                    files = Directory.EnumerateFiles(directory, "*.var", SearchOption.AllDirectories);
+                    files = SafeFileEnumerator.EnumerateFiles(directory, "*.var", recursive: true);
                 }
                 catch (Exception ex)
                 {
@@ -662,13 +662,153 @@ namespace VPM.Services
         /// </summary>
         private async Task<(bool success, string error)> SafeMoveFileAsync(string sourcePath, string destinationPath, int maxRetries = 10, bool skipVarValidation = false)
         {
-            string lastError = null;
-            
+            static bool IsSameVolume(string a, string b)
+            {
+                try
+                {
+                    var rootA = Path.GetPathRoot(Path.GetFullPath(a));
+                    var rootB = Path.GetPathRoot(Path.GetFullPath(b));
+                    return string.Equals(rootA, rootB, StringComparison.OrdinalIgnoreCase);
+                }
+                catch
+                {
+                    return false;
+                }
+            }
+
+            async Task ReleaseAppFileHandlesAsync(string path)
+            {
+                if (string.IsNullOrWhiteSpace(path))
+                    return;
+
+                try
+                {
+                    if (_imageManager != null)
+                    {
+                        await _imageManager.CloseFileHandlesAsync(path);
+                    }
+
+                    FileAccessController.Instance.InvalidateFile(path);
+                }
+                catch
+                {
+                }
+            }
+
+            async Task<(bool moved, string error)> TryFastRenameMoveAsync(FileInfo sourceInfo, string src, string dst, int attempts)
+            {
+                string lastError = null;
+                for (int attempt = 1; attempt <= attempts; attempt++)
+                {
+                    try
+                    {
+                        await ReleaseAppFileHandlesAsync(src);
+                        await ReleaseAppFileHandlesAsync(dst);
+
+                        // File.Move is atomic and extremely fast when src/dst are on the same volume.
+                        File.Move(src, dst);
+
+                        // Ensure LastWriteTime is preserved (should be by rename, but enforce for safety).
+                        try
+                        {
+                            File.SetLastWriteTime(dst, sourceInfo.LastWriteTime);
+                        }
+                        catch
+                        {
+                        }
+
+                        return (true, "");
+                    }
+                    catch (IOException ex) when (attempt < attempts)
+                    {
+                        lastError = ex.Message;
+
+                        // If this is transient locking, give the system a short chance to release handles.
+                        await Task.Delay(40 * attempt);
+                    }
+                    catch (UnauthorizedAccessException ex) when (attempt < attempts)
+                    {
+                        lastError = ex.Message;
+                        await Task.Delay(40 * attempt);
+                    }
+                    catch (Exception ex)
+                    {
+                        return (false, ex.Message);
+                    }
+                }
+
+                return (false, lastError ?? "Rename move failed");
+            }
+
+            async Task<(bool success, string error)> CopyDeleteFallbackAsync(FileInfo sourceInfo, string src, string dst, int retries)
+            {
+                string lastError = null;
+
+                // Step 1: Copy the file with retries
+                for (int copyAttempt = 1; copyAttempt <= retries; copyAttempt++)
+                {
+                    try
+                    {
+                        await ReleaseAppFileHandlesAsync(src);
+                        File.Copy(src, dst, overwrite: false);
+                        break;
+                    }
+                    catch (IOException ex) when (copyAttempt < retries)
+                    {
+                        lastError = $"Copy attempt {copyAttempt} failed: {ex.Message}";
+                        await ReleaseAppFileHandlesAsync(src);
+                        GC.Collect();
+                        GC.WaitForPendingFinalizers();
+                        await Task.Delay(100 * copyAttempt);
+                    }
+                    catch (IOException ex)
+                    {
+                        return (false, $"Failed to copy file after {retries} attempts: {ex.Message}");
+                    }
+                }
+
+                // Preserve LastWriteTime (and CreationTime best-effort)
+                try
+                {
+                    File.SetLastWriteTime(dst, sourceInfo.LastWriteTime);
+                    File.SetCreationTime(dst, sourceInfo.CreationTime);
+                }
+                catch
+                {
+                }
+
+                // Step 2: Delete the source file with retries
+                for (int deleteAttempt = 1; deleteAttempt <= retries; deleteAttempt++)
+                {
+                    try
+                    {
+                        await ReleaseAppFileHandlesAsync(src);
+                        File.Delete(src);
+                        return (true, "");
+                    }
+                    catch (IOException ex) when (deleteAttempt < retries)
+                    {
+                        lastError = $"Delete attempt {deleteAttempt} failed: {ex.Message}";
+                        await ReleaseAppFileHandlesAsync(src);
+                        GC.Collect();
+                        GC.WaitForPendingFinalizers();
+                        await Task.Delay(100 * deleteAttempt);
+                    }
+                    catch (IOException ex)
+                    {
+                        // Copy succeeded but delete failed - file exists in both locations.
+                        return (false, $"File copied but could not delete source after {retries} attempts: {ex.Message}");
+                    }
+                }
+
+                return (false, lastError ?? "Unexpected error in retry logic");
+            }
+
             // Check if we can move the file
-            var (canMove, error) = await CanMoveFileAsync(sourcePath, skipVarValidation);
+            var (canMove, canMoveError) = await CanMoveFileAsync(sourcePath, skipVarValidation);
             if (!canMove)
             {
-                return (false, error);
+                return (false, canMoveError);
             }
 
             // Ensure destination directory exists
@@ -681,76 +821,25 @@ namespace VPM.Services
                 return (false, "Destination file already exists");
             }
 
-            // Close any file handles before attempting the move
-            if (_imageManager != null) await _imageManager.CloseFileHandlesAsync(sourcePath);
-            FileAccessController.Instance.InvalidateFile(sourcePath);
-            
-            // Capture original file dates before copying
-            var sourceFileInfo = new FileInfo(sourcePath);
-            var originalCreationTime = sourceFileInfo.CreationTime;
-            var originalLastWriteTime = sourceFileInfo.LastWriteTime;
-            
-            // GUARANTEED FIX: Use File.Copy + File.Delete instead of File.Move
-            // Step 1: Copy the file with retries
-            for (int copyAttempt = 1; copyAttempt <= maxRetries; copyAttempt++)
+            // Capture original timestamps (for LastWriteTime preservation guarantee)
+            var sourceInfo = new FileInfo(sourcePath);
+
+            // Fast path: attempt atomic rename when on same volume.
+            // This avoids the expensive copy+delete and preserves LastWriteTime.
+            if (IsSameVolume(sourcePath, destinationPath))
             {
-                try
+                // Critical: retry a few times to allow our own UI/image pipeline to release handles.
+                // Keep this bounded to avoid long stalls; fallback will handle persistent issues.
+                var fastAttempts = Math.Min(5, Math.Max(1, maxRetries));
+                var (moved, moveError) = await TryFastRenameMoveAsync(sourceInfo, sourcePath, destinationPath, fastAttempts);
+                if (moved)
                 {
-                    File.Copy(sourcePath, destinationPath, overwrite: false);
-                    break;
-                }
-                catch (IOException ex) when (copyAttempt < maxRetries)
-                {
-                    lastError = $"Copy attempt {copyAttempt} failed: {ex.Message}";
-                    if (_imageManager != null) await _imageManager.CloseFileHandlesAsync(sourcePath);
-                    FileAccessController.Instance.InvalidateFile(sourcePath);
-                    GC.Collect();
-                    GC.WaitForPendingFinalizers();
-                    await Task.Delay(100 * copyAttempt);
-                }
-                catch (IOException ex)
-                {
-                    return (false, $"Failed to copy file after {maxRetries} attempts: {ex.Message}");
-                }
-            }
-            
-            // Restore original file dates on the destination
-            try
-            {
-                File.SetCreationTime(destinationPath, originalCreationTime);
-                File.SetLastWriteTime(destinationPath, originalLastWriteTime);
-            }
-            catch
-            {
-                // If we can't set dates, continue anyway - the copy succeeded
-            }
-            
-            // Step 2: Delete the source file with retries
-            for (int deleteAttempt = 1; deleteAttempt <= maxRetries; deleteAttempt++)
-            {
-                try
-                {
-                    File.Delete(sourcePath);
                     return (true, "");
                 }
-                catch (IOException ex) when (deleteAttempt < maxRetries)
-                {
-                    lastError = $"Delete attempt {deleteAttempt} failed: {ex.Message}";
-                    if (_imageManager != null) await _imageManager.CloseFileHandlesAsync(sourcePath);
-                    FileAccessController.Instance.InvalidateFile(sourcePath);
-                    GC.Collect();
-                    GC.WaitForPendingFinalizers();
-                    await Task.Delay(100 * deleteAttempt);
-                }
-                catch (IOException ex)
-                {
-                    // Copy succeeded but delete failed - this is still a partial success
-                    // The file exists in both locations, which is better than losing data
-                    return (false, $"File copied but could not delete source after {maxRetries} attempts: {ex.Message}");
-                }
             }
-            
-            return (false, lastError ?? "Unexpected error in retry logic");
+
+            // Fallback: robust copy+delete (works across volumes and when rename is blocked).
+            return await CopyDeleteFallbackAsync(sourceInfo, sourcePath, destinationPath, maxRetries);
         }
 
         /// <summary>
@@ -1087,7 +1176,34 @@ namespace VPM.Services
                         if (_imageManager != null) await _imageManager.CloseFileHandlesAsync(sourceFile);
                         
                         // Delete the loaded copy (retry on transient failures)
-                        File.Delete(sourceFile);
+                        string lastDeleteError = null;
+                        for (int attempt = 1; attempt <= 5; attempt++)
+                        {
+                            try
+                            {
+                                if (_imageManager != null) await _imageManager.CloseFileHandlesAsync(sourceFile);
+                                FileAccessController.Instance.InvalidateFile(sourceFile);
+
+                                File.Delete(sourceFile);
+                                lastDeleteError = null;
+                                break;
+                            }
+                            catch (IOException ex) when (attempt < 5)
+                            {
+                                lastDeleteError = ex.Message;
+                                await Task.Delay(50 * attempt);
+                            }
+                            catch (UnauthorizedAccessException ex) when (attempt < 5)
+                            {
+                                lastDeleteError = ex.Message;
+                                await Task.Delay(50 * attempt);
+                            }
+                        }
+
+                        if (lastDeleteError != null && File.Exists(sourceFile))
+                        {
+                            throw new IOException(lastDeleteError);
+                        }
                         
                         // Remove empty directories from source location
                         var sourceDirectory = Path.GetDirectoryName(sourceFile);

@@ -91,7 +91,7 @@ namespace VPM.Services
                     Directory.CreateDirectory(_cacheDirectory);
                 }
             }
-            catch (Exception ex)
+            catch (Exception)
             {
             }
             
@@ -242,7 +242,7 @@ namespace VPM.Services
                 sw.Stop();
                 return true;
             }
-            catch (Exception ex)
+            catch (Exception)
             {
                 _cacheMisses++;
                 return false;
@@ -280,7 +280,7 @@ namespace VPM.Services
                 var lastModTicks = reader.ReadInt64();
                 _lastModified = lastModTicks > 0 ? new DateTime(lastModTicks) : DateTime.MinValue;
             }
-            catch (Exception ex)
+            catch (Exception)
             {
                 _etag = null;
                 _lastModified = DateTime.MinValue;
@@ -308,7 +308,7 @@ namespace VPM.Services
                     File.Delete(_metadataFilePath);
                 File.Move(tempPath, _metadataFilePath);
             }
-            catch (Exception ex)
+            catch (Exception)
             {
             }
         }
@@ -367,7 +367,7 @@ namespace VPM.Services
                 sw.Stop();
                 return true;
             }
-            catch (Exception ex)
+            catch (Exception)
             {
                 // Clean up temp file
                 try
@@ -519,7 +519,7 @@ namespace VPM.Services
             {
                 return false;
             }
-            catch (Exception ex)
+            catch (Exception)
             {
                 return false;
             }
@@ -885,7 +885,7 @@ namespace VPM.Services
                     _cacheLock.ExitWriteLock();
                 }
             }
-            catch (Exception ex)
+            catch (Exception)
             {
                 return false;
             }
@@ -917,7 +917,7 @@ namespace VPM.Services
                     _imageCacheTimestamps[url] = new DateTime(ticks);
                 }
             }
-            catch (Exception ex)
+            catch (Exception)
             {
                 _imageCacheTimestamps = new Dictionary<string, DateTime>(StringComparer.OrdinalIgnoreCase);
             }
@@ -962,7 +962,7 @@ namespace VPM.Services
                     File.Delete(_imagesCacheMetadataFilePath);
                 File.Move(tempPath, _imagesCacheMetadataFilePath);
             }
-            catch (Exception ex)
+            catch (Exception)
             {
             }
         }
@@ -1022,7 +1022,7 @@ namespace VPM.Services
                 
                 return true;
             }
-            catch (Exception ex)
+            catch (Exception)
             {
                 // Clean up temp file
                 try
@@ -1194,7 +1194,7 @@ namespace VPM.Services
                 
                 return true;
             }
-            catch (Exception ex)
+            catch (Exception)
             {
                 return false;
             }

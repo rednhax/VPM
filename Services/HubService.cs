@@ -138,7 +138,7 @@ namespace VPM.Services
                     
                     return options;
                 }
-                catch (Exception ex)
+                catch (Exception)
                 {
                     // Return cached version if available, even if expired
                     if (_cachedFilterOptions != null)
@@ -467,7 +467,7 @@ namespace VPM.Services
                     _packagesCacheTime = DateTime.Now;
                 }
             }
-            catch (Exception ex)
+            catch (Exception)
             {
             }
         }
@@ -889,7 +889,7 @@ namespace VPM.Services
                     PropertyNameCaseInsensitive = true
                 });
             }
-            catch (JsonException ex)
+            catch (JsonException)
             {
                 throw;
             }
@@ -1058,7 +1058,7 @@ namespace VPM.Services
                 
                 return bitmap;
             }
-            catch (Exception ex)
+            catch (Exception)
             {
                 return null;
             }

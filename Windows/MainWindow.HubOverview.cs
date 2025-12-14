@@ -23,7 +23,6 @@ namespace VPM
         private string _currentHubPackageName = null;
         private string _currentHubOverviewUrl = null;
         private CancellationTokenSource _hubOverviewCts;
-        private bool _imagesNeedRefresh = false; // Track if images need to be loaded when switching to Images tab
         private bool _isClearing = false; // Track when we're intentionally clearing the WebView
         // Note: _hubService is defined in MainWindow.PackageUpdates.cs and shared across partial classes
         
@@ -160,16 +159,12 @@ namespace VPM
                 // Restore preferred tab if it was Hub
                 if (_settingsManager?.Settings?.PreferredImageAreaTab == "Hub")
                 {
-                    // Mark that images need refresh when user switches to Images tab
-                    _imagesNeedRefresh = true;
                     ImageAreaTabControl.SelectedItem = HubOverviewTab;
                 }
                 
                 // If Hub tab is currently selected, update content for new selection
                 if (ImageAreaTabControl.SelectedItem == HubOverviewTab)
                 {
-                    // Mark that images need refresh when user switches to Images tab
-                    _imagesNeedRefresh = true;
                     // Don't clear _currentHubPackageName here - let LoadHubOverviewForSelectedPackageAsync handle caching
                     await LoadHubOverviewForSelectedPackageAsync();
                 }
@@ -182,8 +177,6 @@ namespace VPM
                 // If Hub tab was selected, switch to Images tab (but don't change preference)
                 if (ImageAreaTabControl.SelectedItem == HubOverviewTab)
                 {
-                    // Mark that images need refresh since we're switching away from Hub
-                    _imagesNeedRefresh = true;
                     ImageAreaTabControl.SelectedIndex = 0;
                 }
                 
@@ -226,7 +219,6 @@ namespace VPM
                 // - Switching from Hub tab
                 // - Selection changes while Hub tab was active
                 // - Any other scenario where images might be stale
-                _imagesNeedRefresh = false;
                 await RefreshSelectionDisplaysImmediate();
             }
         }

@@ -1002,7 +1002,7 @@ namespace VPM
                                 {
                                 }
                             }
-                            catch (Exception ex)
+                            catch (Exception)
                             {
                             }
                             

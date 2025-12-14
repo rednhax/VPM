@@ -316,7 +316,7 @@ namespace VPM
                 {
                     // Update progress to show we're acquiring lock
                     // Use BeginInvoke to prevent UI blocking
-                    Dispatcher.BeginInvoke(() =>
+                    _ = Dispatcher.BeginInvoke(() =>
                     {
                         if (progressTextBlock != null)
                             progressTextBlock.Text = "Acquiring exclusive file access...";
@@ -352,7 +352,7 @@ namespace VPM
                     var repackageResult = await varRepackager.RepackageVarWithStatsAsync(packagePath, archivedFolder, conversions, (message, current, total) =>
                     {
                         // Use BeginInvoke to prevent UI blocking during frequent progress updates
-                        Dispatcher.BeginInvoke(() =>
+                        _ = Dispatcher.BeginInvoke(() =>
                         {
                             if (progressTextBlock != null)
                                 progressTextBlock.Text = message;
@@ -845,7 +845,7 @@ namespace VPM
                     }
                 }
             }
-            catch (Exception ex)
+            catch (Exception)
             {
                 // Silently handle errors - metadata update is not critical
             }
@@ -1843,7 +1843,7 @@ namespace VPM
                             processedCount++;
                             
                             // Update progress on UI thread - use BeginInvoke to prevent blocking
-                            Dispatcher.BeginInvoke(() =>
+                            _ = Dispatcher.BeginInvoke(() =>
                             {
                                 if (progressTextBlock != null)
                                 {
@@ -2811,26 +2811,16 @@ namespace VPM
                         // Get dependencies for this package
                         var pkgDisabledDeps = disabledDepsByPackage.ContainsKey(packageName) ? disabledDepsByPackage[packageName] : null;
                         var pkgLatestDeps = latestDepsByPackage.ContainsKey(packageName) ? latestDepsByPackage[packageName] : null;
-                        
-                        // Create progress callback to update UI with detailed operation status
-                        // Use BeginInvoke to prevent UI blocking during frequent progress updates
-                        PackageRepackager.ProgressCallback progressCallback = (message, current, total) =>
-                        {
-                            Dispatcher.BeginInvoke(() =>
-                            {
-                                if (currentPackageText != null)
-                                {
-                                    currentPackageText.Text = $"Processing: {packageName} — {message}";
-                                }
-                            });
-                        };
-                        
-                        // Call the core optimization logic directly without UI manipulation
-                        var optimizationCoreResult = await OptimizeSinglePackageCore(packageName, pkgTextureResult, pkgHairResult, pkgDisabledDeps, pkgLatestDeps, minifyJson, progressCallback);
 
                         bool packageFailed = false;
+                        var optimizationCoreResult = await OptimizeSinglePackageCore(
+                            packageName,
+                            pkgTextureResult,
+                            pkgHairResult,
+                            disabledDependencies: pkgDisabledDeps,
+                            latestDependencies: pkgLatestDeps,
+                            minifyJson: minifyJson);
 
-                        // Collect errors from optimization result
                         if (optimizationCoreResult.Errors != null && optimizationCoreResult.Errors.Count > 0)
                         {
                             foreach (var error in optimizationCoreResult.Errors)

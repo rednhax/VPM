@@ -92,6 +92,37 @@
                 </Setter.Value>
             </Setter>
         </Style>
+
+        <!-- CheckBox Style for External (Orange) -->
+        <Style x:Key="ExternalCheckBoxStyle" TargetType="CheckBox">
+            <Setter Property="Foreground" Value="#E0E0E0"/>
+            <Setter Property="HorizontalAlignment" Value="Center"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="CheckBox">
+                        <Grid Background="Transparent">
+                            <Ellipse x:Name="OuterCircle" Width="24" Height="24" 
+                                     Stroke="#FF9800" StrokeThickness="2" Fill="Transparent"/>
+                            <Ellipse x:Name="InnerCircle" Width="14" Height="14" 
+                                     Fill="#FF9800" Visibility="Collapsed"/>
+                        </Grid>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="InnerCircle" Property="Visibility" Value="Visible"/>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter TargetName="OuterCircle" Property="Opacity" Value="0.3"/>
+                                <Setter TargetName="InnerCircle" Property="Opacity" Value="0.3"/>
+                            </Trigger>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="OuterCircle" Property="StrokeThickness" Value="3"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
         
         <!-- CheckBox Style for AddonPackages (Green) -->
         <Style x:Key="AddonPackagesCheckBoxStyle" TargetType="CheckBox">
@@ -223,6 +254,22 @@
                         </DataTemplate>
                     </DataGridTemplateColumn.CellTemplate>
                 </DataGridTemplateColumn>
+
+                <!-- External Column with Checkbox -->
+                <DataGridTemplateColumn Width="150">
+                    <DataGridTemplateColumn.Header>
+                        <StackPanel Orientation="Vertical" HorizontalAlignment="Center">
+                            <TextBlock Text="External" FontWeight="SemiBold"/>
+                        </StackPanel>
+                    </DataGridTemplateColumn.Header>
+                    <DataGridTemplateColumn.CellTemplate>
+                        <DataTemplate>
+                            <CheckBox Style="{StaticResource ExternalCheckBoxStyle}"
+                                      IsChecked="{Binding KeepInExternal, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                      IsEnabled="{Binding ExistsInExternal}"/>
+                        </DataTemplate>
+                    </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
             </DataGrid.Columns>
         </DataGrid>
         
@@ -241,20 +288,10 @@
             <StackPanel Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Right">
                 <!-- Fix Duplicates Mode -->
                 <StackPanel x:Name="FixDuplicatesPanel" Orientation="Horizontal">
-                    <Button x:Name="FixDuplicatesButton" Content="Fix Duplicates (0)" 
+                    <Button x:Name="FixDuplicatesButton" Content="Fix Duplicates" 
                             MinWidth="150" Height="36" FontWeight="SemiBold"
-                            Background="#F44336" Foreground="White"
+                            Background="#4CAF50" Foreground="White"
                             Click="FixDuplicates_Click" Margin="0,0,10,0"/>
-                    <Button Content="Cancel" MinWidth="100" Height="36" 
-                            Click="Cancel_Click"/>
-                </StackPanel>
-                
-                <!-- Archive Mode (Single Selection) -->
-                <StackPanel x:Name="ArchivePanel" Orientation="Horizontal" Visibility="Collapsed">
-                    <Button x:Name="ArchiveButton" Content="Archive" 
-                            MinWidth="150" Height="36" FontWeight="SemiBold"
-                            Background="#FF9800" Foreground="White"
-                            Click="Archive_Click" Margin="0,0,10,0"/>
                     <Button Content="Cancel" MinWidth="100" Height="36" 
                             Click="Cancel_Click"/>
                 </StackPanel>
@@ -262,4 +299,3 @@
         </Grid>
     </Grid>
 </Window>
-

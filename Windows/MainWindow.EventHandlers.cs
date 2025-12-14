@@ -195,6 +195,7 @@ namespace VPM
             ApplyFilters();
             // Status filter doesn't have its own clear button, so update all
             UpdateClearButtonVisibility();
+            UpdateClearAllFiltersButtonVisibility();
         }
 
         private void CreatorsList_SelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -206,6 +207,7 @@ namespace VPM
             ApplyFilters();
             // Update only creators clear button
             UpdateCreatorsClearButton();
+            UpdateClearAllFiltersButtonVisibility();
         }
 
         private void ContentTypesList_SelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -217,6 +219,7 @@ namespace VPM
             ApplyFilters();
             // Update only content types clear button
             UpdateContentTypesClearButton();
+            UpdateClearAllFiltersButtonVisibility();
         }
 
         private void LicenseTypeList_SelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -228,6 +231,7 @@ namespace VPM
             ApplyFilters();
             // Update only license type clear button
             UpdateLicenseTypeClearButton();
+            UpdateClearAllFiltersButtonVisibility();
         }
 
         private void FileSizeFilterList_SelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -237,6 +241,7 @@ namespace VPM
 
             // Apply filters immediately when selection changes
             ApplyFilters();
+            UpdateClearAllFiltersButtonVisibility();
         }
 
         private void SubfoldersFilterList_SelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -246,6 +251,7 @@ namespace VPM
 
             // Apply filters immediately when selection changes
             ApplyFilters();
+            UpdateClearAllFiltersButtonVisibility();
         }
 
         private void DamagedFilterList_SelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -255,6 +261,7 @@ namespace VPM
 
             // Apply filters immediately when selection changes
             ApplyFilters();
+            UpdateClearAllFiltersButtonVisibility();
         }
 
         private void DestinationsFilterList_SelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -264,6 +271,7 @@ namespace VPM
 
             // Apply filters immediately when selection changes
             ApplyFilters();
+            UpdateClearAllFiltersButtonVisibility();
         }
 
 
@@ -347,6 +355,55 @@ namespace VPM
                 }
                 _packageSearchDebounceTimer.Start();
             }
+        }
+
+        private void FilterByCreator_Click(object sender, RoutedEventArgs e)
+        {
+            FilterByCreatorFromSelectedPackage();
+        }
+
+        private void FilterByCreatorFromSelectedPackage()
+        {
+            if (PackageDataGrid?.SelectedItems?.Count != 1)
+                return;
+
+            var selectedPackage = PackageDataGrid.SelectedItems.Cast<PackageItem>().FirstOrDefault();
+            if (selectedPackage == null)
+                return;
+
+            var creator = selectedPackage.Creator ?? "";
+            if (string.IsNullOrWhiteSpace(creator))
+                return;
+
+            if (CreatorsList == null)
+                return;
+
+            try
+            {
+                _suppressSelectionEvents = true;
+                CreatorsList.SelectedItems.Clear();
+
+                // Items are stored as "Creator (count)" strings
+                foreach (var item in CreatorsList.Items)
+                {
+                    if (item is string s)
+                    {
+                        var value = ExtractFilterValue(s);
+                        if (value.Equals(creator, StringComparison.OrdinalIgnoreCase))
+                        {
+                            CreatorsList.SelectedItems.Add(item);
+                            break;
+                        }
+                    }
+                }
+            }
+            finally
+            {
+                _suppressSelectionEvents = false;
+            }
+
+            ApplyFilters();
+            UpdateCreatorsClearButton();
         }
         
         private void DepsSearchBox_TextChanged(object sender, TextChangedEventArgs e)
@@ -814,7 +871,7 @@ namespace VPM
             }
             else
             {
-                RefreshPackagesIncremental();
+                RefreshPackages();
             }
         }
 
@@ -1678,6 +1735,7 @@ namespace VPM
                 }
                 // Update clear button visibility
                 UpdateSubfoldersClearButton();
+                UpdateClearAllFiltersButtonVisibility();
             }
         }
 
@@ -1811,7 +1869,156 @@ namespace VPM
                     // Update clear button visibility and apply filters after clearing
                     UpdateClearButtonVisibility();
                     ApplyFilters();
+                    UpdateClearAllFiltersButtonVisibility();
                 }
+            }
+        }
+
+        private void ClearAllFilters_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                switch (_currentContentMode)
+                {
+                    case "Scenes":
+                        ClearAllSceneFilters();
+                        break;
+                    case "Custom":
+                        ClearAllCustomFilters();
+                        break;
+                    default:
+                        ClearAllPackageFilters();
+                        break;
+                }
+
+                UpdateClearButtonVisibility();
+                UpdateClearAllFiltersButtonVisibility();
+            }
+            catch (Exception)
+            {
+            }
+        }
+
+        private void ClearAllPackageFilters()
+        {
+            if (!IsLoaded)
+                return;
+
+            try
+            {
+                _suppressSelectionEvents = true;
+
+                _filterManager?.ClearAllFilters();
+
+                StatusFilterList?.SelectedItems?.Clear();
+                CreatorsList?.SelectedItems?.Clear();
+                ContentTypesList?.SelectedItems?.Clear();
+                LicenseTypeList?.SelectedItems?.Clear();
+                FileSizeFilterList?.SelectedItems?.Clear();
+                SubfoldersFilterList?.SelectedItems?.Clear();
+                DestinationsFilterList?.SelectedItems?.Clear();
+
+                if (DamagedFilterList != null)
+                {
+                    DamagedFilterList.SelectedItem = null;
+                }
+
+                if (DateFilterList != null)
+                {
+                    DateFilterList.SelectedIndex = 0;
+                }
+                if (CustomDateRangePanel != null)
+                {
+                    CustomDateRangePanel.Visibility = Visibility.Collapsed;
+                }
+                if (StartDatePicker != null)
+                {
+                    StartDatePicker.SelectedDate = null;
+                }
+                if (EndDatePicker != null)
+                {
+                    EndDatePicker.SelectedDate = null;
+                }
+
+                // Restore search / filter text boxes to placeholder state
+                FilterTextBox_LostFocus(PackageSearchBox, new RoutedEventArgs());
+                FilterTextBox_LostFocus(CreatorsFilterBox, new RoutedEventArgs());
+                FilterTextBox_LostFocus(ContentTypesFilterBox, new RoutedEventArgs());
+                FilterTextBox_LostFocus(LicenseTypeFilterBox, new RoutedEventArgs());
+                FilterTextBox_LostFocus(SubfoldersFilterBox, new RoutedEventArgs());
+
+                // Reload packages using the cleared filter manager
+                ApplyFilters();
+            }
+            catch (Exception)
+            {
+            }
+            finally
+            {
+                _suppressSelectionEvents = false;
+            }
+        }
+
+        private void ClearAllSceneFilters()
+        {
+            if (!IsLoaded)
+                return;
+
+            try
+            {
+                _suppressSelectionEvents = true;
+
+                SceneTypeFilterList?.SelectedItems?.Clear();
+                SceneCreatorFilterList?.SelectedItems?.Clear();
+                SceneStatusFilterList?.SelectedItems?.Clear();
+                SceneSourceFilterList?.SelectedItems?.Clear();
+                SceneDateFilterList?.SelectedItems?.Clear();
+                SceneFileSizeFilterList?.SelectedItems?.Clear();
+
+                FilterTextBox_LostFocus(SceneSearchBox, new RoutedEventArgs());
+                FilterTextBox_LostFocus(SceneTypeFilterBox, new RoutedEventArgs());
+                FilterTextBox_LostFocus(SceneCreatorFilterBox, new RoutedEventArgs());
+
+                ApplySceneFilters();
+            }
+            catch (Exception)
+            {
+            }
+            finally
+            {
+                _suppressSelectionEvents = false;
+            }
+        }
+
+        private void ClearAllCustomFilters()
+        {
+            if (!IsLoaded)
+                return;
+
+            try
+            {
+                _suppressSelectionEvents = true;
+
+                _customAtomSearchText = "";
+
+                PresetCategoryFilterList?.SelectedItems?.Clear();
+                PresetSubfolderFilterList?.SelectedItems?.Clear();
+                PresetDateFilterList?.SelectedItems?.Clear();
+                PresetFileSizeFilterList?.SelectedItems?.Clear();
+                PresetStatusFilterList?.SelectedItems?.Clear();
+
+                FilterTextBox_LostFocus(CustomAtomSearchBox, new RoutedEventArgs());
+                FilterTextBox_LostFocus(PresetCategoryFilterBox, new RoutedEventArgs());
+                FilterTextBox_LostFocus(PresetSubfolderFilterBox, new RoutedEventArgs());
+
+                ApplyPresetFilters();
+            }
+            catch (Exception)
+            {
+            }
+            finally
+            {
+                _suppressSelectionEvents = false;
             }
         }
 
@@ -1994,23 +2201,6 @@ namespace VPM
             UpdateClearButtonVisibility();
         }
 
-        private void ClearAllFilters_Click(object sender, RoutedEventArgs e)
-        {
-            // Clear all search boxes
-            ClearPackageSearch_Click(sender, e);
-            ClearDepsSearch_Click(sender, e);
-            ClearCreatorsSearch_Click(sender, e);
-            
-            // Clear all filter selections
-            StatusFilterList.SelectedItems.Clear();
-            CreatorsList.SelectedItems.Clear();
-            ContentTypesList.SelectedItems.Clear();
-            
-            // Apply empty filters to show all items
-            ApplyFilters();
-            UpdateClearButtonVisibility();
-        }
-
         #endregion
 
         #region Window Event Handlers
@@ -2184,7 +2374,6 @@ namespace VPM
             _settingsManager.SaveSettingsImmediate();
             
             // Dispose of managers
-            _incrementalRefresh?.Dispose();
             _settingsManager?.Dispose();
         }
 
@@ -2292,6 +2481,26 @@ namespace VPM
 
         private async void PackageDataGrid_KeyDown(object sender, KeyEventArgs e)
         {
+            // Handle C to filter by creator (single selection only)
+            if (e.Key == Key.C)
+            {
+                // Prevent key repeat - only trigger on first press
+                if (e.IsRepeat)
+                {
+                    e.Handled = true;
+                    return;
+                }
+
+                // Only allow when exactly one package is selected
+                if (PackageDataGrid?.SelectedItems?.Count == 1)
+                {
+                    FilterByCreatorFromSelectedPackage();
+                    e.Handled = true;
+                }
+
+                return;
+            }
+
             // Handle Shift+Space to load with dependencies
             if (e.Key == Key.Space && Keyboard.Modifiers.HasFlag(ModifierKeys.Shift) && PackageDataGrid.SelectedItems.Count > 0)
             {
@@ -4210,9 +4419,10 @@ namespace VPM
                 // Get folder paths
                 string addonPackagesPath = Path.Combine(_selectedFolder, "AddonPackages");
                 string allPackagesPath = Path.Combine(_selectedFolder, "AllPackages");
+                var externalDestinations = _settingsManager?.Settings?.MoveToDestinations;
                 
                 // Open the duplicate management window
-                var duplicateWindow = new DuplicateManagementWindow(duplicatePackages, addonPackagesPath, allPackagesPath)
+                var duplicateWindow = new DuplicateManagementWindow(duplicatePackages, addonPackagesPath, allPackagesPath, externalDestinations)
                 {
                     Owner = this
                 };
@@ -4267,9 +4477,10 @@ namespace VPM
                 // Get folder paths
                 string addonPackagesPath = Path.Combine(_selectedFolder, "AddonPackages");
                 string allPackagesPath = Path.Combine(_selectedFolder, "AllPackages");
+                var externalDestinations = _settingsManager?.Settings?.MoveToDestinations;
                 
                 // Open the duplicate management window
-                var duplicateWindow = new DuplicateManagementWindow(duplicatePackages, addonPackagesPath, allPackagesPath)
+                var duplicateWindow = new DuplicateManagementWindow(duplicatePackages, addonPackagesPath, allPackagesPath, externalDestinations)
                 {
                     Owner = this
                 };
@@ -4894,7 +5105,7 @@ namespace VPM
             }
             else
             {
-                RefreshPackagesIncremental();
+                RefreshPackages();
             }
         }
         
@@ -5055,24 +5266,6 @@ namespace VPM
             {
                 System.Diagnostics.Debug.WriteLine($"Error filtering by scene source: {ex.Message}");
             }
-        }
-        
-        /// <summary>
-        /// Handles scene type filter text box changes
-        /// </summary>
-        private void SceneTypeFilterBox_TextChanged(object sender, TextChangedEventArgs e)
-        {
-            // TODO: Implement scene type filter search
-            // For now, this is a placeholder
-        }
-        
-        /// <summary>
-        /// Handles scene creator filter text box changes
-        /// </summary>
-        private void SceneCreatorFilterBox_TextChanged(object sender, TextChangedEventArgs e)
-        {
-            // TODO: Implement scene creator filter search
-            // For now, this is a placeholder
         }
         
         /// <summary>
@@ -6190,6 +6383,7 @@ namespace VPM
                 // Get menu items from the context menu's items collection
                 MenuItem showDependencyItem = null;
                 MenuItem openInExplorerItem = null;
+                MenuItem filterByCreatorItem = null;
                 MenuItem moveToMenuItem = null;
                 MenuItem restoreOriginalItem = null;
                 
@@ -6202,6 +6396,8 @@ namespace VPM
                             showDependencyItem = menuItem;
                         else if (header == "📁 Open in Explorer")
                             openInExplorerItem = menuItem;
+                        else if (header == "👤 Filter by Creator")
+                            filterByCreatorItem = menuItem;
                         else if (header == "📦 Move To")
                             moveToMenuItem = menuItem;
                         else if (header.StartsWith("🔄 Restore Original"))
@@ -6214,6 +6410,9 @@ namespace VPM
                 
                 if (openInExplorerItem != null)
                     openInExplorerItem.Visibility = selectedCount == 1 ? System.Windows.Visibility.Visible : System.Windows.Visibility.Collapsed;
+
+                if (filterByCreatorItem != null)
+                    filterByCreatorItem.Visibility = selectedCount == 1 ? System.Windows.Visibility.Visible : System.Windows.Visibility.Collapsed;
 
                 // Populate Move To submenu with configured destinations
                 if (moveToMenuItem != null)

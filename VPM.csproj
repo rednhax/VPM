@@ -46,6 +46,7 @@
 
   <!-- Exclude backup/reference folders and test projects from compilation -->
   <ItemGroup>
+    <Compile Remove="Services\IncrementalPackageRefresh.cs" />
     <Compile Remove="_links\**" />
     <Compile Remove="VPM.Tests\**" />
     <Compile Remove="VPM.Old\**" />

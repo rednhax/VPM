@@ -161,8 +161,9 @@ namespace VPM.Services
             _previewImageIndex = previewImageIndex;
             _packageFileManager = packageFileManager;
 
-            // Match any filename ending in .var - we'll parse the content more flexibly
-            _varPattern = new Regex(@"^(.+)\.var$", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+            // Parse standard VAR filenames: Creator.Package.Name.Version.var
+            // Creator cannot contain dots; package name may contain dots; version is numeric.
+            _varPattern = new Regex(@"^([^.]+)\.(.+?)\.(\d+)\.var$", RegexOptions.IgnoreCase | RegexOptions.Compiled);
             
             // Don't load binary cache here - it will be loaded asynchronously
             // to avoid blocking the UI thread during startup
@@ -476,22 +477,23 @@ namespace VPM.Services
 
         public (string creator, string packageName, string version) ParseFilename(string filename)
         {
-            var match = _varPattern.Match(filename);
+            if (string.IsNullOrWhiteSpace(filename))
+                return (null, null, null);
+
+            var fileOnly = Path.GetFileName(filename);
+            var match = _varPattern.Match(fileOnly);
             if (match.Success)
             {
                 return (match.Groups[1].Value, match.Groups[2].Value, match.Groups[3].Value);
             }
 
-            // Fallback for edge cases
-            if (filename.ToLower().EndsWith(".var"))
+            // Fallback parsing for edge cases (should be rare)
+            if (fileOnly.EndsWith(".var", StringComparison.OrdinalIgnoreCase))
             {
-                var parts = filename[..^4].Split('.');
-                if (parts.Length >= 3)
+                var parts = fileOnly[..^4].Split('.');
+                if (parts.Length >= 3 && int.TryParse(parts[^1], out _))
                 {
-                    if (int.TryParse(parts[^1], out _))
-                    {
-                        return (parts[0], string.Join(".", parts[1..^1]), parts[^1]);
-                    }
+                    return (parts[0], string.Join(".", parts[1..^1]), parts[^1]);
                 }
             }
 
@@ -603,6 +605,30 @@ namespace VPM.Services
                     
                     cachedMetadata.FilePath = varPath;
                     cachedMetadata.Filename = filename;
+                    
+                    // IMPORTANT: cached metadata can become stale if filename parsing logic changes.
+                    // Always re-apply authoritative creator/package/version values from the filename when possible.
+                    var (cachedCreator, cachedPkgName, cachedVersion) = ParseFilename(filename);
+                    if (!string.IsNullOrEmpty(cachedCreator))
+                    {
+                        cachedMetadata.CreatorName = StringPool.Intern(cachedCreator);
+                    }
+                    
+                    if (!string.IsNullOrEmpty(cachedPkgName))
+                    {
+                        cachedMetadata.PackageName = StringPool.Intern(cachedPkgName);
+                    }
+                    
+                    if (!string.IsNullOrEmpty(cachedVersion) && int.TryParse(cachedVersion, out var cachedVersionInt))
+                    {
+                        cachedMetadata.Version = cachedVersionInt;
+                    }
+                    
+                    if (!string.IsNullOrEmpty(cachedCreator) && !string.IsNullOrEmpty(cachedPkgName))
+                    {
+                        cachedMetadata.PackageBaseName = $"{cachedCreator}.{cachedPkgName}";
+                    }
+                    
                     return (cachedMetadata, cachedMetadata.GetHashCode());
                 }
 
@@ -1200,8 +1226,8 @@ namespace VPM.Services
                 {
                     try
                     {
-                        var files = await Task.Run(() => 
-                            Directory.EnumerateFiles(dest.Path, "*.var", SearchOption.AllDirectories).ToList());
+                        var files = await Task.Run(() =>
+                            SafeFileEnumerator.EnumerateFiles(dest.Path, "*.var", recursive: true).ToList());
                         
                         lock (external)
                         {
@@ -1210,6 +1236,7 @@ namespace VPM.Services
                     }
                     catch (Exception ex)
                     {
+                        System.Diagnostics.Debug.WriteLine($"External scan FAILED for destination '{dest.Name}' ({dest.Path}): {ex.Message}");
                         lock (external)
                         {
                             external[dest.Name] = new List<string>();
@@ -1632,56 +1659,89 @@ namespace VPM.Services
                             }
                             else
                             {
-                                // Package exists in active location (AddonPackages, AllPackages, etc.)
-                                // Check if the existing package is in a standard VAM folder or external location
-                                var existingPath = existingMeta.FilePath ?? "";
-                                var existingPathNormalized = Path.GetFullPath(existingPath).TrimEnd(Path.DirectorySeparatorChar).ToLowerInvariant();
-                                
-                                // Check if it's in any of the configured external destinations
-                                bool isInExternalDest = false;
-                                foreach (var otherDest in externalDestinations)
+                                // If the existing key points to a different file path, always record this external copy.
+                                // This is critical for showing external duplicates even when the package also exists
+                                // in AddonPackages/AllPackages.
+                                if (!string.IsNullOrEmpty(existingMeta.FilePath) &&
+                                    !existingMeta.FilePath.Equals(filePath, StringComparison.OrdinalIgnoreCase))
                                 {
-                                    if (otherDest == null || !otherDest.IsValid())
-                                        continue;
-                                    var otherDestPath = Path.GetFullPath(otherDest.Path).TrimEnd(Path.DirectorySeparatorChar).ToLowerInvariant();
-                                    if (existingPathNormalized.StartsWith(otherDestPath + Path.DirectorySeparatorChar))
-                                    {
-                                        isInExternalDest = true;
-                                        break;
-                                    }
-                                }
-                                
-                                // Only mark as external if it's NOT in any standard VAM folder and IS in an external destination
-                                if (isInExternalDest && !existingMeta.IsExternal)
-                                {
-                                    // Package exists in an external location, update it
+                                    existingMeta.IsDuplicate = true;
                                     existingMeta.DuplicateLocationCount++;
-                                    
-                                    // Mark this existing package as external
-                                    existingMeta.ExternalDestinationName = finalDestName;
-                                    existingMeta.ExternalDestinationColorHex = destination.StatusColor ?? "#808080";
-                                    existingMeta.ExternalDestinationSubfolder = finalSubfolder;
-                                    existingMeta.OriginalExternalDestinationName = originalDestName;
-                                    existingMeta.OriginalExternalDestinationColorHex = originalDestColor;
+
+                                    var subfolderKey = string.IsNullOrEmpty(finalSubfolder)
+                                        ? "root"
+                                        : finalSubfolder.Replace('/', '_').Replace('\\', '_');
+                                    var uniqueKey = $"{packageKey}#external_{finalDestName}_{subfolderKey}_{Path.GetFileName(filePath)}";
+
+                                    VarMetadata dupMetadata;
+                                    try
+                                    {
+                                        var (parsed, dupMetaHash) = ParseVarMetadata(filePath);
+                                        dupMetadata = parsed;
+                                    }
+                                    catch
+                                    {
+                                        dupMetadata = new VarMetadata
+                                        {
+                                            Filename = Path.GetFileName(filePath) ?? string.Empty,
+                                            CreatorName = creator,
+                                            PackageName = packageName,
+                                            Version = version,
+                                            IsCorrupted = true
+                                        };
+                                    }
+                                    dupMetadata.IsDuplicate = true;
+                                    dupMetadata.DuplicateLocationCount = existingMeta.DuplicateLocationCount;
+                                    dupMetadata.VariantRole = "External";
+                                    dupMetadata.FilePath = filePath;
+                                    dupMetadata.FileSize = fileInfo.Length;
+                                    dupMetadata.ExternalDestinationColorHex = destination.StatusColor ?? "#808080";
+                                    dupMetadata.Status = finalDestName;
+                                    dupMetadata.ExternalDestinationName = finalDestName;
+                                    dupMetadata.ExternalDestinationSubfolder = finalSubfolder;
+                                    dupMetadata.OriginalExternalDestinationName = originalDestName;
+                                    dupMetadata.OriginalExternalDestinationColorHex = originalDestColor;
+
+                                    if (!dupMetadata.IsOptimized)
+                                    {
+                                        dupMetadata.ModifiedDate = fileInfo.LastWriteTime;
+                                    }
+
+                                    PackageMetadata[uniqueKey] = dupMetadata;
                                 }
+
                                 continue;
                             }
                         }
 
                         // Parse or get from cache
-                        var (metadata, metaHash) = ParseVarMetadata(filePath);
+                        VarMetadata metadata;
+                        try
+                        {
+                            var (parsed, metaHash) = ParseVarMetadata(filePath);
+                            metadata = parsed;
+                        }
+                        catch
+                        {
+                            metadata = new VarMetadata
+                            {
+                                Filename = Path.GetFileName(filePath) ?? string.Empty,
+                                CreatorName = creator,
+                                PackageName = packageName,
+                                Version = version,
+                                IsCorrupted = true
+                            };
+                        }
                         metadata.VariantRole = "External";
                         metadata.FilePath = filePath;
                         metadata.FileSize = fileInfo.Length;
                         metadata.ExternalDestinationColorHex = destination.StatusColor ?? "#808080";
-                        
-                        metadata.Status = finalDestName; // Status is the destination name
+                        metadata.Status = finalDestName;
                         metadata.ExternalDestinationName = finalDestName;
                         metadata.ExternalDestinationSubfolder = finalSubfolder;
                         metadata.OriginalExternalDestinationName = originalDestName;
                         metadata.OriginalExternalDestinationColorHex = originalDestColor;
-                        
-                        
+
                         if (!metadata.IsOptimized)
                         {
                             metadata.ModifiedDate = fileInfo.LastWriteTime;
@@ -1691,6 +1751,7 @@ namespace VPM.Services
                     }
                     catch (Exception ex)
                     {
+                        System.Diagnostics.Debug.WriteLine($"External package mapping failed for '{filePath}': {ex.Message}");
                     }
                 }
             }
@@ -1700,16 +1761,15 @@ namespace VPM.Services
             if (_packageFileManager != null)
             {
                 var externalPackageStatuses = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-                
+
                 foreach (var metadata in PackageMetadata.Values)
                 {
                     if (string.Equals(metadata.VariantRole, "External", StringComparison.OrdinalIgnoreCase))
                     {
-                        // Use the destination name as the status for external packages
                         var creatorName = metadata.CreatorName ?? "";
                         var packageName = metadata.PackageName ?? "";
                         var status = metadata.ExternalDestinationName ?? "External";
-                        
+
                         if (!string.IsNullOrWhiteSpace(creatorName) && !string.IsNullOrWhiteSpace(packageName))
                         {
                             var fullPackageName = $"{creatorName}.{packageName}";
@@ -1717,8 +1777,7 @@ namespace VPM.Services
                         }
                     }
                 }
-                
-                // Register all external package statuses at once
+
                 if (externalPackageStatuses.Count > 0)
                 {
                     _packageFileManager.RegisterExternalPackageStatuses(externalPackageStatuses);

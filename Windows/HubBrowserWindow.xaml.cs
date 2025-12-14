@@ -93,9 +93,6 @@ namespace VPM.Windows
         private Stack<DetailStackEntry> _detailStack = new Stack<DetailStackEntry>();
         private Dictionary<string, DetailStackEntry> _savedDownloadingDetails = new Dictionary<string, DetailStackEntry>();
         
-        // Hosted option filter
-        private string _hostedOption = "Hub And Dependencies";
-        
         // Updates panel debounce
         private bool _isUpdatesCheckInProgress = false;
         
@@ -249,7 +246,7 @@ namespace VPM.Windows
                     OverviewWebView.Dispose();
                 }
             }
-            catch (Exception ex)
+            catch (Exception)
             {
             }
         }
@@ -345,8 +342,9 @@ namespace VPM.Windows
                 
                 await OverviewWebView.CoreWebView2.ExecuteScriptAsync(script);
             }
-            catch (Exception ex)
+            catch (Exception)
             {
+                // Handle exception
             }
         }
         
@@ -377,8 +375,9 @@ namespace VPM.Windows
                     var url = _currentWebViewUrl.Replace("-panel", "");
                     Process.Start(new ProcessStartInfo(url) { UseShellExecute = true });
                 }
-                catch (Exception ex)
+                catch (Exception)
                 {
+                    // Handle exception
                 }
             }
         }
@@ -391,8 +390,9 @@ namespace VPM.Windows
                 {
                     Process.Start(new ProcessStartInfo(url) { UseShellExecute = true });
                 }
-                catch (Exception ex)
+                catch (Exception)
                 {
+                    // Handle exception
                 }
             }
         }
@@ -482,8 +482,9 @@ namespace VPM.Windows
                     _currentPage = 1;
                     _ = SearchAsync();
                 }
-                catch (Exception ex)
+                catch (Exception)
                 {
+                    // Handle exception
                 }
             }
         }
@@ -696,9 +697,9 @@ namespace VPM.Windows
                     await Task.WhenAll(prefetchTasks);
                 }
             }
-            catch
+            catch (Exception)
             {
-                // Ignore prefetch errors - they're not critical
+                // Handle exception
             }
         }
         
@@ -726,7 +727,6 @@ namespace VPM.Windows
             var sortSecondary = (SortSecondaryFilter.SelectedItem as ComboBoxItem)?.Content?.ToString() ?? "None";
             var payType = (PayTypeFilter.SelectedItem as ComboBoxItem)?.Content?.ToString() ?? "Free";
             var category = (CategoryFilter.SelectedItem as ComboBoxItem)?.Content?.ToString() ?? "All";
-            var hostedOption = (HostedOptionFilter.SelectedItem as ComboBoxItem)?.Content?.ToString() ?? "Hub And Dependencies";
             
             // Join multiple selected tags with comma
             var tags = _selectedTags.Count == 0 ? "All" : string.Join(",", _selectedTags);
@@ -736,7 +736,7 @@ namespace VPM.Windows
                 Page = _currentPage,
                 PerPage = 48,
                 Search = SearchBox.Text?.Trim(),
-                Location = hostedOption,
+                Location = "Hub And Dependencies",
                 Category = category,
                 Creator = _selectedCreator ?? "All",
                 PayType = payType,
@@ -1117,8 +1117,9 @@ namespace VPM.Windows
                     }
                 }
             }
-            catch (Exception ex)
+            catch (Exception)
             {
+                // Handle exception
             }
             
             // Fallback to original name
@@ -1471,7 +1472,7 @@ namespace VPM.Windows
                     DetailImage.Source = null;
                 }
             }
-            catch (Exception ex)
+            catch (Exception)
             {
                 if (_currentImageUrl == imageUrl)
                 {
@@ -1512,8 +1513,9 @@ namespace VPM.Windows
                             detail.TagsDict = resource.TagsDict;
                         }
                     }
-                    catch (Exception ex)
+                    catch (Exception)
                     {
+                        // Handle exception
                     }
                     // Push current state to stack before showing new resource (if there is one)
                     // This saves the previous resource so we can go back to it
@@ -1605,9 +1607,9 @@ namespace VPM.Windows
                     DetailCreatorIconBrush.ImageSource = new BitmapImage(new Uri(detail.IconUrl));
                     DetailCreatorIcon.Visibility = Visibility.Visible;
                 }
-                catch
+                catch (Exception)
                 {
-                    DetailCreatorIcon.Visibility = Visibility.Collapsed;
+                    // Handle exception
                 }
             }
             else
@@ -1690,7 +1692,7 @@ namespace VPM.Windows
                     DetailTagsPanel.Visibility = Visibility.Collapsed;
                 }
             }
-            catch (Exception ex)
+            catch (Exception)
             {
                 DetailTagsPanel.Visibility = Visibility.Collapsed;
             }
@@ -2015,9 +2017,9 @@ namespace VPM.Windows
                         }
                     }
                 }
-                catch
+                catch (Exception)
                 {
-                    // Ignore access errors
+                    // Handle exception
                 }
                 
                 current = parent;
@@ -2067,8 +2069,9 @@ namespace VPM.Windows
                     }
                 }
             }
-            catch (Exception ex)
+            catch (Exception)
             {
+                // Handle exception
             }
             return null;
         }
@@ -2230,8 +2233,9 @@ namespace VPM.Windows
                         {
                             Process.Start("explorer.exe", $"/select,\"{file.LocalPath}\"");
                         }
-                        catch (Exception ex)
+                        catch (Exception)
                         {
+                            // Handle exception
                         }
                     }
                     else
@@ -2433,7 +2437,7 @@ namespace VPM.Windows
                     packageName = file.Filename.Replace(".var", "");
                 }
             }
-            catch
+            catch (Exception)
             {
                 packageName = file.Filename.Replace(".var", "");
             }
@@ -2513,7 +2517,7 @@ namespace VPM.Windows
                                         // so that the missing dependencies panel updates correctly after download
                                         _packageManager.RemoveFromMissingDependencies(packageName);
                                     }
-                                    catch
+                                    catch (Exception)
                                     {
                                         // If parsing fails, at least update the lookups from _localPackagePaths
                                         BuildLocalPackageLookups();
@@ -2661,8 +2665,9 @@ namespace VPM.Windows
                     DiscardAllOldVersions(oldVersions);
                 }
             }
-            catch (Exception ex)
+            catch (Exception)
             {
+                // Handle exception
             }
         }
         
@@ -2701,21 +2706,24 @@ namespace VPM.Windows
                                     File.Delete(archivePath);
                                 }
                             }
-                            catch (Exception ex)
+                            catch (Exception)
                             {
+                                // Handle exception
                             }
                             
                             File.Move(filePath, archivePath);
                             _localPackagePaths.Remove(packageName);
                         }
-                        catch (Exception ex)
+                        catch (Exception)
                         {
+                            // Handle exception
                         }
                     }
                 }
             }
-            catch (Exception ex)
+            catch (Exception)
             {
+                // Handle exception
             }
         }
         
@@ -2754,21 +2762,24 @@ namespace VPM.Windows
                                     File.Delete(discardPath);
                                 }
                             }
-                            catch (Exception ex)
+                            catch (Exception)
                             {
+                                // Handle exception
                             }
                             
                             File.Move(filePath, discardPath);
                             _localPackagePaths.Remove(packageName);
                         }
-                        catch (Exception ex)
+                        catch (Exception)
                         {
+                            // Handle exception
                         }
                     }
                 }
             }
-            catch (Exception ex)
+            catch (Exception)
             {
+                // Handle exception
             }
         }
         
@@ -3690,8 +3701,8 @@ namespace VPM.Windows
     /// </summary>
     public class CachedImageManager : INotifyPropertyChanged
     {
-        private static readonly Dictionary<string, CachedImageManager> _instanceCache = new Dictionary<string, CachedImageManager>(StringComparer.OrdinalIgnoreCase);
         private static readonly object _instanceCacheLock = new object();
+        private static readonly Dictionary<string, CachedImageManager> _instanceCache = new Dictionary<string, CachedImageManager>(StringComparer.OrdinalIgnoreCase);
         private static HubService _hubService;
         
         private BitmapImage _image;
@@ -3794,7 +3805,7 @@ namespace VPM.Windows
                     LoadDirectUrl();
                 }
             }
-            catch (Exception ex)
+            catch (Exception)
             {
                 LoadDirectUrl();
             }
@@ -3816,7 +3827,7 @@ namespace VPM.Windows
                 bitmap.Freeze();
                 Image = bitmap;
             }
-            catch (Exception ex)
+            catch (Exception)
             {
             }
         }

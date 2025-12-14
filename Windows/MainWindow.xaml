@@ -1378,8 +1378,7 @@
                                             GotFocus="FilterTextBox_GotFocus"
                                             LostFocus="FilterTextBox_LostFocus"
                                             Style="{StaticResource FilterTextBoxStyle}"
-                                            Text="🎬 Filter scene types..."
-                                            TextChanged="SceneTypeFilterBox_TextChanged" />
+                                            Text="🎬 Filter scene types..." />
                                         <Button
                                             x:Name="SceneTypeClearButton"
                                             Grid.Column="2"
@@ -1464,8 +1463,7 @@
                                             GotFocus="FilterTextBox_GotFocus"
                                             LostFocus="FilterTextBox_LostFocus"
                                             Style="{StaticResource FilterTextBoxStyle}"
-                                            Text="👤 Filter scene creators..."
-                                            TextChanged="SceneCreatorFilterBox_TextChanged" />
+                                            Text="👤 Filter scene creators..." />
                                         <Button
                                             x:Name="SceneCreatorClearButton"
                                             Grid.Column="2"
@@ -2110,25 +2108,36 @@
                         </StackPanel>
                     </ScrollViewer>
 
-                    <!--  Compact Scroll Here Area  -->
-                    <Border
-                        x:Name="ScrollHereArea"
-                        Grid.Row="2"
-                        Height="28"
-                        Margin="8,0,8,4"
-                        Background="Transparent"
-                        BorderBrush="{DynamicResource {x:Static SystemColors.ControlDarkBrushKey}}"
-                        BorderThickness="0,1,0,0"
-                        Cursor="ScrollNS"
-                        PreviewMouseWheel="ScrollHereArea_PreviewMouseWheel">
-                        <TextBlock
+                    <StackPanel Grid.Row="2">
+                        <Button
+                            x:Name="ClearAllFiltersButton"
+                            Width="140"
+                            Height="26"
+                            Margin="8,6,0,6"
                             HorizontalAlignment="Center"
-                            VerticalAlignment="Center"
-                            FontSize="11"
-                            Foreground="{DynamicResource {x:Static SystemColors.GrayTextBrushKey}}"
-                            Opacity="0.8"
-                            Text="Scroll here or at top button area" />
-                    </Border>
+                            Click="ClearAllFilters_Click"
+                            Content="🗑️ Clear All Filters"
+                            Visibility="Collapsed" />
+
+                        <!--  Compact Scroll Here Area  -->
+                        <Border
+                            x:Name="ScrollHereArea"
+                            Height="28"
+                            Margin="8,0,8,4"
+                            Background="Transparent"
+                            BorderBrush="{DynamicResource {x:Static SystemColors.ControlDarkBrushKey}}"
+                            BorderThickness="0,1,0,0"
+                            Cursor="ScrollNS"
+                            PreviewMouseWheel="ScrollHereArea_PreviewMouseWheel">
+                            <TextBlock
+                                HorizontalAlignment="Center"
+                                VerticalAlignment="Center"
+                                FontSize="11"
+                                Foreground="{DynamicResource {x:Static SystemColors.GrayTextBrushKey}}"
+                                Opacity="0.8"
+                                Text="Scroll here or at top button area" />
+                        </Border>
+                    </StackPanel>
                 </Grid>
             </Border>
 
@@ -2514,6 +2523,7 @@
                                     <MenuItem Click="ShowDependencyGraph_Click" Header="📊 Show Dependency Graph" />
                                     <MenuItem Click="OpenInExplorer_Click" Header="📁 Open in Explorer" />
                                     <MenuItem Click="CopyPackageName_Click" Header="📋 Copy Package Name" />
+                                    <MenuItem Click="FilterByCreator_Click" Header="👤 Filter by Creator" />
                                     <Separator />
                                     <MenuItem x:Name="MoveToMenuItem" Header="📦 Move To">
                                         <MenuItem Click="ConfigureMoveToDestinations_Click" Header="⚙️ Configure Destinations..." />

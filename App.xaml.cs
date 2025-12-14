@@ -1,22 +1,13 @@
 ﻿using System;
-using System.IO;
 using System.Windows;
 using System.Windows.Threading;
 using VPM.Services;
-using VPM.Models;
 using System.Diagnostics;
 
 namespace VPM
 {
     public partial class App : Application
     {
-        // Startup timing instrumentation
-        public static readonly Stopwatch StartupTimer = Stopwatch.StartNew();
-        
-        public static void LogStartupTiming(string step)
-        {
-            // Debug timing disabled
-        }
         protected override void OnStartup(StartupEventArgs e)
         {
             base.OnStartup(e);
@@ -38,7 +29,6 @@ namespace VPM
         private void CurrentDomain_UnhandledException(object sender, UnhandledExceptionEventArgs e)
         {
             var exception = e.ExceptionObject as Exception;
-            LogException("AppDomain.UnhandledException", exception);
             
             Debug.WriteLine($"FATAL ERROR: {exception?.Message}");
             if (exception != null)
@@ -55,7 +45,6 @@ namespace VPM
 
         private void App_DispatcherUnhandledException(object sender, DispatcherUnhandledExceptionEventArgs e)
         {
-            LogException("Dispatcher.UnhandledException", e.Exception);
             
             Debug.WriteLine($"UNHANDLED ERROR: {e.Exception.Message}");
             Debug.WriteLine(e.Exception.StackTrace);
@@ -68,10 +57,6 @@ namespace VPM
             
             // Mark as handled to prevent crash
             e.Handled = true;
-        }
-
-        private void LogException(string source, Exception exception)
-        {
         }
 
         /// <summary>
