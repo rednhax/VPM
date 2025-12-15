@@ -400,7 +400,7 @@ namespace VPM.Services
 
         #region Private Methods
 
-        private void UpdateSortingState(string tableKey, object sortOption, bool isAscending)
+        public void UpdateSortingState(string tableKey, object sortOption, bool isAscending)
         {
             _sortingStates[tableKey] = new SortingState(sortOption, isAscending);
             

@@ -1078,38 +1078,41 @@ namespace VPM
                             destVisibility[dest.Name] = dest.ShowInMainTable;
                     }
                     
-                    // Filter and create package items
-                    var filteredItems = _packageManager.PackageMetadata
+                    // Filter and collect keys
+                    var filteredKeys = _packageManager.PackageMetadata
                         .AsParallel()
                         .WithCancellation(filterToken)
                         .WithDegreeOfParallelism(Environment.ProcessorCount)
                         .Where(kvp => ShouldIncludePackage(kvp.Value, kvp.Key, filterSnapshot, destVisibility))
-                        .Select(kvp => GetOrCreatePackageItem(kvp.Key, kvp.Value, dependentsCount))
+                        .Select(kvp => kvp.Key)
                         .ToList();
 
                     var processedCount = _packageManager.PackageMetadata.Count;
                     
                     // Handle duplicate filtering
-                    List<PackageItem> allPackages;
+                    List<string> allKeys;
                     if (_filterManager.FilterDuplicates)
                     {
-                        allPackages = new List<PackageItem>();
+                        allKeys = new List<string>();
                         var seenDuplicates = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-                        foreach (var item in filteredItems)
+                        foreach (var key in filteredKeys)
                         {
-                            if (item.DuplicateLocationCount > 1)
+                            if (_packageManager.PackageMetadata.TryGetValue(key, out var metadata))
                             {
-                                var parts = item.Name.Split('.');
-                                var basePackageName = parts.Length >= 3 ? $"{parts[0]}.{parts[1]}" : item.Name;
-                                if (seenDuplicates.Contains(basePackageName)) continue;
-                                seenDuplicates.Add(basePackageName);
+                                if (metadata.DuplicateLocationCount > 1)
+                                {
+                                    var parts = metadata.PackageName.Split('.');
+                                    var basePackageName = parts.Length >= 3 ? $"{parts[0]}.{parts[1]}" : metadata.PackageName;
+                                    if (seenDuplicates.Contains(basePackageName)) continue;
+                                    seenDuplicates.Add(basePackageName);
+                                }
+                                allKeys.Add(key);
                             }
-                            allPackages.Add(item);
                         }
                     }
                     else
                     {
-                        allPackages = filteredItems;
+                        allKeys = filteredKeys;
                     }
 
                     if (filterToken.IsCancellationRequested) return;
@@ -1122,17 +1125,20 @@ namespace VPM
                         _suppressSelectionEvents = true;
                         try
                         {
+                            // Update dependents count cache
+                            _currentDependentsCounts = dependentsCount;
+
                             if (PackagesView != null)
                             {
                                 using (PackagesView.DeferRefresh())
                                 {
-                                    Packages.ReplaceAll(allPackages);
+                                    Packages.SetKeys(allKeys);
                                     PackagesView.Filter = null;
                                 }
                             }
                             else
                             {
-                                Packages.ReplaceAll(allPackages);
+                                Packages.SetKeys(allKeys);
                             }
                         }
                         finally
@@ -1193,9 +1199,9 @@ namespace VPM
                         }), DispatcherPriority.ContextIdle);
 
                         // Update status
-                        var uniquePackageCount = allPackages
-                            .Select(p => p.Name.EndsWith("#archived", StringComparison.OrdinalIgnoreCase) 
-                                ? p.Name.Substring(0, p.Name.Length - 9) : p.Name)
+                        var uniquePackageCount = allKeys
+                            .Select(k => k.EndsWith("#archived", StringComparison.OrdinalIgnoreCase) 
+                                ? k.Substring(0, k.Length - 9) : k)
                             .Distinct(StringComparer.OrdinalIgnoreCase).Count();
                         
                         var uniqueTotalCount = _packageManager.PackageMetadata.Keys
@@ -1203,9 +1209,9 @@ namespace VPM
                                 ? k.Substring(0, k.Length - 9) : k)
                             .Distinct(StringComparer.OrdinalIgnoreCase).Count();
 
-                        SetStatus(allPackages.Count == processedCount
-                            ? $"Showing all {allPackages.Count:N0} entries ({uniquePackageCount:N0} unique packages)"
-                            : $"Showing {allPackages.Count:N0} of {processedCount:N0} entries ({uniquePackageCount:N0} of {uniqueTotalCount:N0} unique packages)");
+                        SetStatus(allKeys.Count == processedCount
+                            ? $"Showing all {allKeys.Count:N0} entries ({uniquePackageCount:N0} unique packages)"
+                            : $"Showing {allKeys.Count:N0} of {processedCount:N0} entries ({uniquePackageCount:N0} of {uniqueTotalCount:N0} unique packages)");
                         
                         // Refresh filter lists AFTER packages are loaded
                         // NOTE: _isLoadingPackages will be set to false at the END of RefreshFilterLists
@@ -1378,13 +1384,42 @@ namespace VPM
             }
             
             // Build matching keys using the same logic as UpdatePackageListAsync
-            var matchingKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var matchingKeys = new List<string>();
             foreach (var kvp in _packageManager.PackageMetadata)
             {
                 if (filterToken.IsCancellationRequested) break;
                 if (ShouldIncludePackage(kvp.Value, kvp.Key, filterSnapshot, destVisibility))
                     matchingKeys.Add(kvp.Key);
             }
+            
+            // Handle duplicate filtering
+            List<string> finalKeys;
+            if (_filterManager.FilterDuplicates)
+            {
+                finalKeys = new List<string>();
+                var seenDuplicates = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                foreach (var key in matchingKeys)
+                {
+                    if (_packageManager.PackageMetadata.TryGetValue(key, out var metadata))
+                    {
+                        if (metadata.DuplicateLocationCount > 1)
+                        {
+                            var parts = metadata.PackageName.Split('.');
+                            var basePackageName = parts.Length >= 3 ? $"{parts[0]}.{parts[1]}" : metadata.PackageName;
+                            if (seenDuplicates.Contains(basePackageName)) continue;
+                            seenDuplicates.Add(basePackageName);
+                        }
+                        finalKeys.Add(key);
+                    }
+                }
+            }
+            else
+            {
+                finalKeys = matchingKeys;
+            }
+            
+            // Sort keys
+            SortPackageKeys(finalKeys);
             
             if (filterToken.IsCancellationRequested) return Task.CompletedTask;
             
@@ -1396,8 +1431,13 @@ namespace VPM
                 {
                     using (PackagesView.DeferRefresh())
                     {
-                        PackagesView.Filter = item => item is PackageItem pkg && matchingKeys.Contains(pkg.MetadataKey);
+                        Packages.SetKeys(finalKeys);
+                        PackagesView.Filter = null;
                     }
+                }
+                else
+                {
+                    Packages.SetKeys(finalKeys);
                 }
                 
                 ReapplySorting();
@@ -1405,16 +1445,16 @@ namespace VPM
                 // Restore selection
                 if (selectedPackageNames.Count > 0 && PackageDataGrid != null)
                 {
-                    foreach (var item in PackagesView)
+                    foreach (var item in Packages)
                     {
-                        if (item is PackageItem pkg && selectedPackageNames.Contains(pkg.Name))
-                            PackageDataGrid.SelectedItems.Add(pkg);
+                        if (selectedPackageNames.Contains(item.Name))
+                            PackageDataGrid.SelectedItems.Add(item);
                     }
                 }
                 
                 // Update status
-                var visibleCount = PackagesView?.Cast<object>().Count() ?? 0;
-                var totalCount = Packages.Count;
+                var visibleCount = Packages.Count;
+                var totalCount = _packageManager.PackageMetadata.Count;
                 SetStatus(totalCount == visibleCount 
                     ? $"Showing all {totalCount:N0} packages"
                     : $"Showing {visibleCount:N0} of {totalCount:N0} packages");
@@ -1429,6 +1469,87 @@ namespace VPM
             }
             
             return Task.CompletedTask;
+        }
+
+        private void SortPackageKeys(List<string> keys)
+        {
+            var sortState = _sortingManager?.GetSortingState("Packages");
+            if (sortState?.CurrentSortOption is PackageSortOption sortOption)
+            {
+                bool isAscending = sortState.IsAscending;
+                
+                keys.Sort((keyA, keyB) => 
+                {
+                    if (!_packageManager.PackageMetadata.TryGetValue(keyA, out var metaA) ||
+                        !_packageManager.PackageMetadata.TryGetValue(keyB, out var metaB))
+                    {
+                        return 0;
+                    }
+                    
+                    int result = 0;
+                    switch (sortOption)
+                    {
+                        case PackageSortOption.Name:
+                            result = StringComparer.OrdinalIgnoreCase.Compare(metaA.PackageName, metaB.PackageName);
+                            break;
+                        case PackageSortOption.Date:
+                            result = Nullable.Compare(metaA.ModifiedDate, metaB.ModifiedDate);
+                            break;
+                        case PackageSortOption.Size:
+                            result = metaA.FileSize.CompareTo(metaB.FileSize);
+                            break;
+                        case PackageSortOption.Dependencies:
+                            result = (metaA.Dependencies?.Count ?? 0).CompareTo(metaB.Dependencies?.Count ?? 0);
+                            break;
+                        case PackageSortOption.Dependents:
+                            int depA = _currentDependentsCounts.TryGetValue(metaA.PackageName, out var cA) ? cA : 0;
+                            int depB = _currentDependentsCounts.TryGetValue(metaB.PackageName, out var cB) ? cB : 0;
+                            result = depA.CompareTo(depB);
+                            break;
+                        case PackageSortOption.Status:
+                            result = StringComparer.OrdinalIgnoreCase.Compare(metaA.Status, metaB.Status);
+                            break;
+                        case PackageSortOption.Morphs:
+                            result = metaA.MorphCount.CompareTo(metaB.MorphCount);
+                            break;
+                        case PackageSortOption.Hair:
+                            result = metaA.HairCount.CompareTo(metaB.HairCount);
+                            break;
+                        case PackageSortOption.Clothing:
+                            result = metaA.ClothingCount.CompareTo(metaB.ClothingCount);
+                            break;
+                        case PackageSortOption.Scenes:
+                            result = metaA.SceneCount.CompareTo(metaB.SceneCount);
+                            break;
+                        case PackageSortOption.Looks:
+                            result = metaA.LooksCount.CompareTo(metaB.LooksCount);
+                            break;
+                        case PackageSortOption.Poses:
+                            result = metaA.PosesCount.CompareTo(metaB.PosesCount);
+                            break;
+                        case PackageSortOption.Assets:
+                            result = metaA.AssetsCount.CompareTo(metaB.AssetsCount);
+                            break;
+                        case PackageSortOption.Scripts:
+                            result = metaA.ScriptsCount.CompareTo(metaB.ScriptsCount);
+                            break;
+                        case PackageSortOption.Plugins:
+                            result = metaA.PluginsCount.CompareTo(metaB.PluginsCount);
+                            break;
+                        case PackageSortOption.SubScenes:
+                            result = metaA.SubScenesCount.CompareTo(metaB.SubScenesCount);
+                            break;
+                        case PackageSortOption.Skins:
+                            result = metaA.SkinsCount.CompareTo(metaB.SkinsCount);
+                            break;
+                        default:
+                            result = StringComparer.OrdinalIgnoreCase.Compare(metaA.PackageName, metaB.PackageName);
+                            break;
+                    }
+                    
+                    return isAscending ? result : -result;
+                });
+            }
         }
 
         private void RefreshFilterLists()

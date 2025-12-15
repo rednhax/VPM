@@ -863,6 +863,28 @@ namespace VPM.Services
                 
                 // Check memory pressure before loading new images
                 CheckMemoryPressure();
+
+                // OPTIMIZATION: Check memory cache first
+                // This benefits callers like LoadImagesForPreviewAsync that don't check memory cache beforehand
+                var pathsToCheck = new List<string>();
+                foreach (var path in internalPaths)
+                {
+                    var cacheKey = $"{varPath}::{path}";
+                    var memCached = GetCachedImage(cacheKey);
+                    if (memCached != null)
+                    {
+                        results[path] = memCached;
+                    }
+                    else
+                    {
+                        pathsToCheck.Add(path);
+                    }
+                }
+
+                if (pathsToCheck.Count == 0)
+                {
+                    return results;
+                }
             
                 // Get VAR file signature for disk cache
                 long fileSize = 0;
@@ -882,19 +904,22 @@ namespace VPM.Services
                 var uncachedPaths = new List<string>();
                 if (fileSize > 0 && lastWriteTicks > 0)
                 {
-                    var (cachedImages, uncached) = _diskCache.TryGetCachedBatch(varPath, internalPaths, fileSize, lastWriteTicks);
+                    var (cachedImages, uncached) = _diskCache.TryGetCachedBatch(varPath, pathsToCheck, fileSize, lastWriteTicks);
                     
                     // Add cached images to results
                     foreach (var (path, bitmap) in cachedImages)
                     {
                         results[path] = bitmap;
+                        // Also add to memory cache for faster subsequent access
+                        var cacheKey = $"{varPath}::{path}";
+                        AddImageToCache(cacheKey, bitmap);
                     }
                     
                     uncachedPaths = uncached;
                 }
                 else
                 {
-                    uncachedPaths.AddRange(internalPaths);
+                    uncachedPaths.AddRange(pathsToCheck);
                 }
 
                 // Load uncached images from VAR
@@ -939,6 +964,10 @@ namespace VPM.Services
                             {
                                 _diskCache.TrySaveToCache(varPath, internalPath, fileSize, lastWriteTicks, bitmap);
                             }
+
+                            // Add to memory cache
+                            var cacheKey = $"{varPath}::{internalPath}";
+                            AddImageToCache(cacheKey, bitmap);
                         }
                     }
                     catch
@@ -1009,7 +1038,7 @@ namespace VPM.Services
                 
                 var fileInfo = new FileInfo(varPath);
                 long fileSize = fileInfo.Length;
-                long lastWriteTicks = fileInfo.LastWriteTime.Ticks;
+                long lastWriteTicks = fileInfo.LastWriteTimeUtc.Ticks;
 
                 // 2. Check Binary/Disk Cache (second fastest)
                 // This avoids opening the archive if we already have the processed image

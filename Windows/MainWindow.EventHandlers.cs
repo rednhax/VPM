@@ -4665,6 +4665,7 @@ namespace VPM
                         {
                             var newPackage = new PackageItem
                             {
+                                MetadataKey = metadata.PackageName,
                                 Name = metadata.PackageName,
                                 Status = "Loaded",
                                 Creator = metadata.CreatorName ?? "Unknown",

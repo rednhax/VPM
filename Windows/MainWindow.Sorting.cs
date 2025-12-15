@@ -249,46 +249,10 @@ namespace VPM
         {
             if (PackagesView == null) return;
             
-            try
-            {
-                string propertyName = sortOption switch
-                {
-                    PackageSortOption.Name => "DisplayName",
-                    PackageSortOption.Date => "ModifiedDate",
-                    PackageSortOption.Size => "FileSize",
-                    PackageSortOption.Dependencies => "DependencyCount",
-                    PackageSortOption.Dependents => "DependentsCount",
-                    PackageSortOption.Status => "Status",
-                    PackageSortOption.Morphs => "MorphCount",
-                    PackageSortOption.Hair => "HairCount",
-                    PackageSortOption.Clothing => "ClothingCount",
-                    PackageSortOption.Scenes => "SceneCount",
-                    PackageSortOption.Looks => "LooksCount",
-                    PackageSortOption.Poses => "PosesCount",
-                    PackageSortOption.Assets => "AssetsCount",
-                    PackageSortOption.Scripts => "ScriptsCount",
-                    PackageSortOption.Plugins => "PluginsCount",
-                    PackageSortOption.SubScenes => "SubScenesCount",
-                    PackageSortOption.Skins => "SkinsCount",
-                    _ => "DisplayName"
-                };
-                
-                using (PackagesView.DeferRefresh())
-                {
-                    PackagesView.SortDescriptions.Clear();
-                    PackagesView.SortDescriptions.Add(new System.ComponentModel.SortDescription(
-                        propertyName,
-                        isAscending ? System.ComponentModel.ListSortDirection.Ascending : System.ComponentModel.ListSortDirection.Descending));
-                }
-                
-                // Update button tooltip
-                var directionText = isAscending ? "†‘" : "†“";
-                PackageSortButton.ToolTip = $"Sort packages (Current: {sortOption.GetDescription()} {directionText})";
-            }
-            catch (Exception)
-            {
-                // Error reapplying package sorting - silently handled
-            }
+            // If using VirtualPackageList, sorting is handled during key generation in ApplyViewFilterAsync
+            // Just update the button tooltip
+            var directionText = isAscending ? "↑" : "↓";
+            PackageSortButton.ToolTip = $"Sort packages (Current: {sortOption.GetDescription()} {directionText})";
         }
         
         /// <summary>
@@ -375,52 +339,28 @@ namespace VPM
         {
             if (_sortingManager == null || PackagesView == null) return;
 
-            try
+            // Handle VirtualPackageList
+            // Since Packages is strongly typed as VirtualPackageList, we always use this path
+            var currentState = _sortingManager.GetSortingState("Packages");
+            bool isAscending;
+            
+            if (currentState?.CurrentSortOption?.Equals(sortOption) == true)
             {
-                // Get property name for sorting
-                string propertyName = sortOption switch
-                {
-                    PackageSortOption.Name => "DisplayName",
-                    PackageSortOption.Date => "ModifiedDate",
-                    PackageSortOption.Size => "FileSize",
-                    PackageSortOption.Dependencies => "DependencyCount",
-                    PackageSortOption.Dependents => "DependentsCount",
-                    PackageSortOption.Status => "Status",
-                    PackageSortOption.Morphs => "MorphCount",
-                    PackageSortOption.Hair => "HairCount",
-                    PackageSortOption.Clothing => "ClothingCount",
-                    PackageSortOption.Scenes => "SceneCount",
-                    PackageSortOption.Looks => "LooksCount",
-                    PackageSortOption.Poses => "PosesCount",
-                    PackageSortOption.Assets => "AssetsCount",
-                    PackageSortOption.Scripts => "ScriptsCount",
-                    PackageSortOption.Plugins => "PluginsCount",
-                    PackageSortOption.SubScenes => "SubScenesCount",
-                    PackageSortOption.Skins => "SkinsCount",
-                    _ => "DisplayName"
-                };
-
-                // Update sorting manager state first to track direction
-                _sortingManager.ApplyPackageSorting(Packages, sortOption);
-                var direction = _sortingManager.GetSortingState("Packages")?.IsAscending == true;
-
-                // Apply sorting to the CollectionView
-                using (PackagesView.DeferRefresh())
-                {
-                    PackagesView.SortDescriptions.Clear();
-                    PackagesView.SortDescriptions.Add(new System.ComponentModel.SortDescription(
-                        propertyName,
-                        direction ? System.ComponentModel.ListSortDirection.Ascending : System.ComponentModel.ListSortDirection.Descending));
-                }
-
-                // Update button tooltip to show current sort
-                var directionText = direction ? "↑" : "↓";
-                PackageSortButton.ToolTip = $"Sort (Current: {sortOption.GetDescription()} {directionText}) - Scroll to navigate";
+                isAscending = !currentState.IsAscending;
             }
-            catch (Exception)
+            else
             {
-                // Error applying package sorting - silently handled
+                isAscending = sortOption == PackageSortOption.Name || sortOption == PackageSortOption.Status;
             }
+            
+            _sortingManager.UpdateSortingState("Packages", sortOption, isAscending);
+            
+            // Trigger refresh
+            _ = UpdatePackageListAsync(false);
+            
+            // Update tooltip
+            var directionText = isAscending ? "↑" : "↓";
+            PackageSortButton.ToolTip = $"Sort (Current: {sortOption.GetDescription()} {directionText}) - Scroll to navigate";
         }
 
         private void ClearPackageSorting()
@@ -430,7 +370,10 @@ namespace VPM
                 _sortingManager?.ClearSorting("Packages");
                 PackageSortButton.ToolTip = "Sort (Scroll to navigate)";
 
-                // Clear sorting from CollectionView
+                // Trigger refresh to reset sorting in VirtualPackageList
+                _ = UpdatePackageListAsync(false);
+
+                // Clear sorting from CollectionView (just in case)
                 if (PackagesView != null)
                 {
                     using (PackagesView.DeferRefresh())

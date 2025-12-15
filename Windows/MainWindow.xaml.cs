@@ -50,7 +50,7 @@ namespace VPM
         private const double UI_CORNER_RADIUS = 4.0;
         
         // Collections
-        public OptimizedObservableCollection<PackageItem> Packages { get; set; }
+        public VirtualPackageList Packages { get; set; }
         public AsyncObservableCollection<DependencyItem> Dependencies { get; set; }
         public OptimizedObservableCollection<SceneItem> Scenes { get; set; }
         public OptimizedObservableCollection<CustomAtomItem> CustomAtomItems { get; set; }
@@ -104,6 +104,9 @@ namespace VPM
         // Cancellation token for image loading operations
         private System.Threading.CancellationTokenSource _imageLoadingCts;
         
+        // Cache for dependents counts
+        private Dictionary<string, int> _currentDependentsCounts = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        
 
         
         // Animation configuration - reduced for better responsiveness
@@ -126,7 +129,14 @@ namespace VPM
             }
 
             // Initialize collections
-            Packages = [];
+            Packages = new VirtualPackageList(key => 
+            {
+                if (_packageManager?.PackageMetadata.TryGetValue(key, out var metadata) == true)
+                {
+                    return GetOrCreatePackageItem(key, metadata, _currentDependentsCounts);
+                }
+                return null;
+            });
             Dependencies = [];
             Scenes = [];
             CustomAtomItems = [];

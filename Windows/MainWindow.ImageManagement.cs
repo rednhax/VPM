@@ -859,6 +859,27 @@ namespace VPM
                                 statusBrush.Freeze();
                             });
 
+                            // OPTIMIZATION: Batch check extraction status for all images in this package
+                            // This avoids opening the VAR archive repeatedly for each image
+                            Dictionary<string, bool> extractionStatus = null;
+                            if (!string.IsNullOrEmpty(gameFolder))
+                            {
+                                try
+                                {
+                                    var internalPaths = locations.Select(l => l.InternalPath).ToList();
+                                    // Use the first location's VarFilePath (they should all be the same for one package)
+                                    var varPath = locations[0].VarFilePath;
+                                    extractionStatus = VPM.Services.VarContentExtractor.BatchCheckExtractionStatus(
+                                        varPath, 
+                                        internalPaths, 
+                                        gameFolder);
+                                }
+                                catch (Exception ex)
+                                {
+                                    System.Diagnostics.Debug.WriteLine($"[ExtCheck-Batch-ERROR] {ex.Message}");
+                                }
+                            }
+
                             foreach (var location in locations)
                             {
                                 if (cancellationToken.IsCancellationRequested) 
@@ -866,22 +887,25 @@ namespace VPM
 
                                 totalImagesFound++;
 
-                                // Check file existence in background
+                                // Check file existence in background using batch result
                                 bool isExtracted = false;
-                                if (!string.IsNullOrEmpty(gameFolder))
+                                if (extractionStatus != null && extractionStatus.TryGetValue(location.InternalPath, out var status))
                                 {
+                                    isExtracted = status;
+                                }
+                                else if (!string.IsNullOrEmpty(gameFolder) && extractionStatus == null)
+                                {
+                                    // Fallback to individual check if batch failed (should rarely happen)
                                     try
                                     {
-                                        // Use VarContentExtractor to determine extraction status
-                                        // This ensures consistency with the deletion logic
                                         isExtracted = VPM.Services.VarContentExtractor.AreRelatedFilesExtracted(
                                             location.VarFilePath, 
                                             location.InternalPath, 
                                             gameFolder);
                                     }
-                                    catch (Exception ex)
+                                    catch
                                     {
-                                        System.Diagnostics.Debug.WriteLine($"[ExtCheck-ERROR] {ex.Message}");
+                                        // Ignore errors
                                     }
                                 }
 

@@ -49,6 +49,20 @@ namespace VPM.Models
         // Store the metadata dictionary key for fast lookup
         public string MetadataKey { get; set; } = "";
 
+        public override bool Equals(object obj)
+        {
+            if (obj is PackageItem other)
+            {
+                return string.Equals(MetadataKey, other.MetadataKey, StringComparison.OrdinalIgnoreCase);
+            }
+            return false;
+        }
+
+        public override int GetHashCode()
+        {
+            return MetadataKey?.GetHashCode() ?? 0;
+        }
+
         public string Name
         {
             get => _name ?? "";

@@ -658,6 +658,120 @@ namespace VPM.Services
         }
 
         /// <summary>
+        /// Checks if all related files already exist in the game folder for a batch of images.
+        /// Opens the archive only once for the entire batch.
+        /// </summary>
+        public static Dictionary<string, bool> BatchCheckExtractionStatus(string varFilePath, List<string> internalImagePaths, string gameFolder)
+        {
+            var results = new Dictionary<string, bool>();
+            
+            if (!File.Exists(varFilePath))
+            {
+                foreach (var path in internalImagePaths) results[path] = false;
+                return results;
+            }
+
+            if (internalImagePaths == null || internalImagePaths.Count == 0 || string.IsNullOrWhiteSpace(gameFolder))
+            {
+                return results;
+            }
+
+            try
+            {
+                using var archive = SharpCompressHelper.OpenForRead(varFilePath);
+                var entries = archive.Entries.ToList(); // Read all entries once
+
+                foreach (var internalImagePath in internalImagePaths)
+                {
+                    if (string.IsNullOrWhiteSpace(internalImagePath))
+                    {
+                        results[internalImagePath] = false;
+                        continue;
+                    }
+
+                    // Get the base name without extension
+                    var baseName = Path.GetFileNameWithoutExtension(internalImagePath);
+                    // For archive paths, use forward slash extraction
+                    var directoryPath = internalImagePath.Contains('/') 
+                        ? internalImagePath.Substring(0, internalImagePath.LastIndexOf('/'))
+                        : "";
+
+                    // Find all files in the archive with the same base name
+                    var relatedEntries = entries
+                        .Where(e => !e.Key.EndsWith("/"))
+                        .Where(e =>
+                        {
+                            var entryBaseName = Path.GetFileNameWithoutExtension(e.Key);
+                            var entryDir = e.Key.Contains('/') 
+                                ? e.Key.Substring(0, e.Key.LastIndexOf('/'))
+                                : "";
+
+                            return entryBaseName.Equals(baseName, StringComparison.OrdinalIgnoreCase) &&
+                                   entryDir.Equals(directoryPath, StringComparison.OrdinalIgnoreCase);
+                        })
+                        .ToList();
+
+                    if (relatedEntries.Count == 0)
+                    {
+                        results[internalImagePath] = false;
+                        continue;
+                    }
+
+                    // Check for .json (Scene files)
+                    var jsonEntry = relatedEntries.FirstOrDefault(e => e.Key.EndsWith(".json", StringComparison.OrdinalIgnoreCase));
+                    if (jsonEntry != null)
+                    {
+                        var targetPath = Path.Combine(gameFolder, jsonEntry.Key.Replace('/', Path.DirectorySeparatorChar));
+                        results[internalImagePath] = File.Exists(targetPath);
+                        continue;
+                    }
+
+                    // Check for .vap (Appearance files)
+                    var vapEntry = relatedEntries.FirstOrDefault(e => e.Key.EndsWith(".vap", StringComparison.OrdinalIgnoreCase));
+                    if (vapEntry != null)
+                    {
+                        var targetPath = Path.Combine(gameFolder, vapEntry.Key.Replace('/', Path.DirectorySeparatorChar));
+                        results[internalImagePath] = File.Exists(targetPath);
+                        continue;
+                    }
+
+                    // Check for .vaj (Hair/Clothing files)
+                    var vajEntry = relatedEntries.FirstOrDefault(e => e.Key.EndsWith(".vaj", StringComparison.OrdinalIgnoreCase));
+                    if (vajEntry != null)
+                    {
+                        var targetPath = Path.Combine(gameFolder, vajEntry.Key.Replace('/', Path.DirectorySeparatorChar));
+                        results[internalImagePath] = File.Exists(targetPath);
+                        continue;
+                    }
+
+                    // Check for .jpg (Preview image)
+                    var jpgEntry = relatedEntries.FirstOrDefault(e => 
+                        e.Key.EndsWith(".jpg", StringComparison.OrdinalIgnoreCase) ||
+                        e.Key.EndsWith(".jpeg", StringComparison.OrdinalIgnoreCase) ||
+                        e.Key.EndsWith(".png", StringComparison.OrdinalIgnoreCase));
+                    if (jpgEntry != null)
+                    {
+                        var targetPath = Path.Combine(gameFolder, jpgEntry.Key.Replace('/', Path.DirectorySeparatorChar));
+                        results[internalImagePath] = File.Exists(targetPath);
+                        continue;
+                    }
+
+                    results[internalImagePath] = false;
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Error checking extracted files batch: {ex.Message}");
+                foreach (var path in internalImagePaths) 
+                {
+                    if (!results.ContainsKey(path)) results[path] = false;
+                }
+            }
+
+            return results;
+        }
+
+        /// <summary>
         /// Checks if all related files already exist in the game folder
         /// </summary>
         /// <param name="varFilePath">Full path to the .var archive</param>

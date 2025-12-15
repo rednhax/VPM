@@ -91,7 +91,8 @@ namespace VPM.Services
         private string GetPackageCacheKey(string varPath, long fileSize, long lastWriteTicks)
         {
             // Create a unique key from the signature
-            return $"{varPath}|{fileSize}|{lastWriteTicks}";
+            // Normalize path to lower case to avoid casing issues on Windows
+            return $"{varPath.ToLowerInvariant()}|{fileSize}|{lastWriteTicks}";
         }
 
         /// <summary>
@@ -657,8 +658,9 @@ namespace VPM.Services
                 
                 var tempPath = _cacheFilePath + ".tmp";
                 
-                // Collect only pending writes (not existing data from disk)
+                // Collect pending writes AND existing index data
                 Dictionary<string, PackageImageCache> pendingData;
+                Dictionary<string, PackageImageIndex> existingIndexData;
                 
                 lock (_cacheLock)
                 {
@@ -674,58 +676,140 @@ namespace VPM.Services
                         cache.ImagePaths = new List<string>(kvp.Value.ImagePaths);
                         pendingData[kvp.Key] = cache;
                     }
+
+                    // Copy existing index
+                    existingIndexData = new Dictionary<string, PackageImageIndex>(_indexCache.Count);
+                    foreach(var kvp in _indexCache)
+                    {
+                         var index = new PackageImageIndex();
+                         index.ImagePaths = new List<string>(kvp.Value.ImagePaths);
+                         foreach(var offsetKvp in kvp.Value.ImageOffsets)
+                         {
+                             index.ImageOffsets[offsetKvp.Key] = new ImageIndexEntry 
+                             { 
+                                 FileOffset = offsetKvp.Value.FileOffset, 
+                                 DataLength = offsetKvp.Value.DataLength 
+                             };
+                         }
+                         existingIndexData[kvp.Key] = index;
+                    }
                 }
 
-                // Write only pending data to temp file
+                // Write merged data to temp file
                 using (var stream = new FileStream(tempPath, FileMode.Create, FileAccess.Write, FileShare.None))
                 using (var writer = new BinaryWriter(stream))
                 {
                     // Write header
                     writer.Write(0x56504D49); // "VPMI" magic
                     writer.Write(CACHE_VERSION); // Version 3
-                    writer.Write(pendingData.Count);
+                    
+                    // Get all unique package keys
+                    var allPackageKeys = existingIndexData.Keys.Union(pendingData.Keys).ToList();
+                    writer.Write(allPackageKeys.Count);
 
                     // Track where we'll write image data (after all index entries)
-                    var indexEntries = new List<(string packageKey, string imagePath, long offsetPosition)>();
+                    // Tuple: PackageKey, ImagePath, OffsetPositionInFile, IsPending, ExistingOffset, Length, PendingData
+                    var indexEntries = new List<(string packageKey, string imagePath, long offsetPosition, bool isPending, long existingOffset, int length, byte[] pendingData)>();
                     
                     // First pass: write index structure with placeholder offsets
-                    foreach (var package in pendingData)
+                    foreach (var packageKey in allPackageKeys)
                     {
                         // Write package key
-                        var keyBytes = Encoding.UTF8.GetBytes(package.Key);
+                        var keyBytes = Encoding.UTF8.GetBytes(packageKey);
                         writer.Write(keyBytes.Length);
                         writer.Write(keyBytes);
 
-                        // Write image count
-                        writer.Write(package.Value.Images.Count);
-
-                        foreach (var image in package.Value.Images)
+                        // Get images from both sources
+                        var images = new Dictionary<string, (bool isPending, long existingOffset, int length, byte[] data)>();
+                        
+                        // Add existing images first
+                        if (existingIndexData.TryGetValue(packageKey, out var existingIndex))
                         {
+                            foreach (var imgPath in existingIndex.ImagePaths)
+                            {
+                                if (existingIndex.ImageOffsets.TryGetValue(imgPath, out var entry))
+                                {
+                                    images[imgPath] = (false, entry.FileOffset, entry.DataLength, null);
+                                }
+                            }
+                        }
+                        
+                        // Overwrite/Add pending images
+                        if (pendingData.TryGetValue(packageKey, out var pendingCache))
+                        {
+                            foreach (var imgKvp in pendingCache.Images)
+                            {
+                                images[imgKvp.Key] = (true, 0, imgKvp.Value.Length, imgKvp.Value);
+                            }
+                        }
+
+                        // Write image count
+                        writer.Write(images.Count);
+
+                        foreach (var imgKvp in images)
+                        {
+                            var imagePath = imgKvp.Key;
+                            var info = imgKvp.Value;
+
                             // Write image path
-                            var pathBytes = Encoding.UTF8.GetBytes(image.Key);
+                            var pathBytes = Encoding.UTF8.GetBytes(imagePath);
                             writer.Write(pathBytes.Length);
                             writer.Write(pathBytes);
 
                             // Remember position for offset (will update later)
-                            indexEntries.Add((package.Key, image.Key, stream.Position));
+                            indexEntries.Add((packageKey, imagePath, stream.Position, info.isPending, info.existingOffset, info.length, info.data));
                             
                             // Write placeholder offset and length
                             writer.Write(0L); // FileOffset placeholder
-                            writer.Write(image.Value.Length); // DataLength
+                            writer.Write(info.length); // DataLength
                         }
                     }
                     
                     // Second pass: write image data and update offsets
-                    var entryIndex = 0;
-                    foreach (var package in pendingData)
+                    // We need to read from the old file for existing images
+                    
+                    // Open old file for reading if we have existing images
+                    FileStream oldFileStream = null;
+                    try 
                     {
-                        foreach (var image in package.Value.Images)
+                        if (File.Exists(_cacheFilePath))
                         {
-                            var entry = indexEntries[entryIndex++];
+                            oldFileStream = new FileStream(_cacheFilePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+                        }
+
+                        foreach (var entry in indexEntries)
+                        {
                             var dataOffset = stream.Position;
                             
-                            // Write image data
-                            writer.Write(image.Value);
+                            if (entry.isPending)
+                            {
+                                // Write pending data
+                                writer.Write(entry.pendingData);
+                            }
+                            else
+                            {
+                                // Read from old file and write to new file
+                                if (oldFileStream != null)
+                                {
+                                    oldFileStream.Seek(entry.existingOffset, SeekOrigin.Begin);
+                                    var buffer = new byte[entry.length];
+                                    var bytesRead = oldFileStream.Read(buffer, 0, entry.length);
+                                    if (bytesRead == entry.length)
+                                    {
+                                        writer.Write(buffer);
+                                    }
+                                    else
+                                    {
+                                        // Failed to read? Write zeros to maintain structure
+                                        writer.Write(new byte[entry.length]);
+                                    }
+                                }
+                                else
+                                {
+                                     // Should not happen if isPending is false
+                                     writer.Write(new byte[entry.length]);
+                                }
+                            }
                             
                             // Go back and update the offset
                             var currentPos = stream.Position;
@@ -733,6 +817,10 @@ namespace VPM.Services
                             writer.Write(dataOffset);
                             stream.Seek(currentPos, SeekOrigin.Begin);
                         }
+                    }
+                    finally
+                    {
+                        oldFileStream?.Dispose();
                     }
                 }
 
@@ -754,8 +842,9 @@ namespace VPM.Services
                 // Reload index from new file
                 LoadCacheIndex();
             }
-            catch (Exception)
+            catch (Exception ex)
             {
+                System.Diagnostics.Debug.WriteLine($"[ImageDiskCache] Save error: {ex.Message}");
             }
         }
 
