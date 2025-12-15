@@ -3189,34 +3189,47 @@ namespace VPM.Windows
                 foreach (var update in updatesAvailable)
                 {
                     var packageKey = update.packageGroup + ".latest";
+                    var filename = $"{update.packageGroup}.{update.hubVersion}.var";
+                    var downloadUrl = "";
+                    var fileSize = 0;
+                    var latestUrl = "";
+                    var hasMetadata = false;
+                    
                     if (hubPackages.TryGetValue(packageKey, out var hubPackage) && hubPackage != null)
                     {
-                        var downloadUrl = !string.IsNullOrEmpty(hubPackage.LatestUrl) 
+                        hasMetadata = true;
+                        downloadUrl = !string.IsNullOrEmpty(hubPackage.LatestUrl) 
                             ? hubPackage.LatestUrl 
                             : hubPackage.DownloadUrl;
                         
-                        var filename = hubPackage.PackageName ?? $"{update.packageGroup}.{update.hubVersion}.var";
+                        if (!string.IsNullOrEmpty(hubPackage.PackageName))
+                            filename = hubPackage.PackageName;
                         
-                        // Skip if filename is null or empty
-                        if (string.IsNullOrEmpty(filename))
-                            continue;
-                            
-                        var vm = new HubFileViewModel
-                        {
-                            Filename = filename,
-                            FileSize = hubPackage.FileSize,
-                            DownloadUrl = downloadUrl,
-                            LatestUrl = hubPackage.LatestUrl,
-                            Status = $"Update {update.localVersion} → {update.hubVersion}",
-                            StatusColor = new SolidColorBrush(Colors.Orange),
-                            CanDownload = !string.IsNullOrEmpty(downloadUrl),
-                            ButtonText = "⬆",
-                            HasUpdate = true,
-                            IsInstalled = true
-                        };
-                        
-                        _currentFiles.Add(vm);
+                        fileSize = (int)hubPackage.FileSize;
+                        latestUrl = hubPackage.LatestUrl;
                     }
+                    
+                    var statusColor = hasMetadata 
+                        ? new SolidColorBrush(Colors.Orange)
+                        : new SolidColorBrush(Colors.Gray);
+                    
+                    var vm = new HubFileViewModel
+                    {
+                        Filename = filename,
+                        FileSize = fileSize,
+                        DownloadUrl = downloadUrl,
+                        LatestUrl = latestUrl,
+                        Status = hasMetadata
+                            ? $"Update {update.localVersion} → {update.hubVersion}"
+                            : $"Update available ({update.localVersion} → {update.hubVersion})",
+                        StatusColor = statusColor,
+                        CanDownload = !string.IsNullOrEmpty(downloadUrl),
+                        ButtonText = "⬆",
+                        HasUpdate = true,
+                        IsInstalled = true
+                    };
+                    
+                    _currentFiles.Add(vm);
                 }
                 
                 // Update UI

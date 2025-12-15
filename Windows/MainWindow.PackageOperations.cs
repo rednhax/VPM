@@ -807,20 +807,10 @@ namespace VPM
 
                     if (successfullyLoaded.Count > 0)
                     {
-                        await BulkUpdatePackageStatus(successfullyLoaded, "Loaded");
-                        
                         // Refresh package status index to reflect newly loaded packages
                         _packageFileManager?.RefreshPackageStatusIndex(force: true);
                         
-                        // Refresh the dependency display to show updated statuses
-                        if (PackageDataGrid?.SelectedItems?.Count > 0)
-                        {
-                            var selectedPackage = PackageDataGrid.SelectedItems[0] as PackageItem;
-                            if (selectedPackage != null)
-                            {
-                                DisplayDependencies(selectedPackage);
-                            }
-                        }
+                        await BulkUpdatePackageStatus(successfullyLoaded, "Loaded");
                     }
 
                     // Refresh image grid to show newly loaded dependencies
@@ -1749,68 +1739,80 @@ namespace VPM
                     // SELECTION PRESERVATION: Save selections before any updates
                     var savedPackageSelections = PreserveDataGridSelections();
                     var savedDependencySelections = PreserveDependenciesDataGridSelections();
-                    
-                    // Update packages in main grid - just update the Status property
-                    // PackageItem.Status setter triggers PropertyChanged which updates StatusColor binding
-                    foreach (var package in Packages)
-                    {
-                        if (packageNameSet.Contains(package.Name))
-                        {
-                            package.Status = newStatus;
-                        }
-                    }
+                    _suppressSelectionEvents = true;
 
-                    // Update dependencies in dependencies grid
-                    foreach (var dependency in Dependencies)
+                    try
                     {
-                        if (packageNameSet.Contains(dependency.Name))
+                        // Update packages in main grid - just update the Status property
+                        // PackageItem.Status setter triggers PropertyChanged which updates StatusColor binding
+                        foreach (var package in Packages)
                         {
-                            dependency.Status = newStatus;
-                        }
-                    }
-
-                    // Update PackageMetadata status for reactive filtering
-                    if (_packageManager?.PackageMetadata != null)
-                    {
-                        foreach (var packageName in packageNameSet)
-                        {
-                            // Try both regular and archived keys
-                            if (_packageManager.PackageMetadata.TryGetValue(packageName, out var metadata))
+                            if (packageNameSet.Contains(package.Name))
                             {
-                                metadata.Status = newStatus;
+                                package.Status = newStatus;
                             }
+                        }
+
+                        // Update dependencies in dependencies grid
+                        foreach (var dependency in Dependencies)
+                        {
+                            if (packageNameSet.Contains(dependency.Name))
+                            {
+                                dependency.Status = newStatus;
+                            }
+                        }
+
+                        // Update PackageMetadata status for reactive filtering
+                        if (_packageManager?.PackageMetadata != null)
+                        {
+                            foreach (var packageName in packageNameSet)
+                            {
+                                // Try both regular and archived keys
+                                if (_packageManager.PackageMetadata.TryGetValue(packageName, out var metadata))
+                                {
+                                    metadata.Status = newStatus;
+                                }
+                                
+                                var archivedKey = packageName + "#archived";
+                                if (_packageManager.PackageMetadata.TryGetValue(archivedKey, out var archivedMetadata))
+                                {
+                                    archivedMetadata.Status = newStatus;
+                                }
+                            }
+                        }
+
+                        // Update reactive filter counts without full refresh
+                        if (_reactiveFilterManager != null)
+                        {
+                            _reactiveFilterManager.InvalidateCounts();
                             
-                            var archivedKey = packageName + "#archived";
-                            if (_packageManager.PackageMetadata.TryGetValue(archivedKey, out var archivedMetadata))
+                            if (_cascadeFiltering)
                             {
-                                archivedMetadata.Status = newStatus;
+                                var currentFilters = GetSelectedFilters();
+                                UpdateCascadeFilteringLive(currentFilters);
+                            }
+                            else
+                            {
+                                UpdateFilterCountsLive();
                             }
                         }
-                    }
 
-                    // Update reactive filter counts without full refresh
-                    if (_reactiveFilterManager != null)
-                    {
-                        _reactiveFilterManager.InvalidateCounts();
+                        // NOTE: Do NOT call SyncPackageDisplayWithFilters() here!
+                        // This would remove packages that no longer match filters, causing selection loss.
+                        // Users should see the status change result - they can manually refresh filters if needed.
+
+                        // SELECTION PRESERVATION: Restore selections after all updates
+                        RestoreDataGridSelections(savedPackageSelections);
                         
-                        if (_cascadeFiltering)
-                        {
-                            var currentFilters = GetSelectedFilters();
-                            UpdateCascadeFilteringLive(currentFilters);
-                        }
-                        else
-                        {
-                            UpdateFilterCountsLive();
-                        }
+                        // Ensure dependencies display is updated (re-sorted/filtered)
+                        RefreshDependenciesDisplay();
+                        
+                        RestoreDependenciesDataGridSelections(savedDependencySelections);
                     }
-
-                    // NOTE: Do NOT call SyncPackageDisplayWithFilters() here!
-                    // This would remove packages that no longer match filters, causing selection loss.
-                    // Users should see the status change result - they can manually refresh filters if needed.
-
-                    // SELECTION PRESERVATION: Restore selections after all updates
-                    RestoreDataGridSelections(savedPackageSelections);
-                    RestoreDependenciesDataGridSelections(savedDependencySelections);
+                    finally
+                    {
+                        _suppressSelectionEvents = false;
+                    }
 
                     // Update button states
                     UpdatePackageButtonBar();

@@ -158,6 +158,8 @@ namespace VPM
         private void ExecuteWithPreservedSelections(Action action)
         {
             var selectedNames = PreserveDataGridSelections();
+            var selectedDeps = PreserveDependenciesDataGridSelections();
+            _suppressSelectionEvents = true;
             
             try
             {
@@ -167,7 +169,20 @@ namespace VPM
             {
                 Dispatcher.BeginInvoke(new Action(() =>
                 {
-                    RestoreDataGridSelections(selectedNames);
+                    try
+                    {
+                        RestoreDataGridSelections(selectedNames);
+                        
+                        // Ensure dependencies display is updated to match restored selection
+                        RefreshDependenciesDisplay();
+                        
+                        // Restore dependencies selection
+                        RestoreDependenciesDataGridSelections(selectedDeps);
+                    }
+                    finally
+                    {
+                        _suppressSelectionEvents = false;
+                    }
                 }), System.Windows.Threading.DispatcherPriority.Background);
             }
         }
@@ -180,6 +195,8 @@ namespace VPM
         private async Task ExecuteWithPreservedSelectionsAsync(Func<Task> action)
         {
             var selectedNames = PreserveDataGridSelections();
+            var selectedDeps = PreserveDependenciesDataGridSelections();
+            _suppressSelectionEvents = true;
             
             try
             {
@@ -189,7 +206,20 @@ namespace VPM
             {
                 await Dispatcher.InvokeAsync(() =>
                 {
-                    RestoreDataGridSelections(selectedNames);
+                    try
+                    {
+                        RestoreDataGridSelections(selectedNames);
+                        
+                        // Ensure dependencies display is updated to match restored selection
+                        RefreshDependenciesDisplay();
+                        
+                        // Restore dependencies selection
+                        RestoreDependenciesDataGridSelections(selectedDeps);
+                    }
+                    finally
+                    {
+                        _suppressSelectionEvents = false;
+                    }
                 }, System.Windows.Threading.DispatcherPriority.Background);
             }
         }

@@ -4631,6 +4631,8 @@ namespace VPM
                     {
                         // Preserve package selection before making changes
                         var selectedPackageNames = PreserveDataGridSelections();
+                        var selectedDeps = PreserveDependenciesDataGridSelections();
+                        _suppressSelectionEvents = true;
                         
                         // Update dependency status - try multiple matching strategies
                         var dep = Dependencies.FirstOrDefault(d => 
@@ -4688,7 +4690,16 @@ namespace VPM
                         // Restore package selection after all UI updates
                         await Dispatcher.InvokeAsync(() =>
                         {
-                            RestoreDataGridSelections(selectedPackageNames);
+                            try
+                            {
+                                RestoreDataGridSelections(selectedPackageNames);
+                                RefreshDependenciesDisplay();
+                                RestoreDependenciesDataGridSelections(selectedDeps);
+                            }
+                            finally
+                            {
+                                _suppressSelectionEvents = false;
+                            }
                         }, System.Windows.Threading.DispatcherPriority.Background);
                         
                         // Load preview images for the newly downloaded package

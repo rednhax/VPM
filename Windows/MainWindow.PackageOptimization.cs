@@ -518,6 +518,7 @@ namespace VPM
                     }
                     
                     // Update all package item properties from fresh metadata
+                    List<string> selectedDeps = null;
                     await Dispatcher.InvokeAsync(() =>
                     {
                         string originalStatus = packageItem.Status;
@@ -539,10 +540,19 @@ namespace VPM
                         packageItem.DependencyCount = freshMetadata.Dependencies?.Count ?? 0;
                         
                         var selectedNames = PreserveDataGridSelections();
+                        selectedDeps = PreserveDependenciesDataGridSelections();
+                        _suppressSelectionEvents = true;
                         PackageDataGrid.Items.Refresh();
                         Dispatcher.BeginInvoke(new Action(() =>
                         {
-                            RestoreDataGridSelections(selectedNames);
+                            try
+                            {
+                                RestoreDataGridSelections(selectedNames);
+                            }
+                            finally
+                            {
+                                _suppressSelectionEvents = false;
+                            }
                         }), System.Windows.Threading.DispatcherPriority.Background);
                     });
                     
@@ -564,6 +574,11 @@ namespace VPM
                             {
                                 DisplayMultiplePackageInfo(selectedPackages);
                             }
+                        }
+                        
+                        if (selectedDeps != null)
+                        {
+                            RestoreDependenciesDataGridSelections(selectedDeps);
                         }
                         
                         // Refresh filter lists to update optimization counts
