@@ -54,7 +54,7 @@
                                             Background="{TemplateBinding Background}"
                                             BorderBrush="{TemplateBinding BorderBrush}"
                                             BorderThickness="{TemplateBinding BorderThickness}"
-                                            CornerRadius="3">
+                                            CornerRadius="4">
                                             <Grid>
                                                 <Grid.ColumnDefinitions>
                                                     <ColumnDefinition />
@@ -95,7 +95,7 @@
                                     Background="#FF2B2B2B"
                                     BorderBrush="{StaticResource DarkBorder}"
                                     BorderThickness="1"
-                                    CornerRadius="3">
+                                    CornerRadius="4">
                                     <ScrollViewer Margin="2" SnapsToDevicePixels="True">
                                         <StackPanel IsItemsHost="True" KeyboardNavigation.DirectionalNavigation="Contained" />
                                     </ScrollViewer>
@@ -141,6 +141,19 @@
             <Setter Property="Foreground" Value="{StaticResource DarkText}" />
             <Setter Property="BorderBrush" Value="{StaticResource DarkBorder}" />
             <Setter Property="CaretBrush" Value="{StaticResource DarkText}" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="TextBox">
+                        <Border
+                            Background="{TemplateBinding Background}"
+                            BorderBrush="{TemplateBinding BorderBrush}"
+                            BorderThickness="1"
+                            CornerRadius="4">
+                            <ScrollViewer x:Name="PART_ContentHost" />
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
         </Style>
 
         <!--  Button dark style with white border hover  -->
@@ -148,7 +161,9 @@
             <Setter Property="Background" Value="{StaticResource DarkControlBackground}" />
             <Setter Property="Foreground" Value="{StaticResource DarkText}" />
             <Setter Property="BorderBrush" Value="{StaticResource DarkBorder}" />
-            <Setter Property="Padding" Value="8,4" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="Padding" Value="12,6" />
+            <Setter Property="Height" Value="32" />
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="Button">
@@ -157,8 +172,8 @@
                             Padding="{TemplateBinding Padding}"
                             Background="{TemplateBinding Background}"
                             BorderBrush="{TemplateBinding BorderBrush}"
-                            BorderThickness="1"
-                            CornerRadius="3">
+                            BorderThickness="{TemplateBinding BorderThickness}"
+                            CornerRadius="4">
                             <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
                         </Border>
                         <ControlTemplate.Triggers>
@@ -459,46 +474,98 @@
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*" />
                         <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
                     </Grid.ColumnDefinitions>
 
                     <TextBlock
                         Grid.Column="0"
+                        HorizontalAlignment="Left"
                         VerticalAlignment="Center"
                         FontSize="20"
                         FontWeight="Bold"
                         Foreground="{StaticResource DarkText}"
-                        Text="🌐 VaM Hub Browser" />
+                        Text="🌐 VaM Hub" />
 
-                    <StackPanel
+                    <Grid
                         Grid.Column="1"
-                        VerticalAlignment="Center"
-                        Orientation="Horizontal">
-                        <TextBox
-                            x:Name="SearchBox"
-                            Width="250"
-                            Height="28"
-                            Margin="0,0,8,0"
-                            Padding="4"
-                            VerticalContentAlignment="Center"
-                            KeyDown="SearchBox_KeyDown"
-                            Text=""
-                            TextChanged="SearchBox_TextChanged" />
+                        HorizontalAlignment="Center"
+                        VerticalAlignment="Center">
+                        <Grid>
+                            <TextBox
+                                x:Name="SearchBox"
+                                Width="260"
+                                Height="32"
+                                Padding="8,4,32,4"
+                                VerticalContentAlignment="Center"
+                                FontSize="14"
+                                GotFocus="SearchBox_GotFocus"
+                                KeyDown="SearchBox_KeyDown"
+                                LostFocus="SearchBox_LostFocus"
+                                Text=""
+                                TextChanged="SearchBox_TextChanged" />
+                            <TextBlock
+                                x:Name="SearchPlaceholder"
+                                Margin="10,0,0,0"
+                                HorizontalAlignment="Center"
+                                VerticalAlignment="Center"
+                                FontSize="16"
+                                Foreground="{StaticResource DarkTextSecondary}"
+                                IsHitTestVisible="False"
+                                Text="Search Here"
+                                Visibility="Visible" />
+                        </Grid>
                         <Button
-                            x:Name="SearchButton"
-                            Margin="0,0,12,0"
-                            Padding="12,4"
-                            Click="SearchButton_Click"
-                            Content="🔍 Search" />
-                        <Button
-                            x:Name="RefreshButton"
-                            Width="28"
-                            Height="28"
-                            Padding="0"
-                            Click="RefreshButton_Click"
-                            Content="🔄"
-                            FontSize="14"
-                            ToolTip="Refresh" />
-                    </StackPanel>
+                            x:Name="ClearSearchButton"
+                            Width="24"
+                            Height="24"
+                            Margin="0,0,4,0"
+                            HorizontalAlignment="Right"
+                            VerticalAlignment="Center"
+                            Background="Transparent"
+                            BorderBrush="Transparent"
+                            Click="ClearSearchButton_Click"
+                            Content="✕"
+                            FontSize="12"
+                            Foreground="{StaticResource DarkTextSecondary}"
+                            ToolTip="Clear search"
+                            Visibility="Collapsed">
+                            <Button.Style>
+                                <Style TargetType="Button">
+                                    <Setter Property="Background" Value="Transparent" />
+                                    <Setter Property="BorderThickness" Value="0" />
+                                    <Setter Property="Template">
+                                        <Setter.Value>
+                                            <ControlTemplate TargetType="Button">
+                                                <Border Background="{TemplateBinding Background}">
+                                                    <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                                </Border>
+                                            </ControlTemplate>
+                                        </Setter.Value>
+                                    </Setter>
+                                    <Style.Triggers>
+                                        <Trigger Property="IsMouseOver" Value="True">
+                                            <Setter Property="Foreground" Value="{StaticResource DarkText}" />
+                                        </Trigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </Button.Style>
+                        </Button>
+                    </Grid>
+
+                    <Button
+                        x:Name="RefreshButton"
+                        Grid.Column="2"
+                        Height="32"
+                        Padding="12,0"
+                        HorizontalAlignment="Right"
+                        Click="RefreshButton_Click"
+                        FontSize="14"
+                        ToolTip="Refresh">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Margin="0,0,6,0" Text="🔄" />
+                            <TextBlock Text="Refresh" />
+                        </StackPanel>
+                    </Button>
                 </Grid>
 
                 <!--  Filters Row - Using WrapPanel for responsive wrapping  -->
@@ -804,13 +871,26 @@
                             <ToggleButton
                                 x:Name="TagsFilterToggle"
                                 Grid.Column="0"
-                                Padding="8,4"
+                                Height="28"
+                                Padding="8,3"
                                 Background="{StaticResource DarkCardBackground}"
                                 BorderBrush="{StaticResource DarkBorder}"
                                 BorderThickness="1"
                                 Checked="TagsFilterToggle_Checked"
                                 Foreground="{StaticResource DarkText}"
                                 Unchecked="TagsFilterToggle_Unchecked">
+                                <ToggleButton.Template>
+                                    <ControlTemplate TargetType="ToggleButton">
+                                        <Border
+                                            Padding="{TemplateBinding Padding}"
+                                            Background="{TemplateBinding Background}"
+                                            BorderBrush="{TemplateBinding BorderBrush}"
+                                            BorderThickness="{TemplateBinding BorderThickness}"
+                                            CornerRadius="4">
+                                            <ContentPresenter />
+                                        </Border>
+                                    </ControlTemplate>
+                                </ToggleButton.Template>
                                 <TextBlock
                                     x:Name="TagsDisplayText"
                                     Text="All"
@@ -820,15 +900,29 @@
                             <!--  Clear button  -->
                             <Button
                                 Grid.Column="1"
+                                Height="28"
                                 Margin="6,0,0,0"
-                                Padding="4,4"
+                                Padding="4,3"
                                 Background="{StaticResource DarkCardBackground}"
                                 BorderBrush="{StaticResource DarkBorder}"
                                 BorderThickness="1"
                                 Click="ClearTagsFilter_Click"
                                 Content="✕"
                                 FontSize="12"
-                                Foreground="{StaticResource DarkText}" />
+                                Foreground="{StaticResource DarkText}">
+                                <Button.Template>
+                                    <ControlTemplate TargetType="Button">
+                                        <Border
+                                            Padding="{TemplateBinding Padding}"
+                                            Background="{TemplateBinding Background}"
+                                            BorderBrush="{TemplateBinding BorderBrush}"
+                                            BorderThickness="{TemplateBinding BorderThickness}"
+                                            CornerRadius="4">
+                                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                        </Border>
+                                    </ControlTemplate>
+                                </Button.Template>
+                            </Button>
 
                             <!--  Tags search popup  -->
                             <Popup
@@ -842,7 +936,8 @@
                                 <Border
                                     Background="{StaticResource DarkCardBackground}"
                                     BorderBrush="{StaticResource DarkBorder}"
-                                    BorderThickness="1">
+                                    BorderThickness="1"
+                                    CornerRadius="4">
                                     <StackPanel Width="250">
                                         <!--  Search box  -->
                                         <TextBox
@@ -865,7 +960,21 @@
                                             BorderThickness="1"
                                             Foreground="{StaticResource DarkText}"
                                             SelectionChanged="TagsListBox_SelectionChanged"
-                                            SelectionMode="Multiple" />
+                                            SelectionMode="Multiple">
+                                            <ListBox.Template>
+                                                <ControlTemplate TargetType="ListBox">
+                                                    <Border
+                                                        Background="{TemplateBinding Background}"
+                                                        BorderBrush="{TemplateBinding BorderBrush}"
+                                                        BorderThickness="{TemplateBinding BorderThickness}"
+                                                        CornerRadius="4">
+                                                        <ScrollViewer Padding="{TemplateBinding Padding}">
+                                                            <ItemsPresenter />
+                                                        </ScrollViewer>
+                                                    </Border>
+                                                </ControlTemplate>
+                                            </ListBox.Template>
+                                        </ListBox>
                                     </StackPanel>
                                 </Border>
                             </Popup>
@@ -886,23 +995,7 @@
                     <!--  Spacer to push buttons to the right  -->
                     <Border Width="0" />
 
-                    <!--  Updates Panel Button  -->
-                    <Button
-                        x:Name="UpdatesPanelButton"
-                        Margin="0,4,8,0"
-                        Padding="10,4"
-                        Click="UpdatesPanelButton_Click"
-                        Content="⬆ Updates"
-                        ToolTip="View available package updates" />
 
-                    <!--  Missing Dependencies Button  -->
-                    <Button
-                        x:Name="MissingDepsPanelButton"
-                        Margin="0,4,8,0"
-                        Padding="10,4"
-                        Click="MissingDepsPanelButton_Click"
-                        Content="🔗 Missing"
-                        ToolTip="View missing dependencies" />
                 </WrapPanel>
 
                 <!--  Main Content - Resource Grid  -->
@@ -949,12 +1042,30 @@
                                             MinWidth="180"
                                             MaxWidth="320"
                                             Margin="2"
-                                            Background="{StaticResource DarkControlBackground}"
-                                            BorderBrush="{StaticResource DarkBorder}"
                                             BorderThickness="1"
                                             CornerRadius="4"
                                             Cursor="Hand"
                                             MouseLeftButtonDown="ResourceCard_Click">
+                                            <Border.Style>
+                                                <Style TargetType="Border">
+                                                    <Setter Property="Background" Value="{StaticResource DarkControlBackground}" />
+                                                    <Setter Property="BorderBrush" Value="{StaticResource DarkBorder}" />
+                                                    <Style.Triggers>
+                                                        <Trigger Property="IsMouseOver" Value="True">
+                                                            <Setter Property="Background" Value="{StaticResource DarkHover}" />
+                                                            <Setter Property="BorderBrush" Value="#FF4A90D9" />
+                                                            <Setter Property="Effect">
+                                                                <Setter.Value>
+                                                                    <DropShadowEffect
+                                                                        BlurRadius="8"
+                                                                        Opacity="0.4"
+                                                                        ShadowDepth="2" />
+                                                                </Setter.Value>
+                                                            </Setter>
+                                                        </Trigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </Border.Style>
                                             <Grid>
                                                 <Grid.RowDefinitions>
                                                     <RowDefinition Height="Auto" />
@@ -1183,15 +1294,26 @@
 
                         <TextBlock
                             x:Name="StatusText"
+                            MaxWidth="300"
                             VerticalAlignment="Center"
                             Foreground="{StaticResource DarkText}"
-                            Text="Ready" />
+                            Text="Ready"
+                            TextTrimming="CharacterEllipsis" />
+
+                        <!--  Missing Dependencies Button  -->
+                        <Button
+                            x:Name="MissingDepsPanelButton"
+                            Margin="12,0,0,0"
+                            Padding="12,0"
+                            Click="MissingDepsPanelButton_Click"
+                            Content="🔗 Missing"
+                            ToolTip="View missing dependencies" />
 
                         <!--  Download Queue Button  -->
                         <Button
                             x:Name="DownloadQueueButton"
                             Margin="16,0,0,0"
-                            Padding="8,4"
+                            Padding="12,0"
                             Click="DownloadQueueButton_Click"
                             Visibility="Collapsed">
                             <Button.Style>
@@ -1487,45 +1609,85 @@
                         </Border>
                     </Popup>
 
-                    <!--  Pagination  -->
+                    <!--  Pagination and Controls  -->
                     <StackPanel
                         Grid.Column="1"
                         HorizontalAlignment="Center"
                         Orientation="Horizontal">
+
+                        <!--  Pagination  -->
                         <Button
                             x:Name="FirstPageButton"
                             Margin="0,0,4,0"
-                            Padding="12,4"
+                            Padding="12,0"
                             Click="FirstPage_Click"
                             Content="⏮ First" />
                         <Button
                             x:Name="PrevPageButton"
                             Margin="0,0,4,0"
-                            Padding="12,4"
+                            Padding="12,0"
                             Click="PrevPage_Click"
                             Content="◀ Prev" />
-                        <TextBlock
-                            x:Name="PageInfoText"
+                        <StackPanel
                             Margin="8,0"
                             VerticalAlignment="Center"
-                            Foreground="{StaticResource DarkText}"
-                            Text="Page 1 of 1" />
+                            Orientation="Horizontal">
+                            <TextBlock
+                                Margin="0,0,4,0"
+                                VerticalAlignment="Center"
+                                Foreground="{StaticResource DarkText}"
+                                Text="Page" />
+                            <TextBox
+                                x:Name="PageNumberBox"
+                                Width="40"
+                                Height="32"
+                                Padding="0,2"
+                                HorizontalContentAlignment="Center"
+                                VerticalContentAlignment="Center"
+                                FontSize="15"
+                                KeyDown="PageNumberBox_KeyDown"
+                                Text="1" />
+                            <TextBlock
+                                Margin="4,0"
+                                VerticalAlignment="Center"
+                                Foreground="{StaticResource DarkText}"
+                                Text="of" />
+                            <TextBlock
+                                x:Name="TotalPagesText"
+                                VerticalAlignment="Center"
+                                Foreground="{StaticResource DarkText}"
+                                Text="1" />
+                        </StackPanel>
                         <Button
                             x:Name="NextPageButton"
                             Margin="4,0,0,0"
-                            Padding="12,4"
+                            Padding="12,0"
                             Click="NextPage_Click"
                             Content="Next ▶" />
                     </StackPanel>
 
                     <!--  Total Count  -->
-                    <TextBlock
-                        x:Name="TotalCountText"
+                    <StackPanel
                         Grid.Column="2"
                         HorizontalAlignment="Right"
                         VerticalAlignment="Center"
-                        Foreground="{StaticResource DarkText}"
-                        Text="Total: 0" />
+                        Orientation="Horizontal">
+
+                        <!--  Updates Panel Button  -->
+                        <Button
+                            x:Name="UpdatesPanelButton"
+                            Margin="0,0,12,0"
+                            Padding="12,0"
+                            Click="UpdatesPanelButton_Click"
+                            Content="⬆ Updates"
+                            ToolTip="View available package updates" />
+
+                        <TextBlock
+                            x:Name="TotalCountText"
+                            VerticalAlignment="Center"
+                            Foreground="{StaticResource DarkText}"
+                            Text="Total: 0" />
+                    </StackPanel>
                 </Grid>
             </Grid>
 

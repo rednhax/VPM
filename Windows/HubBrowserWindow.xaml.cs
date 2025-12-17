@@ -203,10 +203,17 @@ namespace VPM.Windows
             
             // Start all async operations in parallel for faster startup
             var packagesTask = _hubService.LoadPackagesJsonAsync();
+            var filterTask = LoadFilterOptionsAsync();
             var searchTask = SearchAsync();
             
-            // Wait for all tasks in parallel
-            await Task.WhenAll(packagesTask, searchTask);
+            // Wait for packages and filter options to load in parallel
+            await Task.WhenAll(packagesTask, filterTask);
+            
+            // Load creator list after packages are loaded
+            LoadCreatorListFromPackages();
+            
+            // Wait for search to complete
+            await searchTask;
         }
 
         protected override void OnKeyDown(KeyEventArgs e)
@@ -613,7 +620,6 @@ namespace VPM.Windows
                 using (var timer = _hubService.PerformanceMonitor.StartOperation("SearchAsync_Total"))
                 {
                     LoadingPanel.Visibility = Visibility.Visible;
-                    ResourcesItemsControl.ItemsSource = null;
 
                     var searchParams = BuildSearchParams();
                     var response = await _hubService.SearchResourcesAsync(searchParams, _searchCts.Token);
@@ -901,10 +907,10 @@ namespace VPM.Windows
 
         #region UI Event Handlers
 
-        private async void SearchButton_Click(object sender, RoutedEventArgs e)
+        private void ClearSearchButton_Click(object sender, RoutedEventArgs e)
         {
-            _currentPage = 1;
-            await SearchAsync();
+            SearchBox.Text = string.Empty;
+            SearchBox.Focus();
         }
 
         private async void SearchBox_KeyDown(object sender, KeyEventArgs e)
@@ -916,13 +922,67 @@ namespace VPM.Windows
                 _currentPage = 1;
                 await SearchAsync();
             }
+            else if (e.Key == Key.Escape)
+            {
+                SearchBox.Text = string.Empty;
+                e.Handled = true;
+            }
+        }
+
+        private async void PageNumberBox_KeyDown(object sender, KeyEventArgs e)
+        {
+            if (e.Key == Key.Enter)
+            {
+                if (int.TryParse(PageNumberBox.Text, out int newPage))
+                {
+                    if (newPage < 1) newPage = 1;
+                    if (newPage > _totalPages) newPage = _totalPages;
+                    
+                    if (newPage != _currentPage)
+                    {
+                        _currentPage = newPage;
+                        await SearchAsync();
+                    }
+                    else
+                    {
+                        PageNumberBox.Text = _currentPage.ToString();
+                    }
+                }
+                else
+                {
+                    PageNumberBox.Text = _currentPage.ToString();
+                }
+                
+                // Remove focus
+                Keyboard.ClearFocus();
+            }
         }
         
         private void SearchBox_TextChanged(object sender, TextChangedEventArgs e)
         {
+            // Toggle clear button visibility
+            if (ClearSearchButton != null)
+            {
+                ClearSearchButton.Visibility = string.IsNullOrEmpty(SearchBox.Text) 
+                    ? Visibility.Collapsed 
+                    : Visibility.Visible;
+            }
+
             // Reset and start the debounce timer
             _searchDebounceTimer.Stop();
             _searchDebounceTimer.Start();
+        }
+        
+        private void SearchBox_GotFocus(object sender, RoutedEventArgs e)
+        {
+            SearchPlaceholder.Visibility = Visibility.Collapsed;
+        }
+        
+        private void SearchBox_LostFocus(object sender, RoutedEventArgs e)
+        {
+            SearchPlaceholder.Visibility = string.IsNullOrEmpty(SearchBox.Text) 
+                ? Visibility.Visible 
+                : Visibility.Collapsed;
         }
         
         private async void SearchDebounceTimer_Tick(object sender, EventArgs e)
@@ -1425,7 +1485,8 @@ namespace VPM.Windows
 
         private void UpdatePaginationUI()
         {
-            PageInfoText.Text = $"Page {_currentPage} of {_totalPages}";
+            PageNumberBox.Text = _currentPage.ToString();
+            TotalPagesText.Text = _totalPages.ToString();
             TotalCountText.Text = $"Total: {_totalResources}";
             
             FirstPageButton.IsEnabled = _currentPage > 1;
