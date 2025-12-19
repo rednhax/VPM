@@ -2528,6 +2528,9 @@
                                     <MenuItem x:Name="MoveToMenuItem" Header="📦 Move To">
                                         <MenuItem Click="ConfigureMoveToDestinations_Click" Header="⚙️ Configure Destinations..." />
                                     </MenuItem>
+                                    <MenuItem x:Name="AddToPlaylistMenuItem" Header="🕹️ Add to Playlist">
+                                        <MenuItem Click="ManagePlaylists_Click" Header="🕹️ Manage Playlists..." />
+                                    </MenuItem>
                                     <Separator />
                                     <MenuItem Click="DiscardSelected_Click" Header="🗑️ Discard Selected" />
                                     <MenuItem Click="OpenDiscardLocation_Click" Header="📂 Open Discard Location" />

@@ -6397,6 +6397,7 @@ namespace VPM
                 MenuItem openInExplorerItem = null;
                 MenuItem filterByCreatorItem = null;
                 MenuItem moveToMenuItem = null;
+                MenuItem addToPlaylistMenuItem = null;
                 MenuItem restoreOriginalItem = null;
                 
                 foreach (var item in contextMenu.Items)
@@ -6412,6 +6413,8 @@ namespace VPM
                             filterByCreatorItem = menuItem;
                         else if (header == "📦 Move To")
                             moveToMenuItem = menuItem;
+                        else if (header == "🕹️ Add to Playlist")
+                            addToPlaylistMenuItem = menuItem;
                         else if (header.StartsWith("🔄 Restore Original"))
                             restoreOriginalItem = menuItem;
                     }
@@ -6430,6 +6433,12 @@ namespace VPM
                 if (moveToMenuItem != null)
                 {
                     PopulateMoveToMenu(moveToMenuItem, isPackageMenu: true);
+                }
+
+                // Populate Add to Playlist submenu with playlists
+                if (addToPlaylistMenuItem != null)
+                {
+                    PopulateAddToPlaylistMenu(addToPlaylistMenuItem);
                 }
                 
                 // Update Restore Original menu item based on selected packages
@@ -6525,6 +6534,115 @@ namespace VPM
                 newConfigItem.Click += ConfigureMoveToDestinations_Click;
                 moveToMenuItem.Items.Add(newConfigItem);
             }
+        }
+
+        private void PopulateAddToPlaylistMenu(MenuItem addToPlaylistMenuItem)
+        {
+            var manageItem = addToPlaylistMenuItem.Items.Cast<object>()
+                .OfType<MenuItem>()
+                .FirstOrDefault(m => m.Header?.ToString()?.Contains("Manage Playlists") == true);
+
+            foreach (var item in addToPlaylistMenuItem.Items.Cast<object>().OfType<MenuItem>().ToList())
+            {
+                if (item != manageItem)
+                {
+                    item.Click -= AddPackageToPlaylist_Click;
+                }
+            }
+
+            addToPlaylistMenuItem.Items.Clear();
+
+            var playlists = _settingsManager?.Settings?.Playlists?
+                .Where(p => p.IsEnabled && p.IsValid())
+                .OrderBy(p => p.SortOrder)
+                .ToList() ?? new List<Models.Playlist>();
+
+            foreach (var playlist in playlists)
+            {
+                var menuItem = new MenuItem
+                {
+                    Header = $"{playlist.Name} ({playlist.PackageKeys.Count})",
+                    ToolTip = $"{playlist.PackageKeys.Count} packages",
+                    Tag = playlist
+                };
+                menuItem.Click += AddPackageToPlaylist_Click;
+                addToPlaylistMenuItem.Items.Add(menuItem);
+            }
+
+            if (playlists.Count > 0)
+            {
+                addToPlaylistMenuItem.Items.Add(new Separator());
+            }
+
+            if (manageItem != null)
+            {
+                addToPlaylistMenuItem.Items.Add(manageItem);
+            }
+            else
+            {
+                var newManageItem = new MenuItem { Header = "🕹️ Manage Playlists..." };
+                newManageItem.Click += ManagePlaylists_Click;
+                addToPlaylistMenuItem.Items.Add(newManageItem);
+            }
+        }
+
+        private void AddPackageToPlaylist_Click(object sender, RoutedEventArgs e)
+        {
+            if (sender is not MenuItem menuItem || menuItem.Tag is not Models.Playlist playlist)
+                return;
+
+            var selectedPackages = PackageDataGrid?.SelectedItems?.Cast<PackageItem>().ToList();
+            if (selectedPackages == null || selectedPackages.Count == 0)
+            {
+                DarkMessageBox.Show("No packages selected.", "Add to Playlist",
+                    MessageBoxButton.OK, MessageBoxImage.Information);
+                return;
+            }
+
+            int addedCount = 0;
+            var packageNames = new List<string>();
+
+            foreach (var package in selectedPackages)
+            {
+                if (playlist.AddPackage(package.MetadataKey))
+                {
+                    addedCount++;
+                    packageNames.Add(package.DisplayName);
+                }
+            }
+
+            _settingsManager?.SaveSettingsImmediate();
+
+            if (addedCount > 0)
+            {
+                var summary = string.Join("\n", packageNames.Take(5).Select(n => $"  • {n}"));
+                if (packageNames.Count > 5)
+                    summary += $"\n  ... and {packageNames.Count - 5} more";
+
+                DarkMessageBox.Show(
+                    $"Added {addedCount} package(s) to playlist: {playlist.Name}\n\n{summary}",
+                    "Add to Playlist",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Information);
+            }
+        }
+
+        private void ManagePlaylists_Click(object sender, RoutedEventArgs e)
+        {
+            var vamRootFolder = _settingsManager?.Settings?.SelectedFolder;
+            var playlistWindow = new Windows.PlaylistsManagementWindow(
+                _settingsManager, 
+                _packageManager,
+                _packageManager?.DependencyGraph,
+                vamRootFolder,
+                _packageFileManager);
+            playlistWindow.ShowDialog();
+            
+            // Rescan packages to reflect file movements from playlist activation
+            // PackageFileManager moves files between AddonPackages and AllPackages folders.
+            // We must rescan the disk to detect the new file locations and update package statuses.
+            _packageFileManager?.InvalidatePackageIndex();
+            RefreshPackages();
         }
 
         private class MoveToMenuItemTag

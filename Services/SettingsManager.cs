@@ -37,9 +37,11 @@ namespace VPM.Services
     public class SettingsManager : ISettingsManager
     {
         private readonly string _settingsFilePath;
+        private readonly string _cacheFolder;
         private readonly DispatcherTimer _saveTimer;
         private bool _hasUnsavedChanges = false;
         private readonly object _saveLock = new object();
+        private readonly PlaylistCache _playlistCache;
         
         // Cache JsonSerializerOptions to avoid repeated allocations
         // Using JSON source generation for .NET 10 performance optimization
@@ -105,6 +107,13 @@ namespace VPM.Services
             
             // Settings file path configured
             
+            // Determine cache folder
+            var appDataPath = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+            _cacheFolder = Path.Combine(appDataPath, "VPM", "Cache");
+
+            // Initialize PlaylistCache
+            _playlistCache = new PlaylistCache(_cacheFolder);
+
             // Initialize auto-save timer (saves after 1 second of inactivity)
             _saveTimer = new DispatcherTimer
             {
@@ -154,6 +163,22 @@ namespace VPM.Services
             catch (Exception)
             {
                 Settings = AppSettings.CreateDefault();
+            }
+
+            // Load playlists from cache
+            try
+            {
+                if (_playlistCache != null)
+                {
+                    var cachedPlaylists = _playlistCache.LoadPlaylists();
+                    if (cachedPlaylists != null && cachedPlaylists.Count > 0)
+                    {
+                        Settings.Playlists = cachedPlaylists;
+                    }
+                }
+            }
+            catch (Exception)
+            {
             }
         }
 
@@ -246,6 +271,12 @@ namespace VPM.Services
 
                     File.WriteAllText(_settingsFilePath, json);
                     _hasUnsavedChanges = false;
+
+                    // Save playlists to cache
+                    if (_playlistCache != null && Settings.Playlists != null)
+                    {
+                        _playlistCache.SavePlaylists(Settings.Playlists);
+                    }
                 }
                 catch
                 {
@@ -272,6 +303,12 @@ namespace VPM.Services
 
                 await File.WriteAllTextAsync(_settingsFilePath, json);
                 _hasUnsavedChanges = false;
+
+                // Save playlists to cache
+                if (_playlistCache != null && Settings.Playlists != null)
+                {
+                    await Task.Run(() => _playlistCache.SavePlaylists(Settings.Playlists));
+                }
             }
             catch (Exception)
             {

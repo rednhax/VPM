@@ -36,6 +36,11 @@ namespace VPM.Services
         // Dependency graph for reverse dependency lookups and analysis
         private readonly DependencyGraph _dependencyGraph = new();
 
+        /// <summary>
+        /// Public accessor for the dependency graph (used by playlist manager and other services)
+        /// </summary>
+        public DependencyGraph DependencyGraph => _dependencyGraph;
+
 
         private readonly string _cacheFolder;
         private readonly BinaryMetadataCache _binaryCache;

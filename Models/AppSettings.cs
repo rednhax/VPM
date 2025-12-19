@@ -131,6 +131,12 @@ namespace VPM.Models
         // Move To Destination Paths - list of named paths for quick package moving
         private List<MoveToDestination> _moveToDestinations = new List<MoveToDestination>();
 
+        // Playlists - list of package playlists for quick activation
+        private List<Playlist> _playlists = new List<Playlist>();
+
+        // Unload other packages setting for playlist activation
+        private bool _unloadOtherPackagesOnPlaylistActivation = true;
+
         public event PropertyChangedEventHandler PropertyChanged;
 
         // First Launch Settings Properties
@@ -667,6 +673,19 @@ namespace VPM.Models
         {
             get => _moveToDestinations;
             set => SetProperty(ref _moveToDestinations, value ?? new List<MoveToDestination>());
+        }
+
+        // Playlist Properties
+        public List<Playlist> Playlists
+        {
+            get => _playlists;
+            set => SetProperty(ref _playlists, value ?? new List<Playlist>());
+        }
+
+        public bool UnloadOtherPackagesOnPlaylistActivation
+        {
+            get => _unloadOtherPackagesOnPlaylistActivation;
+            set => SetProperty(ref _unloadOtherPackagesOnPlaylistActivation, value);
         }
 
         /// <summary>

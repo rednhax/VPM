@@ -915,6 +915,9 @@ namespace VPM
                 // This ensures filters are preserved after hub download or other refresh operations
                 UpdateFilterManagerFromUI();
                 
+                // Force cache rebuild since package statuses might have changed even if count is same
+                _packageItemCacheVersion = -1;
+
                 // Update UI with real package data
                 await UpdatePackageListAsync();
                 
@@ -1117,6 +1120,12 @@ namespace VPM
 
                     if (filterToken.IsCancellationRequested) return;
                     
+                    // If no sorting is active, sort by package name for consistent ordering
+                    if (savedSortDescriptions.Count == 0)
+                    {
+                        allKeys = allKeys.OrderBy(k => k, StringComparer.OrdinalIgnoreCase).ToList();
+                    }
+                    
                     // Update UI
                     await Application.Current.Dispatcher.InvokeAsync(() =>
                     {
@@ -1140,45 +1149,44 @@ namespace VPM
                             {
                                 Packages.SetKeys(allKeys);
                             }
+                            
+                            // Reapply sorting immediately
+                            var packageState = _sortingManager?.GetSortingState("Packages");
+                            if (packageState?.CurrentSortOption is PackageSortOption)
+                            {
+                                ReapplySorting();
+                            }
+                            else if (savedSortDescriptions.Count > 0 && PackagesView != null)
+                            {
+                                using (PackagesView.DeferRefresh())
+                                {
+                                    PackagesView.SortDescriptions.Clear();
+                                    foreach (var sortDesc in savedSortDescriptions)
+                                        PackagesView.SortDescriptions.Add(sortDesc);
+                                }
+                            }
+                            
+                            // Restore selection immediately (no visible flash)
+                            if (selectedPackageNames.Count > 0 && PackageDataGrid != null)
+                            {
+                                foreach (var item in Packages)
+                                {
+                                    if (selectedPackageNames.Contains(item.Name))
+                                        PackageDataGrid.SelectedItems.Add(item);
+                                }
+                            }
                         }
                         finally
                         {
                             _suppressSelectionEvents = false;
                         }
 
-                        // Defer sorting and selection restoration
+                        // Defer scroll position restoration only
                         _ = Dispatcher.BeginInvoke(new Action(() =>
                         {
                             _suppressSelectionEvents = true;
                             try
                             {
-                                if (PackagesView != null) PackagesView.Filter = null;
-                                
-                                // Reapply sorting
-                                var packageState = _sortingManager?.GetSortingState("Packages");
-                                if (packageState?.CurrentSortOption is PackageSortOption)
-                                {
-                                    ReapplySorting();
-                                }
-                                else if (savedSortDescriptions.Count > 0 && PackagesView != null)
-                                {
-                                    using (PackagesView.DeferRefresh())
-                                    {
-                                        PackagesView.SortDescriptions.Clear();
-                                        foreach (var sortDesc in savedSortDescriptions)
-                                            PackagesView.SortDescriptions.Add(sortDesc);
-                                    }
-                                }
-
-                                // Restore selection
-                                if (selectedPackageNames.Count > 0 && PackageDataGrid != null)
-                                {
-                                    foreach (var item in Packages)
-                                    {
-                                        if (selectedPackageNames.Contains(item.Name))
-                                            PackageDataGrid.SelectedItems.Add(item);
-                                    }
-                                }
                                 
                                 UpdateOptimizeCounter();
                             }
@@ -1549,6 +1557,10 @@ namespace VPM
                     
                     return isAscending ? result : -result;
                 });
+            }
+            else
+            {
+                keys.Sort(StringComparer.OrdinalIgnoreCase);
             }
         }
 

@@ -791,7 +791,10 @@ namespace VPM.Services
                     catch (IOException ex)
                     {
                         // Copy succeeded but delete failed - file exists in both locations.
-                        return (false, $"File copied but could not delete source after {retries} attempts: {ex.Message}");
+                        // Treat this as success since the file is now in the destination (Loaded)
+                        // The source file will be cleaned up later or ignored
+                        System.Diagnostics.Debug.WriteLine($"File copied but could not delete source: {ex.Message}");
+                        return (true, "");
                     }
                 }
 
