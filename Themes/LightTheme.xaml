@@ -4,6 +4,7 @@
     
     <!-- Converters -->
     <local:DataGridHeadersVisibilityConverter x:Key="DataGridHeadersVisibilityConverter" />
+    <local:AddOneConverter x:Key="AddOneConverter" />
     
     <!-- Light Theme Colors -->
     <!-- UI Constants -->

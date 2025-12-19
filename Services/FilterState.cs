@@ -46,5 +46,11 @@ namespace VPM.Services
 
         // External destination filtering
         public HashSet<string> SelectedDestinations { get; set; } = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        // Playlist filtering
+        public HashSet<string> SelectedPlaylistFilters { get; set; } = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        // Lookup for base package key => playlist tags (e.g. "P1 P2")
+        public IReadOnlyDictionary<string, string> PlaylistTagsCache { get; set; }
     }
 }

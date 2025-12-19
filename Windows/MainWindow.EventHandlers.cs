@@ -274,6 +274,15 @@ namespace VPM
             UpdateClearAllFiltersButtonVisibility();
         }
 
+        private void PlaylistsFilterList_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            // Prevent recursion during programmatic updates
+            if (_suppressSelectionEvents) return;
+
+            ApplyFilters();
+            UpdateClearAllFiltersButtonVisibility();
+        }
+
 
         private void DependenciesDataGrid_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
@@ -2296,6 +2305,12 @@ namespace VPM
                     System.IO.Directory.Exists(settings.SelectedFolder))
                 {
                     RefreshPackages();
+                    
+                    // Update playlist tags cache after packages are loaded to ensure indicators show
+                    UpdatePlaylistTagsCache();
+                    
+                    // Refresh the DataGrid to show updated playlist tags
+                    PackageDataGrid?.Items?.Refresh();
                 }
                 
                 // Apply window settings after packages are loaded
@@ -3836,6 +3851,10 @@ namespace VPM
                             if (DestinationsFilterList != null)
                                 _settingsManager.Settings.DestinationsFilterHeight = DestinationsFilterList.ActualHeight;
                             break;
+                        case "PlaylistsFilter":
+                            if (PlaylistsFilterList != null)
+                                _settingsManager.Settings.PlaylistsFilterHeight = PlaylistsFilterList.ActualHeight;
+                            break;
                     }
                 }
                 catch (Exception)
@@ -3858,6 +3877,7 @@ namespace VPM
                 "FileSizeFilter" => FileSizeFilterList,
                 "DamagedFilter" => DamagedFilterList,
                 "DestinationsFilter" => DestinationsFilterList,
+                "PlaylistsFilter" => PlaylistsFilterList,
                 _ => null
             };
         }
@@ -4018,6 +4038,13 @@ namespace VPM
                             targetList = DestinationsFilterList;
                             textBoxGrid = DestinationsFilterTextBoxGrid;
                             collapsedGrid = DestinationsFilterCollapsedGrid;
+                            break;
+                        case "PlaylistsFilter":
+                            newVisibility = !_settingsManager.Settings.PlaylistsFilterVisible;
+                            _settingsManager.Settings.PlaylistsFilterVisible = newVisibility;
+                            targetList = PlaylistsFilterList;
+                            expandedGrid = PlaylistsFilterExpandedGrid;
+                            collapsedGrid = PlaylistsFilterCollapsedGrid;
                             break;
                     }
                     
@@ -6557,11 +6584,13 @@ namespace VPM
                 .OrderBy(p => p.SortOrder)
                 .ToList() ?? new List<Models.Playlist>();
 
-            foreach (var playlist in playlists)
+            for (int i = 0; i < playlists.Count; i++)
             {
+                var playlist = playlists[i];
+                var playlistNumber = $"P{i + 1}";
                 var menuItem = new MenuItem
                 {
-                    Header = $"{playlist.Name} ({playlist.PackageKeys.Count})",
+                    Header = $"{playlistNumber} - {playlist.Name} ({playlist.PackageKeys.Count})",
                     ToolTip = $"{playlist.PackageKeys.Count} packages",
                     Tag = playlist
                 };
@@ -6615,12 +6644,18 @@ namespace VPM
 
             if (addedCount > 0)
             {
-                var summary = string.Join("\n", packageNames.Take(5).Select(n => $"  • {n}"));
-                if (packageNames.Count > 5)
-                    summary += $"\n  ... and {packageNames.Count - 5} more";
+                // Force update of playlist tags in UI
+                UpdatePlaylistTagsCache();
+                
+                // Refresh the DataGrid to show updated playlist tags
+                PackageDataGrid?.Items?.Refresh();
 
+                SetStatus($"Added {addedCount} package(s) to playlist: {playlist.Name}");
+            }
+            else
+            {
                 DarkMessageBox.Show(
-                    $"Added {addedCount} package(s) to playlist: {playlist.Name}\n\n{summary}",
+                    $"No packages were added. They may already be in the playlist: {playlist.Name}",
                     "Add to Playlist",
                     MessageBoxButton.OK,
                     MessageBoxImage.Information);

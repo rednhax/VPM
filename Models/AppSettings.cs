@@ -62,6 +62,7 @@ namespace VPM.Models
         private double _subfoldersFilterHeight = 120;
         private double _damagedFilterHeight = 80;
         private double _destinationsFilterHeight = 120;
+        private double _playlistsFilterHeight = 120;
         
         // Filter Section Visibility
         private bool _dateFilterVisible = true;
@@ -85,6 +86,7 @@ namespace VPM.Models
         private bool _sceneStatusFilterVisible = true;
         private bool _presetStatusFilterVisible = true;
         private bool _destinationsFilterVisible = true;
+        private bool _playlistsFilterVisible = true;
         
         // File Size Filter Settings (in MB)
         private double _fileSizeTinyMax = 1;
@@ -407,6 +409,12 @@ namespace VPM.Models
             set => SetProperty(ref _destinationsFilterHeight, Math.Max(80, Math.Min(400, value)));
         }
 
+        public double PlaylistsFilterHeight
+        {
+            get => _playlistsFilterHeight;
+            set => SetProperty(ref _playlistsFilterHeight, Math.Max(80, Math.Min(400, value)));
+        }
+
         // Filter Section Visibility Properties
         public bool DateFilterVisible
         {
@@ -532,6 +540,12 @@ namespace VPM.Models
         {
             get => _destinationsFilterVisible;
             set => SetProperty(ref _destinationsFilterVisible, value);
+        }
+
+        public bool PlaylistsFilterVisible
+        {
+            get => _playlistsFilterVisible;
+            set => SetProperty(ref _playlistsFilterVisible, value);
         }
 
         // File Size Filter Settings Properties
@@ -754,6 +768,7 @@ namespace VPM.Models
                 SubfoldersFilterHeight = 120,
                 DamagedFilterHeight = 80,
                 DestinationsFilterHeight = 100,
+                PlaylistsFilterHeight = 120,
                 DateFilterVisible = true,
                 StatusFilterVisible = true,
                 OptimizationFilterVisible = true,
@@ -764,6 +779,7 @@ namespace VPM.Models
                 SubfoldersFilterVisible = true,
                 DamagedFilterVisible = true,
                 DestinationsFilterVisible = true,
+                PlaylistsFilterVisible = true,
                 SceneTypeFilterVisible = true,
                 SceneCreatorFilterVisible = true,
                 SceneSourceFilterVisible = true,

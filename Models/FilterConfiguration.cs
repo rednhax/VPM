@@ -22,7 +22,8 @@ namespace VPM.Models
             "FileSizeFilter",
             "SubfoldersFilter",
             "DamagedFilter",
-            "DestinationsFilter"
+            "DestinationsFilter",
+            "PlaylistsFilter"
         };
 
         /// <summary>

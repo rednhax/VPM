@@ -30,24 +30,25 @@
         </Border>
 
         <Grid>
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="300" />
-                <ColumnDefinition Width="*" />
-            </Grid.ColumnDefinitions>
+            <Grid x:Name="MainContentGrid">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="300" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
 
-            <!--  Sidebar  -->
-            <Border
-                Grid.Column="0"
-                Background="{DynamicResource ControlBackgroundBrush}"
-                BorderBrush="{DynamicResource ControlBorderBrush}"
-                BorderThickness="0,0,1,0">
-                <Grid Margin="12">
-                    <Grid.RowDefinitions>
-                        <RowDefinition Height="Auto" />
-                        <RowDefinition Height="Auto" />
-                        <RowDefinition Height="*" />
-                        <RowDefinition Height="Auto" />
-                    </Grid.RowDefinitions>
+                <!--  Sidebar  -->
+                <Border
+                    Grid.Column="0"
+                    Background="{DynamicResource ControlBackgroundBrush}"
+                    BorderBrush="{DynamicResource ControlBorderBrush}"
+                    BorderThickness="0,0,1,0">
+                    <Grid Margin="12">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="*" />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
 
                     <!--  Header  -->
                     <DockPanel
@@ -84,9 +85,15 @@
                     <ListBox
                         x:Name="PlaylistsListBox"
                         Grid.Row="2"
+                        AllowDrop="True"
                         Background="Transparent"
                         BorderThickness="0"
                         ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                        PreviewMouseLeftButtonDown="PlaylistsListBox_PreviewMouseLeftButtonDown"
+                        MouseMove="PlaylistsListBox_MouseMove"
+                        DragOver="PlaylistsListBox_DragOver"
+                        DragLeave="PlaylistsListBox_DragLeave"
+                        Drop="PlaylistsListBox_Drop"
                         SelectionChanged="PlaylistsListBox_SelectionChanged">
                         <ListBox.ItemTemplate>
                             <DataTemplate>
@@ -94,6 +101,7 @@
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="Auto" />
                                         <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
                                     </Grid.ColumnDefinitions>
                                     <Border
                                         Margin="0,0,8,0"
@@ -103,8 +111,13 @@
                                         CornerRadius="3">
                                         <TextBlock
                                             FontSize="11"
-                                            Foreground="{DynamicResource SecondaryTextBrush}"
-                                            Text="{Binding SortOrder, StringFormat='#{0}'}" />
+                                            Foreground="{DynamicResource SecondaryTextBrush}">
+                                            <TextBlock.Text>
+                                                <MultiBinding StringFormat="#{0}">
+                                                    <Binding Path="SortOrder" Converter="{StaticResource AddOneConverter}" />
+                                                </MultiBinding>
+                                            </TextBlock.Text>
+                                        </TextBlock>
                                     </Border>
                                     <TextBlock
                                         Grid.Column="1"
@@ -113,55 +126,42 @@
                                         FontWeight="Medium"
                                         Text="{Binding Name}"
                                         TextTrimming="CharacterEllipsis" />
+                                    <Button
+                                        Grid.Column="2"
+                                        Width="28"
+                                        Height="24"
+                                        Padding="0"
+                                        Background="Transparent"
+                                        BorderThickness="0"
+                                        Click="DeletePlaylistInline_Click"
+                                        Content="🗑️"
+                                        FontSize="12"
+                                        Foreground="{DynamicResource SecondaryTextBrush}"
+                                        ToolTip="Delete playlist" />
                                 </Grid>
                             </DataTemplate>
                         </ListBox.ItemTemplate>
                     </ListBox>
 
-                    <!--  Sidebar Footer  -->
-                    <StackPanel
+                    <TextBlock
                         Grid.Row="3"
-                        Margin="0,12,0,0"
+                        Margin="0,10,0,0"
                         HorizontalAlignment="Center"
-                        Orientation="Horizontal">
-                        <Button
-                            x:Name="MoveUpPlaylistBtn"
-                            Width="36"
-                            Height="32"
-                            Margin="0,0,8,0"
-                            Click="MoveUp_Click"
-                            Content="⬆️"
-                            FontSize="14"
-                            ToolTip="Move Up" />
-                        <Button
-                            x:Name="MoveDownPlaylistBtn"
-                            Width="36"
-                            Height="32"
-                            Margin="0,0,8,0"
-                            Click="MoveDown_Click"
-                            Content="⬇️"
-                            FontSize="14"
-                            ToolTip="Move Down" />
-                        <Button
-                            x:Name="DeletePlaylistBtn"
-                            Width="36"
-                            Height="32"
-                            Click="DeletePlaylist_Click"
-                            Content="🗑️"
-                            FontSize="14"
-                            ToolTip="Delete Playlist" />
-                    </StackPanel>
-                </Grid>
-            </Border>
+                        FontSize="12"
+                        Foreground="{DynamicResource SecondaryTextBrush}"
+                        Opacity="0.7"
+                        Text="Drag to reorder" />
+                    </Grid>
+                </Border>
 
-            <!--  Content Area  -->
-            <Grid Grid.Column="1" Margin="24">
-                <Grid.RowDefinitions>
-                    <RowDefinition Height="Auto" />
-                    <RowDefinition Height="Auto" />
-                    <RowDefinition Height="*" />
-                    <RowDefinition Height="Auto" />
-                </Grid.RowDefinitions>
+                <!--  Content Area  -->
+                <Grid Grid.Column="1" Margin="24">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
 
                 <!--  Header / Toolbar  -->
                 <Grid Grid.Row="0" Margin="0,0,0,24">
@@ -249,6 +249,7 @@
                 <Grid Grid.Row="2">
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
                         <RowDefinition Height="*" />
                     </Grid.RowDefinitions>
 
@@ -269,9 +270,33 @@
                             Text="0 items" />
                     </DockPanel>
 
+                    <Grid Grid.Row="1" Margin="0,0,0,10">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <TextBox
+                            x:Name="PlaylistPackagesSearchBox"
+                            Height="28"
+                            VerticalContentAlignment="Center"
+                            FontSize="13"
+                            Tag="Search packages..."
+                            TextChanged="PlaylistPackagesSearchBox_TextChanged" />
+                        <Button
+                            x:Name="PlaylistPackagesSortToggleBtn"
+                            Grid.Column="1"
+                            Height="28"
+                            Margin="10,0,0,0"
+                            Padding="10,0"
+                            Click="PlaylistPackagesSortToggle_Click"
+                            Content="A–Z"
+                            FontSize="13"
+                            ToolTip="Toggle sorting (A–Z / Original)" />
+                    </Grid>
+
                     <ListBox
                         x:Name="PlaylistPackagesListBox"
-                        Grid.Row="1"
+                        Grid.Row="2"
                         Background="{DynamicResource ControlBackgroundBrush}"
                         BorderBrush="{DynamicResource ControlBorderBrush}"
                         BorderThickness="1"
@@ -286,9 +311,9 @@
                                     <TextBlock
                                         VerticalAlignment="Center"
                                         FontSize="14"
-                                        Text="{Binding}"
+                                        Text="{Binding Display}"
                                         TextTrimming="CharacterEllipsis"
-                                        ToolTip="{Binding}" />
+                                        ToolTip="{Binding Key}" />
                                     <Button
                                         Grid.Column="1"
                                         Width="24"
@@ -303,6 +328,13 @@
                                 </Grid>
                             </DataTemplate>
                         </ListBox.ItemTemplate>
+                        <ListBox.ContextMenu>
+                            <ContextMenu>
+                                <MenuItem
+                                    Click="CopySelectedPlaylistPackageKey_Click"
+                                    Header="Copy package key" />
+                            </ContextMenu>
+                        </ListBox.ContextMenu>
                     </ListBox>
                 </Grid>
 
@@ -320,6 +352,47 @@
                         Content="Close"
                         FontSize="14" />
                 </StackPanel>
+                </Grid>
+            </Grid>
+
+            <Grid
+                x:Name="ActivationBusyOverlay"
+                Background="#80000000"
+                Visibility="Collapsed">
+                <Border
+                    Width="320"
+                    Padding="16"
+                    HorizontalAlignment="Center"
+                    VerticalAlignment="Center"
+                    Background="{DynamicResource ControlBackgroundBrush}"
+                    BorderBrush="{DynamicResource ControlBorderBrush}"
+                    BorderThickness="1"
+                    CornerRadius="8">
+                    <StackPanel>
+                        <TextBlock
+                            Margin="0,0,0,12"
+                            FontSize="14"
+                            FontWeight="SemiBold"
+                            Foreground="{DynamicResource TextBrush}"
+                            Text="Activating playlist..." />
+                        <TextBlock
+                            x:Name="ActivationBusyStatusText"
+                            Margin="0,0,0,6"
+                            FontSize="12"
+                            Foreground="{DynamicResource SecondaryTextBrush}"
+                            Text="Preparing..." />
+                        <TextBlock
+                            x:Name="ActivationBusyProgressText"
+                            Margin="0,0,0,10"
+                            FontSize="12"
+                            Foreground="{DynamicResource SecondaryTextBrush}"
+                            Text="0 / 0" />
+                        <ProgressBar
+                            x:Name="ActivationBusyProgressBar"
+                            Height="10"
+                            IsIndeterminate="True" />
+                    </StackPanel>
+                </Border>
             </Grid>
         </Grid>
     </DockPanel>

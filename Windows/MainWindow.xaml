@@ -1313,6 +1313,70 @@
                                         Tag="DamagedFilter" />
                                 </StackPanel>
 
+                                <!--  Playlists Filter Section  -->
+                                <StackPanel Margin="0,6,0,0">
+                                    <Grid
+                                        x:Name="PlaylistsFilterCollapsedGrid"
+                                        Margin="0,0,0,6"
+                                        Visibility="Collapsed">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto" />
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+                                        <Button
+                                            x:Name="PlaylistsFilterToggleButton"
+                                            Grid.Column="0"
+                                            Click="ToggleFilterVisibility_Click"
+                                            Content="➕"
+                                            Style="{StaticResource FilterToggleButtonStyle}"
+                                            Tag="PlaylistsFilter" />
+                                        <Label Grid.Column="1" Content="Filter playlists" />
+                                        <Button
+                                            x:Name="PlaylistsFilterMoveUpButton"
+                                            Grid.Column="2"
+                                            Click="FilterMoveUp_Click"
+                                            Style="{StaticResource FilterMoveUpButtonStyle}"
+                                            Tag="PlaylistsFilter" />
+                                        <Button
+                                            x:Name="PlaylistsFilterMoveDownButton"
+                                            Grid.Column="3"
+                                            Click="FilterMoveDown_Click"
+                                            Style="{StaticResource FilterMoveDownButtonStyle}"
+                                            Tag="PlaylistsFilter" />
+                                    </Grid>
+
+                                    <Grid x:Name="PlaylistsFilterExpandedGrid" Margin="0,0,0,6">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto" />
+                                            <ColumnDefinition Width="*" />
+                                        </Grid.ColumnDefinitions>
+                                        <Button
+                                            x:Name="PlaylistsFilterToggleButtonExpanded"
+                                            Grid.Column="0"
+                                            Click="ToggleFilterVisibility_Click"
+                                            Content="➖"
+                                            Style="{StaticResource FilterToggleButtonStyle}"
+                                            Tag="PlaylistsFilter" />
+                                        <Label Grid.Column="1" Content="Filter playlists" />
+                                    </Grid>
+
+                                    <ListBox
+                                        x:Name="PlaylistsFilterList"
+                                        Height="{Binding PlaylistsFilterHeight, Mode=TwoWay}"
+                                        MinHeight="80"
+                                        MouseLeftButtonDown="FilterList_MouseLeftButtonDown"
+                                        SelectionChanged="PlaylistsFilterList_SelectionChanged"
+                                        SelectionMode="Multiple"
+                                        Style="{StaticResource FilterListBoxStyle}" />
+                                    <Thumb
+                                        DragCompleted="FilterResizeThumb_DragCompleted"
+                                        DragDelta="FilterResizeThumb_DragDelta"
+                                        Style="{StaticResource FilterResizeThumbStyle}"
+                                        Tag="PlaylistsFilter" />
+                                </StackPanel>
+
                             </StackPanel>
 
                             <!--  Scene Filters Container (Scene Mode Only)  -->
@@ -2613,6 +2677,14 @@
                                                                 Text="⏳"
                                                                 ToolTip="Old version available"
                                                                 Visibility="{Binding IsOldVersion, Converter={StaticResource BoolToVis}}" />
+                                                            <TextBlock
+                                                                Margin="0,0,3,0"
+                                                                FontSize="11"
+                                                                FontWeight="Bold"
+                                                                Foreground="#00BCD4"
+                                                                Text="{Binding PlaylistTags}"
+                                                                ToolTip="Package is in one or more playlists"
+                                                                Visibility="{Binding HasPlaylists, Converter={StaticResource BoolToVis}}" />
                                                         </StackPanel>
                                                         <TextBlock
                                                             FontSize="16"
@@ -3135,6 +3207,15 @@
                                                     Text="⚡"
                                                     ToolTip="Package has been optimized"
                                                     Visibility="{Binding IsOptimized, Converter={StaticResource BoolToVis}}" />
+                                                <TextBlock
+                                                    Margin="3,0,0,0"
+                                                    VerticalAlignment="Center"
+                                                    FontSize="11"
+                                                    FontWeight="Bold"
+                                                    Foreground="#00BCD4"
+                                                    Text="{Binding PlaylistTags}"
+                                                    ToolTip="Package is in one or more playlists"
+                                                    Visibility="{Binding HasPlaylists, Converter={StaticResource BoolToVis}}" />
                                                 <TextBlock
                                                     Margin="6,0,2,0"
                                                     VerticalAlignment="Center"

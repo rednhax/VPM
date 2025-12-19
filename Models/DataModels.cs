@@ -43,6 +43,7 @@ namespace VPM.Models
         private string _externalDestinationName = "";
         private string _externalDestinationColorHex = "";
         private string _originalExternalDestinationColorHex = "";
+        private string _playlistTags = "";
 
         public event PropertyChangedEventHandler PropertyChanged;
 
@@ -62,6 +63,20 @@ namespace VPM.Models
         {
             return MetadataKey?.GetHashCode() ?? 0;
         }
+
+        public string PlaylistTags
+        {
+            get => _playlistTags;
+            set
+            {
+                if (SetProperty(ref _playlistTags, value))
+                {
+                    OnPropertyChanged(nameof(HasPlaylists));
+                }
+            }
+        }
+
+        public bool HasPlaylists => !string.IsNullOrEmpty(_playlistTags);
 
         public string Name
         {

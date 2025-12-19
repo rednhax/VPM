@@ -99,6 +99,18 @@ namespace VPM.Services
         /// </summary>
         public async Task<PlaylistActivationResult> ActivatePlaylistAsync(Playlist playlist, bool unloadOthers = true)
         {
+            return await ActivatePlaylistAsync(playlist, unloadOthers, progress: null);
+        }
+
+        /// <summary>
+        /// Activates a playlist by loading required packages and optionally unloading others.
+        /// Reports progress updates as packages are moved.
+        /// </summary>
+        public async Task<PlaylistActivationResult> ActivatePlaylistAsync(
+            Playlist playlist,
+            bool unloadOthers,
+            IProgress<PlaylistActivationProgress> progress)
+        {
             var result = new PlaylistActivationResult();
 
             if (playlist == null || !playlist.IsValid())
@@ -114,6 +126,17 @@ namespace VPM.Services
             result.PackagesToLoad = packagesToLoad.ToList();
             result.PackagesToUnload = packagesToUnload;
 
+            int totalSteps = packagesToUnload.Count + packagesToLoad.Count;
+            int completedSteps = 0;
+
+            progress?.Report(new PlaylistActivationProgress
+            {
+                Phase = "Preparing",
+                Completed = completedSteps,
+                Total = totalSteps,
+                CurrentPackageKey = ""
+            });
+
             try
             {
                 int loadedCount = 0;
@@ -121,19 +144,44 @@ namespace VPM.Services
 
                 foreach (var packageKey in packagesToUnload)
                 {
+                    progress?.Report(new PlaylistActivationProgress
+                    {
+                        Phase = "Unloading",
+                        Completed = completedSteps,
+                        Total = totalSteps,
+                        CurrentPackageKey = packageKey
+                    });
+
                     if (_packageManager.PackageMetadata.TryGetValue(packageKey, out var metadata) && metadata != null)
                     {
                         if (await MovePackageToAllPackagesAsync(metadata))
                             unloadedCount++;
                     }
+
+                    completedSteps++;
+                    progress?.Report(new PlaylistActivationProgress
+                    {
+                        Phase = "Unloading",
+                        Completed = completedSteps,
+                        Total = totalSteps,
+                        CurrentPackageKey = packageKey
+                    });
                 }
 
                 foreach (var packageKey in packagesToLoad)
                 {
+                    progress?.Report(new PlaylistActivationProgress
+                    {
+                        Phase = "Loading",
+                        Completed = completedSteps,
+                        Total = totalSteps,
+                        CurrentPackageKey = packageKey
+                    });
+
                     if (_packageManager.PackageMetadata.TryGetValue(packageKey, out var metadata) && metadata != null)
                     {
                         var currentStatus = metadata.Status;
-                        var isLoaded = currentStatus == "Loaded" || 
+                        var isLoaded = currentStatus == "Loaded" ||
                             (metadata.FilePath != null && metadata.FilePath.Contains("AddonPackages", StringComparison.OrdinalIgnoreCase));
 
                         if (!isLoaded)
@@ -146,12 +194,29 @@ namespace VPM.Services
                             loadedCount++;
                         }
                     }
+
+                    completedSteps++;
+                    progress?.Report(new PlaylistActivationProgress
+                    {
+                        Phase = "Loading",
+                        Completed = completedSteps,
+                        Total = totalSteps,
+                        CurrentPackageKey = packageKey
+                    });
                 }
 
                 result.Success = true;
                 result.LoadedCount = loadedCount;
                 result.UnloadedCount = unloadedCount;
                 result.Message = $"Playlist activated: {loadedCount} loaded, {unloadedCount} unloaded";
+
+                progress?.Report(new PlaylistActivationProgress
+                {
+                    Phase = "Complete",
+                    Completed = totalSteps,
+                    Total = totalSteps,
+                    CurrentPackageKey = ""
+                });
             }
             catch (Exception ex)
             {
@@ -412,6 +477,14 @@ namespace VPM.Services
         public List<string> PackagesToUnload { get; set; } = new List<string>();
         public int LoadedCount { get; set; }
         public int UnloadedCount { get; set; }
+    }
+
+    public class PlaylistActivationProgress
+    {
+        public string Phase { get; set; }
+        public int Completed { get; set; }
+        public int Total { get; set; }
+        public string CurrentPackageKey { get; set; }
     }
 
     /// <summary>

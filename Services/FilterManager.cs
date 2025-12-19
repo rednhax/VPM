@@ -49,6 +49,12 @@ namespace VPM.Services
         // External destination filtering
         public HashSet<string> SelectedDestinations { get; set; } = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
+        // Playlist filtering
+        public HashSet<string> SelectedPlaylistFilters { get; set; } = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        // Base package key => playlist tags (e.g. "P1 P2"). Supplied by MainWindow.
+        public IReadOnlyDictionary<string, string> PlaylistTagsCache { get; set; }
+
         public void ClearAllFilters()
         {
             SelectedStatus = null;
@@ -76,6 +82,7 @@ namespace VPM.Services
             SelectedHairTags.Clear();
             RequireAllTags = false;
             SelectedDestinations.Clear();
+            SelectedPlaylistFilters.Clear();
         }
 
         public void ClearCategoryFilter()
@@ -200,8 +207,30 @@ namespace VPM.Services
                 SelectedClothingTags = new HashSet<string>(SelectedClothingTags, StringComparer.OrdinalIgnoreCase),
                 SelectedHairTags = new HashSet<string>(SelectedHairTags, StringComparer.OrdinalIgnoreCase),
                 RequireAllTags = RequireAllTags,
-                SelectedDestinations = new HashSet<string>(SelectedDestinations, StringComparer.OrdinalIgnoreCase)
+                SelectedDestinations = new HashSet<string>(SelectedDestinations, StringComparer.OrdinalIgnoreCase),
+                SelectedPlaylistFilters = new HashSet<string>(SelectedPlaylistFilters, StringComparer.OrdinalIgnoreCase),
+                PlaylistTagsCache = PlaylistTagsCache
             };
+        }
+
+        private static string GetBasePackageKey(string key)
+        {
+            if (string.IsNullOrEmpty(key)) return "";
+            int hashIndex = key.IndexOf('#');
+            string baseKey = hashIndex >= 0 ? key.Substring(0, hashIndex) : key;
+
+            try
+            {
+                if (baseKey.IndexOf(Path.DirectorySeparatorChar) >= 0 || baseKey.IndexOf(Path.AltDirectorySeparatorChar) >= 0)
+                {
+                    return Path.GetFileName(baseKey);
+                }
+            }
+            catch
+            {
+            }
+
+            return baseKey;
         }
 
         /// <summary>
@@ -223,6 +252,45 @@ namespace VPM.Services
 
             // Resolve package name once for all filters that need it
             packageName = ResolvePackageName(metadata, packageName);
+
+            // Playlist filter (applies to both local and external)
+            if (state.SelectedPlaylistFilters != null && state.SelectedPlaylistFilters.Count > 0)
+            {
+                bool wantsIn = state.SelectedPlaylistFilters.Contains("In Playlists");
+                bool wantsNotIn = state.SelectedPlaylistFilters.Contains("Not in Playlists");
+
+                // If both are selected, they cancel out
+                if (!(wantsIn && wantsNotIn))
+                {
+                    var selectedTags = state.SelectedPlaylistFilters
+                        .Where(v => v.StartsWith("P", StringComparison.OrdinalIgnoreCase))
+                        .Select(v => v.Split(new[] { ' ', '-' }, 2, StringSplitOptions.TrimEntries)[0])
+                        .ToList();
+
+                    string baseKey = GetBasePackageKey(packageName);
+                    string tags = "";
+                    if (state.PlaylistTagsCache != null)
+                    {
+                        state.PlaylistTagsCache.TryGetValue(baseKey, out tags);
+                    }
+                    bool isInPlaylist = !string.IsNullOrEmpty(tags);
+
+                    if (wantsIn && !isInPlaylist) return false;
+                    if (wantsNotIn && isInPlaylist) return false;
+
+                    if (selectedTags.Count > 0)
+                    {
+                        // Selecting a specific playlist implies "in playlists"
+                        if (!isInPlaylist) return false;
+
+                        bool matchAny = selectedTags.Any(t => tags?.IndexOf(t, StringComparison.OrdinalIgnoreCase) >= 0);
+                        if (!matchAny) return false;
+
+                        // If user also selected "Not in Playlists" alongside tags, it can never match
+                        if (wantsNotIn) return false;
+                    }
+                }
+            }
 
             // CRITICAL: Early filter for external packages
             // External packages should ONLY appear when:

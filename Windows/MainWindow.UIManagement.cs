@@ -34,6 +34,83 @@ namespace VPM
         // Key is MetadataKey, value is the cached PackageItem
         // Using ConcurrentDictionary for thread-safe parallel access
         private readonly System.Collections.Concurrent.ConcurrentDictionary<string, PackageItem> _packageItemCache = new(StringComparer.OrdinalIgnoreCase);
+        
+        // Cache for playlist tags
+        private Dictionary<string, string> _playlistTagsCache = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+        private string GetBasePackageKey(string key)
+        {
+            if (string.IsNullOrEmpty(key)) return "";
+            int hashIndex = key.IndexOf('#');
+            string baseKey = hashIndex >= 0 ? key.Substring(0, hashIndex) : key;
+
+            // Handle keys that are paths - match by filename to support moving files
+            try
+            {
+                if (baseKey.IndexOf(Path.DirectorySeparatorChar) >= 0 || baseKey.IndexOf(Path.AltDirectorySeparatorChar) >= 0)
+                {
+                    return Path.GetFileName(baseKey);
+                }
+            }
+            catch
+            {
+                // Ignore invalid path characters
+            }
+
+            return baseKey;
+        }
+
+        public void UpdatePlaylistTagsCache()
+        {
+            _playlistTagsCache.Clear();
+            var playlists = _settingsManager?.Settings?.Playlists;
+            if (playlists == null) return;
+
+            // IMPORTANT: P1/P2/... are positional labels and must follow current SortOrder
+            var orderedPlaylists = playlists
+                .OrderBy(p => p?.SortOrder ?? int.MaxValue)
+                .ToList();
+
+            for (int i = 0; i < orderedPlaylists.Count; i++)
+            {
+                var playlist = orderedPlaylists[i];
+                if (playlist == null)
+                    continue;
+
+                string tag = $"P{i + 1}";
+                foreach (var packageKey in playlist.PackageKeys)
+                {
+                    string baseKey = GetBasePackageKey(packageKey);
+                    
+                    if (_playlistTagsCache.TryGetValue(baseKey, out var existingTags))
+                    {
+                        // Avoid duplicate tags if multiple keys map to same base key
+                        if (!existingTags.Contains(tag))
+                        {
+                            _playlistTagsCache[baseKey] = existingTags + " " + tag;
+                        }
+                    }
+                    else
+                    {
+                        _playlistTagsCache[baseKey] = tag;
+                    }
+                }
+            }
+            
+            // Update existing cached items
+            foreach (var item in _packageItemCache.Values)
+            {
+                string baseKey = GetBasePackageKey(item.MetadataKey);
+                item.PlaylistTags = _playlistTagsCache.TryGetValue(baseKey, out var tags) ? tags : "";
+            }
+
+            // Provide playlist cache to FilterManager so filtering can work on VarMetadata
+            if (_filterManager != null)
+            {
+                _filterManager.PlaylistTagsCache = _playlistTagsCache;
+            }
+        }
+
         private int _packageItemCacheVersion = -1;
         private string _cachedDestinationNamesHash = "";  // Hash of destination names to detect renames
         
@@ -394,6 +471,7 @@ namespace VPM
         /// </summary>
         private void ApplySettingsToUI()
         {
+            UpdatePlaylistTagsCache();
             var settings = _settingsManager.Settings;
             
             // Apply theme
@@ -504,6 +582,14 @@ namespace VPM
                     FileSizeFilterList.Visibility = settings.FileSizeFilterVisible ? System.Windows.Visibility.Visible : System.Windows.Visibility.Collapsed;
                     FileSizeFilterExpandedGrid.Visibility = settings.FileSizeFilterVisible ? System.Windows.Visibility.Visible : System.Windows.Visibility.Collapsed;
                     FileSizeFilterCollapsedGrid.Visibility = settings.FileSizeFilterVisible ? System.Windows.Visibility.Collapsed : System.Windows.Visibility.Visible;
+                }
+
+                // Playlists Filter
+                if (PlaylistsFilterList != null && PlaylistsFilterExpandedGrid != null && PlaylistsFilterCollapsedGrid != null)
+                {
+                    PlaylistsFilterList.Visibility = settings.PlaylistsFilterVisible ? System.Windows.Visibility.Visible : System.Windows.Visibility.Collapsed;
+                    PlaylistsFilterExpandedGrid.Visibility = settings.PlaylistsFilterVisible ? System.Windows.Visibility.Visible : System.Windows.Visibility.Collapsed;
+                    PlaylistsFilterCollapsedGrid.Visibility = settings.PlaylistsFilterVisible ? System.Windows.Visibility.Collapsed : System.Windows.Visibility.Visible;
                 }
                 
                 // Subfolders Filter
@@ -643,6 +729,7 @@ namespace VPM
         /// </summary>
         private void OnSettingsChanged(object sender, AppSettings settings)
         {
+            UpdatePlaylistTagsCache();
             
             // Apply theme if changed
             if (_currentTheme != settings.Theme)
@@ -914,6 +1001,9 @@ namespace VPM
                 // Sync filter manager with current UI selections before updating package list
                 // This ensures filters are preserved after hub download or other refresh operations
                 UpdateFilterManagerFromUI();
+                
+                // Update playlist tags cache before rebuilding package items
+                UpdatePlaylistTagsCache();
                 
                 // Force cache rebuild since package statuses might have changed even if count is same
                 _packageItemCacheVersion = -1;
@@ -1327,10 +1417,15 @@ namespace VPM
         /// </summary>
         private PackageItem GetOrCreatePackageItem(string metadataKey, VarMetadata metadata, Dictionary<string, int> dependentsCount)
         {
+            string baseKey = GetBasePackageKey(metadataKey);
+            
             if (_packageItemCache.TryGetValue(metadataKey, out var cachedItem))
             {
                 cachedItem.IsFavorite = _favoritesManager?.IsFavorite(cachedItem.Name) ?? false;
                 cachedItem.IsAutoInstall = _autoInstallManager?.IsAutoInstall(cachedItem.Name) ?? false;
+                
+                cachedItem.PlaylistTags = _playlistTagsCache.TryGetValue(baseKey, out var cachedTags) ? cachedTags : "";
+                
                 return cachedItem;
             }
             
@@ -1340,6 +1435,7 @@ namespace VPM
             var newItem = new PackageItem
             {
                 MetadataKey = metadataKey,
+                PlaylistTags = _playlistTagsCache.TryGetValue(baseKey, out var tags) ? tags : "",
                 Name = packageName,
                 Status = metadata.Status,
                 Creator = metadata.CreatorName,
@@ -2048,6 +2144,104 @@ namespace VPM
                                 }
                             }
                             
+                        }
+
+                        // Update playlists filter list
+                        if (PlaylistsFilterList != null)
+                        {
+                            var selectedPlaylistFilters = new List<string>();
+                            foreach (var item in PlaylistsFilterList.SelectedItems)
+                            {
+                                string itemText = item?.ToString() ?? "";
+                                if (!string.IsNullOrEmpty(itemText))
+                                {
+                                    var value = itemText.Split('(')[0].Trim();
+                                    selectedPlaylistFilters.Add(value);
+                                }
+                            }
+
+                            // Build tag -> playlist display name map (P1/P2/... based on playlist order)
+                            var playlistTagToName = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+                            var enabledPlaylists = _settingsManager?.Settings?.Playlists?
+                                .Where(p => p != null && p.IsEnabled && p.IsValid())
+                                .OrderBy(p => p.SortOrder)
+                                .ToList();
+                            if (enabledPlaylists != null)
+                            {
+                                for (int i = 0; i < enabledPlaylists.Count; i++)
+                                {
+                                    playlistTagToName[$"P{i + 1}"] = enabledPlaylists[i].Name;
+                                }
+                            }
+
+                            int inPlaylistsCount = 0;
+                            int notInPlaylistsCount = 0;
+                            var tagCounts = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+
+                            foreach (var kvp in packagesToCount)
+                            {
+                                var keyBase = GetBasePackageKey(kvp.Key);
+                                if (_playlistTagsCache.TryGetValue(keyBase, out var tags) && !string.IsNullOrEmpty(tags))
+                                {
+                                    inPlaylistsCount++;
+                                    foreach (var t in tags.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries))
+                                    {
+                                        if (!tagCounts.TryGetValue(t, out var c))
+                                            tagCounts[t] = 1;
+                                        else
+                                            tagCounts[t] = c + 1;
+                                    }
+                                }
+                                else
+                                {
+                                    notInPlaylistsCount++;
+                                }
+                            }
+
+                            PlaylistsFilterList.Items.Clear();
+                            var inText = $"In Playlists ({inPlaylistsCount:N0})";
+                            var notInText = $"Not in Playlists ({notInPlaylistsCount:N0})";
+                            PlaylistsFilterList.Items.Add(inText);
+                            PlaylistsFilterList.Items.Add(notInText);
+
+                            foreach (var tag in tagCounts.OrderBy(k => k.Key))
+                            {
+                                var nameSuffix = playlistTagToName.TryGetValue(tag.Key, out var playlistName) && !string.IsNullOrWhiteSpace(playlistName)
+                                    ? $" - {playlistName}"
+                                    : "";
+                                PlaylistsFilterList.Items.Add($"{tag.Key}{nameSuffix} ({tag.Value:N0})");
+                            }
+
+                            // Restore selection
+                            foreach (var desiredValue in selectedPlaylistFilters)
+                            {
+                                foreach (var listItem in PlaylistsFilterList.Items)
+                                {
+                                    var text = listItem?.ToString() ?? "";
+                                    var itemValue = text.Split('(')[0].Trim();
+                                    // Match exact for non-tag items; match by tag prefix for P# items
+                                    var desiredTag = desiredValue.StartsWith("P", StringComparison.OrdinalIgnoreCase)
+                                        ? desiredValue.Split(new[] { ' ', '-' }, 2, StringSplitOptions.TrimEntries)[0]
+                                        : null;
+                                    var itemTag = itemValue.StartsWith("P", StringComparison.OrdinalIgnoreCase)
+                                        ? itemValue.Split(new[] { ' ', '-' }, 2, StringSplitOptions.TrimEntries)[0]
+                                        : null;
+
+                                    if (desiredTag != null && itemTag != null)
+                                    {
+                                        if (!string.Equals(itemTag, desiredTag, StringComparison.OrdinalIgnoreCase))
+                                            continue;
+                                    }
+                                    else
+                                    {
+                                        if (!string.Equals(itemValue, desiredValue, StringComparison.OrdinalIgnoreCase))
+                                            continue;
+                                    }
+
+                                    PlaylistsFilterList.SelectedItems.Add(listItem);
+                                    break;
+                                }
+                            }
                         }
                         
                         // Restore filter list sorting after lists are populated

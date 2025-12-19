@@ -60,6 +60,8 @@ namespace VPM
                 }
                 if (DestinationsFilterList?.SelectedItems?.Count > 0)
                     return true;
+                if (PlaylistsFilterList?.SelectedItems?.Count > 0)
+                    return true;
 
                 if (DateFilterList?.SelectedIndex > 0)
                     return true;
@@ -324,6 +326,7 @@ namespace VPM
                 _filterManager.SelectedFileSizeRanges.Clear();
                 _filterManager.SelectedSubfolders.Clear();
                 _filterManager.SelectedDamagedFilter = null;
+                _filterManager.SelectedPlaylistFilters.Clear();
                 
                 
                 // Update status filters (includes regular status, optimization status, version status, and favorites)
@@ -394,6 +397,9 @@ namespace VPM
                 // Update destinations filter
                 _filterManager.SelectedDestinations.Clear();
                 CollectSelectedFilters(DestinationsFilterList, _filterManager.SelectedDestinations);
+
+                // Update playlists filter
+                CollectSelectedFilters(PlaylistsFilterList, _filterManager.SelectedPlaylistFilters);
 
                 // Update damaged filter
                 if (DamagedFilterList?.SelectedItem != null)

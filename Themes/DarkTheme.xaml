@@ -5,6 +5,7 @@
 
     <!--  Converters  -->
     <local:DataGridHeadersVisibilityConverter x:Key="DataGridHeadersVisibilityConverter" />
+    <local:AddOneConverter x:Key="AddOneConverter" />
 
     <!--  Windows 11 Inspired Dark Theme - Neutral Grays  -->
     <!--  UI Constants  -->
