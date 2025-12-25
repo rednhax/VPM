@@ -117,7 +117,7 @@ namespace VPM.Models
         private string _hubBrowserSource = "All";
         private string _hubBrowserCategory = "All";
         private string _hubBrowserPayType = "All";
-        private string _hubBrowserSort = "Last Update";
+        private string _hubBrowserSort = "Latest Update";
         private string _hubBrowserSortSecondary = "None";
         private string _hubBrowserCreator = "All";
         private List<string> _hubBrowserTags = new List<string>();
@@ -677,7 +677,7 @@ namespace VPM.Models
         public string HubBrowserSort
         {
             get => _hubBrowserSort;
-            set => SetProperty(ref _hubBrowserSort, value ?? "Last Update");
+            set => SetProperty(ref _hubBrowserSort, value ?? "Latest Update");
         }
 
         public string HubBrowserSortSecondary
@@ -887,7 +887,7 @@ namespace VPM.Models
                 HubBrowserSource = "All",
                 HubBrowserCategory = "All",
                 HubBrowserPayType = "All",
-                HubBrowserSort = "Last Update",
+                HubBrowserSort = "Latest Update",
                 HubBrowserSortSecondary = "None",
                 HubBrowserCreator = "All",
                 HubBrowserTags = new List<string>(),

@@ -68,6 +68,34 @@ namespace VPM.Windows
         private List<string> _allTags = new List<string>();
         private List<string> _selectedTags = new List<string>();
         private bool _isTagsFilterUpdating = false;
+
+        private async Task LoadAllTagsAsync()
+        {
+            try
+            {
+                var result = await _hubService.GetFilterOptionsResultAsync();
+                var options = result.Success ? result.Value : await _hubService.GetFilterOptionsAsync();
+
+                var tags = options?.Tags?.Keys
+                    ?.Where(t => !string.IsNullOrWhiteSpace(t))
+                    .Select(t => t.Trim())
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .OrderBy(t => t, StringComparer.OrdinalIgnoreCase)
+                    .ToList();
+
+                _allTags = tags ?? new List<string>();
+
+                if (TagsFilterToggle != null && TagsFilterToggle.IsChecked == true)
+                {
+                    PopulateTagsListBox(TagsSearchBox?.Text?.ToLowerInvariant() ?? "");
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[HubBrowserWindow] Failed to load tags list: {ex}");
+                _allTags = new List<string>();
+            }
+        }
         
         // Download queue state
         private ObservableCollection<QueuedDownload> _downloadQueue = new ObservableCollection<QueuedDownload>();
@@ -379,6 +407,36 @@ namespace VPM.Windows
 
             _vm = new HubBrowserViewModel(_hubService, _settingsManager, _localPackagePaths);
             DataContext = _vm;
+
+            try
+            {
+                if (_vm != null)
+                {
+                    _vm.PropertyChanged += (s, e) =>
+                    {
+                        if (string.IsNullOrEmpty(e?.PropertyName))
+                            return;
+
+                        switch (e.PropertyName)
+                        {
+                            case nameof(HubBrowserViewModel.SearchText):
+                            case nameof(HubBrowserViewModel.Scope):
+                            case nameof(HubBrowserViewModel.Category):
+                            case nameof(HubBrowserViewModel.PayType):
+                            case nameof(HubBrowserViewModel.Sort):
+                            case nameof(HubBrowserViewModel.SortSecondary):
+                            case nameof(HubBrowserViewModel.Creator):
+                            case nameof(HubBrowserViewModel.OnlyDownloadable):
+                                Dispatcher.BeginInvoke(new Action(UpdateActiveFiltersUI));
+                                break;
+                        }
+                    };
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[HubBrowserWindow] Failed to subscribe to HubBrowserViewModel.PropertyChanged: {ex}");
+            }
             
             // Pre-compute lookups for fast library status checking
             BuildLocalPackageLookups();
@@ -495,6 +553,8 @@ namespace VPM.Windows
             
             await _vm.InitializeAsync();
 
+            await LoadAllTagsAsync();
+
             // Restore Overview panel preference
             try
             {
@@ -559,7 +619,7 @@ namespace VPM.Windows
                 _settingsManager.UpdateSetting("HubBrowserCategory", _vm?.Category ?? "All");
                 if (_settingsManager?.Settings != null)
                     _settingsManager.Settings.HubBrowserPayType = _vm?.PayType ?? "All";
-                _settingsManager.UpdateSetting("HubBrowserSort", _vm?.Sort ?? "Last Update");
+                _settingsManager.UpdateSetting("HubBrowserSort", _vm?.Sort ?? "Latest Update");
                 _settingsManager.UpdateSetting("HubBrowserSortSecondary", _vm?.SortSecondary ?? "None");
                 _settingsManager.UpdateSetting("HubBrowserCreator", _vm?.Creator ?? "All");
                 _settingsManager.UpdateSetting("HubBrowserTags", new List<string>(_selectedTags ?? new List<string>()));
@@ -1054,6 +1114,43 @@ namespace VPM.Windows
                 _vm.SearchCommand.Execute(null);
             }
         }
+
+        private void ClearAllFilters_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                _selectedTags.Clear();
+                if (TagsListBox != null)
+                {
+                    _isTagsFilterUpdating = true;
+                    try { TagsListBox.SelectedItems.Clear(); }
+                    finally { _isTagsFilterUpdating = false; }
+                }
+
+                UpdateTagsDisplay();
+
+                if (_vm != null)
+                {
+                    try
+                    {
+                        _vm.ClearAllFiltersCommand.Execute(null);
+                    }
+                    catch (Exception ex)
+                    {
+                        Debug.WriteLine($"[HubBrowserWindow] ClearAllFiltersCommand.Execute failed: {ex}");
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[HubBrowserWindow] Failed to clear all filters: {ex}");
+            }
+            finally
+            {
+                UpdateActiveFiltersUI();
+                SaveHubBrowserState();
+            }
+        }
         
         private void UpdateTagsDisplay()
         {
@@ -1075,6 +1172,13 @@ namespace VPM.Windows
                 ClearTagsFilterButton.Visibility = _selectedTags.Count > 0
                     ? Visibility.Visible
                     : Visibility.Collapsed;
+            }
+
+            if (_vm != null)
+            {
+                _vm.Tags = (_selectedTags != null && _selectedTags.Count > 0)
+                    ? string.Join(",", _selectedTags)
+                    : "All";
             }
 
             UpdateActiveFiltersUI();
@@ -1123,6 +1227,14 @@ namespace VPM.Windows
                 if (!string.IsNullOrEmpty(creator) && !string.Equals(creator, "All", StringComparison.OrdinalIgnoreCase))
                     chips.Add(new ActiveFilterChip { Kind = "creator", Value = creator, DisplayText = $"Creator: {creator}" });
 
+                var sort = _vm?.Sort ?? "Latest Update";
+                if (!string.IsNullOrEmpty(sort) && !string.Equals(sort, "Latest Update", StringComparison.OrdinalIgnoreCase))
+                    chips.Add(new ActiveFilterChip { Kind = "sort", Value = sort, DisplayText = $"Sort: {sort}" });
+
+                var sort2 = _vm?.SortSecondary ?? "None";
+                if (!string.IsNullOrEmpty(sort2) && !string.Equals(sort2, "None", StringComparison.OrdinalIgnoreCase))
+                    chips.Add(new ActiveFilterChip { Kind = "sort2", Value = sort2, DisplayText = $"Then: {sort2}" });
+
                 if (_selectedTags != null && _selectedTags.Count > 0)
                 {
                     foreach (var tag in _selectedTags)
@@ -1164,6 +1276,12 @@ namespace VPM.Windows
                         break;
                     case "creator":
                         if (_vm != null) _vm.Creator = "All";
+                        break;
+                    case "sort":
+                        if (_vm != null) _vm.Sort = "Latest Update";
+                        break;
+                    case "sort2":
+                        if (_vm != null) _vm.SortSecondary = "None";
                         break;
                     case "tag":
                         _selectedTags.RemoveAll(t => string.Equals(t, chip.Value, StringComparison.OrdinalIgnoreCase));

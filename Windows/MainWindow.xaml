@@ -4902,6 +4902,8 @@
                                             <MenuItem Click="LaunchDesktop_Click" Header="🖥️ Desktop" />
                                             <MenuItem Click="LaunchVR_Click" Header="🥽 VR" />
                                             <MenuItem Click="LaunchConfig_Click" Header="⚙️ Config" />
+                                            <Separator />
+                                            <MenuItem Click="LaunchLogMode_Click" Header="📄 Log Mode" />
                                         </ContextMenu>
                                     </Button.ContextMenu>
                                     <Button.Style>

@@ -5067,6 +5067,43 @@ namespace VPM
         {
             LaunchVirtAMate("Config", "-show-screen-selector");
         }
+
+        private void LaunchLogMode_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                if (string.IsNullOrEmpty(_selectedFolder))
+                {
+                    CustomMessageBox.Show("Please select a VAM root folder first.",
+                        "No Folder Selected", MessageBoxButton.OK, MessageBoxImage.Information);
+                    return;
+                }
+
+                var batPath = Path.Combine(_selectedFolder, "VaM (Log Mode).bat");
+                if (!File.Exists(batPath))
+                {
+                    CustomMessageBox.Show($"VaM (Log Mode).bat not found in:\n{_selectedFolder}\n\nExpected file:\n{batPath}",
+                        "Log Mode Launcher Not Found", MessageBoxButton.OK, MessageBoxImage.Warning);
+                    return;
+                }
+
+                var startInfo = new ProcessStartInfo
+                {
+                    FileName = batPath,
+                    WorkingDirectory = _selectedFolder,
+                    UseShellExecute = true,
+                    CreateNoWindow = false
+                };
+
+                Process.Start(startInfo);
+                SetStatus("Launched VirtAMate in Log Mode");
+            }
+            catch (Exception ex)
+            {
+                CustomMessageBox.Show($"Error launching VirtAMate (Log Mode):\n\n{ex.Message}",
+                    "Launch Error", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
         
         /// <summary>
         /// Launches VirtAMate in a separate process with specified arguments

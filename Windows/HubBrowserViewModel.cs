@@ -245,7 +245,7 @@ namespace VPM.Windows
             }
         }
 
-        private string _sort = "Last Update";
+        private string _sort = "Latest Update";
         public string Sort
         {
             get => _sort;
@@ -394,7 +394,7 @@ namespace VPM.Windows
                 Scope = "All";
                 Category = "All";
                 PayType = "All";
-                Sort = SortOptions.Count > 0 ? SortOptions[0] : "Last Update";
+                Sort = SortOptions.Count > 0 ? SortOptions[0] : "Latest Update";
                 SortSecondary = "None";
                 Creator = "All";
                 OnlyDownloadable = false;
@@ -439,7 +439,7 @@ namespace VPM.Windows
                 }
                 else
                 {
-                    SortOptions.Add("Last Update");
+                    SortOptions.Add("Latest Update");
                 }
 
                 SortSecondaryOptions.Clear();
@@ -478,7 +478,7 @@ namespace VPM.Windows
                 Creator = string.IsNullOrWhiteSpace(Creator) ? "All" : Creator,
                 PayType = string.IsNullOrWhiteSpace(PayType) ? "All" : PayType,
                 Tags = string.IsNullOrWhiteSpace(Tags) ? "All" : Tags,
-                Sort = string.IsNullOrWhiteSpace(Sort) ? "Last Update" : Sort,
+                Sort = string.IsNullOrWhiteSpace(Sort) ? "Latest Update" : Sort,
                 SortSecondary = string.IsNullOrWhiteSpace(SortSecondary) ? "None" : SortSecondary,
                 OnlyDownloadable = OnlyDownloadable
             };
@@ -662,7 +662,7 @@ namespace VPM.Windows
                 _settingsManager.UpdateSetting("HubBrowserCategory", Category ?? "All");
                 if (_settingsManager?.Settings != null)
                     _settingsManager.Settings.HubBrowserPayType = PayType ?? "All";
-                _settingsManager.UpdateSetting("HubBrowserSort", Sort ?? "Last Update");
+                _settingsManager.UpdateSetting("HubBrowserSort", Sort ?? "Latest Update");
                 _settingsManager.UpdateSetting("HubBrowserSortSecondary", SortSecondary ?? "None");
                 _settingsManager.UpdateSetting("HubBrowserCreator", Creator ?? "All");
             }
@@ -682,7 +682,7 @@ namespace VPM.Windows
                 Category = _settingsManager.GetSetting("HubBrowserCategory", "All") ?? "All";
                 var savedPayType = _settingsManager?.Settings?.HubBrowserPayType ?? "All";
                 PayType = savedPayType;
-                Sort = _settingsManager.GetSetting("HubBrowserSort", "Last Update") ?? "Last Update";
+                Sort = _settingsManager.GetSetting("HubBrowserSort", SortOptions.Count > 0 ? SortOptions[0] : "Latest Update") ?? (SortOptions.Count > 0 ? SortOptions[0] : "Latest Update");
                 SortSecondary = _settingsManager.GetSetting("HubBrowserSortSecondary", "None") ?? "None";
                 Creator = _settingsManager.GetSetting("HubBrowserCreator", "All") ?? "All";
             }

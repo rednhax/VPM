@@ -297,14 +297,14 @@ namespace VPM.Models
     public class HubSearchParams
     {
         public int Page { get; set; } = 1;
-        public int PerPage { get; set; } = 48;
-        public string Location { get; set; } = "Hub And Dependencies";  // "All", "Hub And Dependencies"
-        public string Search { get; set; }
+        public int PerPage { get; set; } = 24;
+        public string Search { get; set; } = "";
+        public string Location { get; set; } = "All";  // "All", "Hub Only", "Hub And Dependencies", etc.
         public string PayType { get; set; } = "Free";  // "All", "Free", "Paid"
         public string Category { get; set; } = "All";  // "All", "Scenes", "Looks", "Assets", etc.
         public string Creator { get; set; } = "All";
         public string Tags { get; set; } = "All";
-        public string Sort { get; set; } = "Last Update";
+        public string Sort { get; set; } = "Latest Update";
         public string SortSecondary { get; set; } = "None";  // Secondary sort option
         public bool OnlyDownloadable { get; set; } = true;
     }
