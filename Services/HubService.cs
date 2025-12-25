@@ -1072,15 +1072,80 @@ namespace VPM.Services
             await _requestThrottle.WaitAsync(cancellationToken);
             try
             {
-                var content = new StringContent(jsonContent, Encoding.UTF8, "application/json");
-                var response = await _httpClient.PostAsync(ApiUrl, content, cancellationToken);
-                response.EnsureSuccessStatusCode();
-                return await response.Content.ReadAsStringAsync(cancellationToken);
+                const int maxAttempts = 3;
+                for (int attempt = 1; attempt <= maxAttempts; attempt++)
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+
+                    try
+                    {
+                        using var content = new StringContent(jsonContent, Encoding.UTF8, "application/json");
+                        using var response = await _httpClient.PostAsync(ApiUrl, content, cancellationToken);
+                        response.EnsureSuccessStatusCode();
+                        return await response.Content.ReadAsStringAsync(cancellationToken);
+                    }
+                    catch (OperationCanceledException)
+                    {
+                        throw;
+                    }
+                    catch (HttpRequestException ex) when (attempt < maxAttempts && IsTransientHubHttpFailure(ex) && !cancellationToken.IsCancellationRequested)
+                    {
+                        await Task.Delay(GetRetryDelay(attempt), cancellationToken);
+                    }
+                }
+
+                // Should never get here due to return/throw paths.
+                throw new HttpRequestException("Hub request failed after retries.");
             }
             finally
             {
                 _requestThrottle.Release();
             }
+        }
+
+        private static bool IsTransientHubHttpFailure(HttpRequestException ex)
+        {
+            if (ex == null)
+                return false;
+
+            // Common transient case seen in logs:
+            // System.Net.Http.HttpIOException: The response ended prematurely. (ResponseEnded)
+            // Note: often the *outer* HttpRequestException message is generic and the detail is in InnerException.
+            for (Exception cur = ex; cur != null; cur = cur.InnerException)
+            {
+                var msg = cur.Message ?? string.Empty;
+                if (msg.IndexOf("prematurely", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                    msg.IndexOf("ResponseEnded", StringComparison.OrdinalIgnoreCase) >= 0)
+                {
+                    return true;
+                }
+
+                // Treat low-level IO failures as transient.
+                if (cur is IOException)
+                    return true;
+            }
+
+            // Retry on 5xx when HttpRequestException has StatusCode.
+            if (ex.StatusCode.HasValue)
+            {
+                var code = (int)ex.StatusCode.Value;
+                if (code >= 500 && code <= 599)
+                    return true;
+            }
+
+            // Otherwise treat as non-transient.
+            return false;
+        }
+
+        private static TimeSpan GetRetryDelay(int attempt)
+        {
+            // Small exponential backoff: 200ms, 500ms, 1s
+            return attempt switch
+            {
+                1 => TimeSpan.FromMilliseconds(200),
+                2 => TimeSpan.FromMilliseconds(500),
+                _ => TimeSpan.FromMilliseconds(1000)
+            };
         }
 
         private static int ExtractVersion(string packageName)
