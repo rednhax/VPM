@@ -1288,13 +1288,56 @@
                                             <!--  Details section below image  -->
                                             <StackPanel Grid.Row="1" Margin="8">
                                                 <!--  Title  -->
-                                                <TextBlock
-                                                    FontSize="13"
-                                                    FontWeight="SemiBold"
-                                                    Foreground="{StaticResource DarkText}"
-                                                    Text="{Binding Title}"
-                                                    TextTrimming="CharacterEllipsis"
-                                                    TextWrapping="NoWrap" />
+                                                <Grid>
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="*" />
+                                                        <ColumnDefinition Width="Auto" />
+                                                    </Grid.ColumnDefinitions>
+
+                                                    <TextBlock
+                                                        Grid.Column="0"
+                                                        FontSize="13"
+                                                        FontWeight="SemiBold"
+                                                        Foreground="{StaticResource DarkText}"
+                                                        Text="{Binding Title}"
+                                                        TextTrimming="CharacterEllipsis"
+                                                        TextWrapping="NoWrap" />
+
+                                                    <Border
+                                                        Grid.Column="1"
+                                                        Margin="6,0,0,0"
+                                                        Padding="3,0"
+                                                        Background="#607D8B"
+                                                        CornerRadius="3"
+                                                        ToolTip="Open in system browser">
+                                                        <Border.Style>
+                                                            <Style TargetType="Border">
+                                                                <Setter Property="Visibility" Value="Visible" />
+                                                                <Style.Triggers>
+                                                                    <DataTrigger Binding="{Binding ResourceId}" Value="{x:Null}">
+                                                                        <Setter Property="Visibility" Value="Collapsed" />
+                                                                    </DataTrigger>
+                                                                    <DataTrigger Binding="{Binding ResourceId}" Value="">
+                                                                        <Setter Property="Visibility" Value="Collapsed" />
+                                                                    </DataTrigger>
+                                                                </Style.Triggers>
+                                                            </Style>
+                                                        </Border.Style>
+                                                        <Button
+                                                            Height="12"
+                                                            Padding="0"
+                                                            Background="Transparent"
+                                                            BorderThickness="0"
+                                                            Click="OpenResourceLandingInBrowser_Click"
+                                                            Cursor="Hand"
+                                                            Tag="{Binding ResourceId}">
+                                                            <TextBlock
+                                                                FontSize="9"
+                                                                Foreground="White"
+                                                                Text="🌐" />
+                                                        </Button>
+                                                    </Border>
+                                                </Grid>
 
                                                 <!--  Tag Line (subtitle/description)  -->
                                                 <TextBlock

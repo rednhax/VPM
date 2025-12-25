@@ -80,6 +80,24 @@ namespace VPM.Windows
             }
         }
 
+        public async Task RefreshLibraryStatusesAsync(CancellationToken cancellationToken = default)
+        {
+            BuildLocalPackageLookups();
+
+            if (Results == null || Results.Count == 0)
+                return;
+
+            foreach (var resource in Results)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+
+                var (inLibrary, updateAvailable) = await EvaluateLibraryStatusAsync(resource, cancellationToken);
+                resource.InLibrary = inLibrary;
+                resource.UpdateAvailable = updateAvailable;
+                resource.UpdateMessage = updateAvailable ? "Update available" : null;
+            }
+        }
+
         public bool IsNotLoading => !IsLoading;
 
         public System.Windows.Visibility LoadingVisibility => IsLoading ? System.Windows.Visibility.Visible : System.Windows.Visibility.Collapsed;
@@ -510,17 +528,13 @@ namespace VPM.Windows
                     TotalPages = response.Pagination?.TotalPages ?? 1;
 
                     var list = response.Resources ?? new List<HubResource>();
-                    var evaluated = await Task.Run(() =>
+                    var evaluated = new List<(HubResource Resource, bool InLibrary, bool UpdateAvailable)>(list.Count);
+                    foreach (var resource in list)
                     {
-                        var results = new List<(HubResource Resource, bool InLibrary, bool UpdateAvailable)>(list.Count);
-                        foreach (var resource in list)
-                        {
-                            token.ThrowIfCancellationRequested();
-                            var (inLibrary, updateAvailable) = EvaluateLibraryStatus(resource);
-                            results.Add((resource, inLibrary, updateAvailable));
-                        }
-                        return results;
-                    }, token);
+                        token.ThrowIfCancellationRequested();
+                        var (inLibrary, updateAvailable) = await EvaluateLibraryStatusAsync(resource, token);
+                        evaluated.Add((resource, inLibrary, updateAvailable));
+                    }
 
                     foreach (var item in evaluated)
                     {
@@ -561,45 +575,159 @@ namespace VPM.Windows
             }
         }
 
-        private (bool InLibrary, bool UpdateAvailable) EvaluateLibraryStatus(HubResource resource)
+        private async Task<(bool InLibrary, bool UpdateAvailable)> EvaluateLibraryStatusAsync(HubResource resource, CancellationToken cancellationToken)
         {
             if (resource?.HubFiles == null || resource.HubFiles.Count == 0)
                 return (false, false);
 
-            var inLibrary = false;
+            HubResourceDetail detail = resource as HubResourceDetail;
+            if (detail == null && resource.DependencyCount > 0 && !string.IsNullOrEmpty(resource.ResourceId))
+            {
+                try
+                {
+                    detail = await _hubService.GetResourceDetailAsync(resource.ResourceId, isPackageName: false, cancellationToken);
+                }
+                catch (OperationCanceledException)
+                {
+                    throw;
+                }
+                catch
+                {
+                    detail = null;
+                }
+            }
+
+            // Treat the resource as a collection (main + dependencies). If the Hub says there are dependencies,
+            // we must be able to enumerate them; otherwise we cannot claim the collection is complete.
+            if (resource.DependencyCount > 0 && (detail?.Dependencies == null || detail.Dependencies.Count == 0))
+            {
+                var updateFromMainOnly = false;
+                foreach (var hubFile in resource.HubFiles)
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                    if (string.IsNullOrEmpty(hubFile?.Filename))
+                        continue;
+
+                    var cleanName = hubFile.PackageName.Replace(".var", "", StringComparison.OrdinalIgnoreCase);
+                    var pkgGroupName = GetPackageGroupName(cleanName);
+                    if (_localPackageVersions != null && _localPackageVersions.TryGetValue(pkgGroupName, out var localVersion) && localVersion > 0)
+                    {
+                        if (_hubService.HasUpdate(pkgGroupName, localVersion))
+                        {
+                            updateFromMainOnly = true;
+                            break;
+                        }
+                    }
+                }
+                return (false, updateFromMainOnly);
+            }
+
+            var requiredFiles = new List<HubFile>();
+            if (detail?.HubFiles != null)
+                requiredFiles.AddRange(detail.HubFiles);
+            else
+                requiredFiles.AddRange(resource.HubFiles);
+
+            if (detail?.Dependencies != null)
+            {
+                foreach (var depGroup in detail.Dependencies.Values)
+                {
+                    if (depGroup == null)
+                        continue;
+                    requiredFiles.AddRange(depGroup);
+                }
+            }
+
+            if (requiredFiles.Count == 0)
+                return (false, false);
+
+            var allInLibrary = true;
             var updateAvailable = false;
 
-            foreach (var file in resource.HubFiles)
+            foreach (var file in requiredFiles)
             {
-                var packageName = file?.PackageName;
-                if (string.IsNullOrEmpty(packageName))
+                cancellationToken.ThrowIfCancellationRequested();
+
+                if (file == null || string.IsNullOrEmpty(file.Filename))
+                {
+                    allInLibrary = false;
                     continue;
+                }
+
+                var packageName = file.PackageName;
+                if (string.IsNullOrEmpty(packageName))
+                {
+                    allInLibrary = false;
+                    continue;
+                }
 
                 var cleanName = packageName.Replace(".var", "", StringComparison.OrdinalIgnoreCase);
-                if (_localPackageNames != null && _localPackageNames.Contains(cleanName))
+                var pkgGroupName = GetPackageGroupName(cleanName);
+                var hubVersion = GetHubFileVersion(file);
+
+                var hasLocal = false;
+                var localVersion = -1;
+
+                if (hubVersion > 0)
                 {
-                    inLibrary = true;
+                    // Versioned requirement: accept any local version in the group as long as it's >= required.
+                    if (_localPackageVersions != null && _localPackageVersions.TryGetValue(pkgGroupName, out var lv) && lv > 0)
+                    {
+                        localVersion = lv;
+                        hasLocal = localVersion >= hubVersion;
+                    }
                 }
                 else
                 {
-                    var groupName = GetPackageGroupName(cleanName);
-                    if (_localPackageVersions != null && _localPackageVersions.ContainsKey(groupName))
-                        inLibrary = true;
+                    // Unversioned / non-numeric requirement (commonly .latest): require exact package presence.
+                    if (_localPackageNames != null && _localPackageNames.Contains(cleanName))
+                        hasLocal = true;
+
+                    // Still capture a local version (if any) for update detection, but it should not satisfy the requirement.
+                    if (_localPackageVersions != null && _localPackageVersions.TryGetValue(pkgGroupName, out var lv) && lv > 0)
+                        localVersion = lv;
                 }
 
-                var pkgGroupName = GetPackageGroupName(cleanName);
-                if (!updateAvailable && _localPackageVersions != null &&
-                    _localPackageVersions.TryGetValue(pkgGroupName, out var localVersion) && localVersion > 0 &&
-                    _hubService.HasUpdate(pkgGroupName, localVersion))
+                if (!hasLocal)
                 {
-                    updateAvailable = true;
+                    allInLibrary = false;
                 }
+                else if (!updateAvailable && localVersion > 0)
+                {
+                    if ((hubVersion > 0 && hubVersion > localVersion) || _hubService.HasUpdate(pkgGroupName, localVersion))
+                        updateAvailable = true;
+                }
+            }
+            return (allInLibrary, updateAvailable);
+        }
 
-                if (inLibrary && updateAvailable)
-                    break;
+        private static int GetHubFileVersion(HubFile file)
+        {
+            if (file == null)
+                return -1;
+
+            if (!string.IsNullOrEmpty(file.LatestVersion) && int.TryParse(file.LatestVersion, out var parsedLatest))
+                return parsedLatest;
+
+            if (!string.IsNullOrEmpty(file.Version) && int.TryParse(file.Version, out var parsedVersion))
+                return parsedVersion;
+
+            if (string.IsNullOrEmpty(file.Filename))
+                return -1;
+
+            var name = file.Filename;
+            if (name.EndsWith(".var", StringComparison.OrdinalIgnoreCase))
+                name = name.Substring(0, name.Length - 4);
+
+            var lastDot = name.LastIndexOf('.');
+            if (lastDot > 0 && lastDot < name.Length - 1)
+            {
+                var versionPart = name.Substring(lastDot + 1);
+                if (int.TryParse(versionPart, out var version))
+                    return version;
             }
 
-            return (inLibrary, updateAvailable);
+            return -1;
         }
 
         private void BuildLocalPackageLookups()
@@ -607,9 +735,15 @@ namespace VPM.Windows
             _localPackageNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             _localPackageVersions = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
 
-            foreach (var pkg in _localPackagePaths.Keys)
+            foreach (var kvp in _localPackagePaths)
             {
-                var name = (pkg ?? string.Empty).Replace(".var", "");
+                var pkg = kvp.Key;
+                var path = kvp.Value;
+
+                if (string.IsNullOrWhiteSpace(pkg) || string.IsNullOrWhiteSpace(path) || !System.IO.File.Exists(path))
+                    continue;
+
+                var name = pkg.Replace(".var", "");
                 if (string.IsNullOrEmpty(name))
                     continue;
 

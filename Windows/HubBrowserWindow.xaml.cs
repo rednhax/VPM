@@ -821,6 +821,179 @@ namespace VPM.Windows
                 }
             }
         }
+
+        private void TryOpenTagUrlInBrowser(object sender, string context)
+        {
+            if (sender is not FrameworkElement element)
+            {
+                return;
+            }
+
+            var url = element.Tag as string;
+            if (string.IsNullOrWhiteSpace(url))
+            {
+                try
+                {
+                    StatusText.Text = "No Hub URL available for this item.";
+                }
+                catch
+                {
+                }
+                return;
+            }
+
+            if (!Uri.IsWellFormedUriString(url, UriKind.Absolute))
+            {
+                try
+                {
+                    StatusText.Text = "Invalid URL.";
+                }
+                catch
+                {
+                }
+                Debug.WriteLine($"[HubBrowserWindow] Invalid URL for browser open ({context}): '{url}'");
+                return;
+            }
+
+            try
+            {
+                OpenUrlInSystemBrowser(url);
+                try
+                {
+                    StatusText.Text = "Opened in system browser.";
+                }
+                catch
+                {
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[HubBrowserWindow] Failed to open URL in browser ({context}): {ex}");
+                try
+                {
+                    StatusText.Text = $"Failed to open browser: {ex.GetType().Name}: {ex.Message}";
+                }
+                catch
+                {
+                }
+            }
+        }
+
+        private static void OpenUrlInSystemBrowser(string url)
+        {
+            // Primary: shell execute (uses default handler)
+            try
+            {
+                Process.Start(new ProcessStartInfo(url) { UseShellExecute = true });
+                return;
+            }
+            catch
+            {
+            }
+
+            // Fallback: explorer.exe
+            try
+            {
+                Process.Start(new ProcessStartInfo("explorer.exe", url)
+                {
+                    UseShellExecute = false,
+                    CreateNoWindow = true
+                });
+                return;
+            }
+            catch
+            {
+            }
+
+            // Fallback: cmd start
+            var escaped = url.Replace("\"", "\\\"");
+            Process.Start(new ProcessStartInfo("cmd.exe", $"/c start \"\" \"{escaped}\"")
+            {
+                UseShellExecute = false,
+                CreateNoWindow = true
+            });
+        }
+
+        private void OpenResourceLandingInBrowser_Click(object sender, RoutedEventArgs e)
+        {
+            TryOpenHubResourcePageInBrowser(sender, "ResourceLanding", "landing");
+        }
+
+        private void OpenResourceDescriptionInBrowser_Click(object sender, RoutedEventArgs e)
+        {
+            TryOpenHubResourcePageInBrowser(sender, "ResourceDescription", "overview");
+        }
+
+        private void OpenResourceUpdatesInBrowser_Click(object sender, RoutedEventArgs e)
+        {
+            TryOpenHubResourcePageInBrowser(sender, "ResourceUpdates", "updates");
+        }
+
+        private void OpenResourceReviewsInBrowser_Click(object sender, RoutedEventArgs e)
+        {
+            TryOpenHubResourcePageInBrowser(sender, "ResourceReviews", "review");
+        }
+
+        private void OpenResourceDiscussionInBrowser_Click(object sender, RoutedEventArgs e)
+        {
+            TryOpenHubThreadPageInBrowser(sender, "ResourceDiscussion");
+        }
+
+        private void TryOpenHubResourcePageInBrowser(object sender, string context, string subpage)
+        {
+            if (sender is not FrameworkElement element)
+                return;
+
+            var resourceId = element.Tag as string;
+            if (string.IsNullOrWhiteSpace(resourceId))
+            {
+                try { StatusText.Text = "No Hub resource id available for this item."; } catch { }
+                return;
+            }
+
+            var url = subpage == "landing"
+                ? $"https://hub.virtamate.com/resources/{resourceId}"
+                : $"https://hub.virtamate.com/resources/{resourceId}/{subpage}";
+
+            TryOpenAbsoluteUrlInBrowser(url, context);
+        }
+
+        private void TryOpenHubThreadPageInBrowser(object sender, string context)
+        {
+            if (sender is not FrameworkElement element)
+                return;
+
+            var threadId = element.Tag as string;
+            if (string.IsNullOrWhiteSpace(threadId))
+            {
+                try { StatusText.Text = "No discussion thread available for this item."; } catch { }
+                return;
+            }
+
+            var url = $"https://hub.virtamate.com/threads/{threadId}";
+            TryOpenAbsoluteUrlInBrowser(url, context);
+        }
+
+        private void TryOpenAbsoluteUrlInBrowser(string url, string context)
+        {
+            if (!Uri.IsWellFormedUriString(url, UriKind.Absolute))
+            {
+                try { StatusText.Text = "Invalid URL."; } catch { }
+                Debug.WriteLine($"[HubBrowserWindow] Invalid URL for browser open ({context}): '{url}'");
+                return;
+            }
+
+            try
+            {
+                OpenUrlInSystemBrowser(url);
+                try { StatusText.Text = "Opened in system browser."; } catch { }
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[HubBrowserWindow] Failed to open URL in browser ({context}): {ex}");
+                try { StatusText.Text = $"Failed to open browser: {ex.GetType().Name}: {ex.Message}"; } catch { }
+            }
+        }
         
         private void DetailCreator_Click(object sender, MouseButtonEventArgs e)
         {
@@ -1350,11 +1523,38 @@ namespace VPM.Windows
         {
             // Restore single-click activation while keeping keyboard and double-click support.
             // If the user clicked on an item, SelectedItem will already be updated.
+            if (IsClickOnInteractiveElement(e.OriginalSource))
+            {
+                return;
+            }
             if (ResourcesListBox?.SelectedItem is HubResource resource)
             {
                 ShowResourceDetail(resource);
                 e.Handled = true;
             }
+        }
+
+        private static bool IsClickOnInteractiveElement(object originalSource)
+        {
+            var current = originalSource as DependencyObject;
+            while (current != null)
+            {
+                if (current is ButtonBase)
+                    return true;
+
+                if (current is Hyperlink)
+                    return true;
+
+                if (current is TextBoxBase)
+                    return true;
+
+                if (current is Selector && current is not ListBox)
+                    return true;
+
+                current = VisualTreeHelper.GetParent(current);
+            }
+
+            return false;
         }
 
         private void ResourcesListBox_MouseDoubleClick(object sender, MouseButtonEventArgs e)
@@ -1369,14 +1569,9 @@ namespace VPM.Windows
         private void ResourcesScrollViewer_PreviewMouseWheel(object sender, MouseWheelEventArgs e)
         {
             // Increase scrolling sensitivity by multiplying the delta
-            const double scrollMultiplier = 100;
-            
-            if (sender is ScrollViewer scrollViewer)
-            {
-                double newOffset = scrollViewer.VerticalOffset - (e.Delta * scrollMultiplier / 120.0);
-                scrollViewer.ScrollToVerticalOffset(newOffset);
-                e.Handled = true;
-            }
+            // This aggressive scroll multiplier can cause large layout jumps and UI hitching,
+            // especially with virtualization and image-heavy items. Let WPF handle wheel scrolling.
+            return;
         }
 
         private void UpdatePaginationUI()
@@ -2574,11 +2769,43 @@ namespace VPM.Windows
                                         _packageManager.RemoveFromMissingDependencies(packageName);
                                     }
                                 }
-                                
-                                if (_currentResource != null)
+
+                                // Refresh library status for all visible Hub results and update the current detail badge.
+                                if (_vm != null)
                                 {
-                                    _currentResource.InLibrary = true;
-                                    _currentResource.UpdateAvailable = false;
+                                    _ = Dispatcher.BeginInvoke(new Action(async () =>
+                                    {
+                                        try
+                                        {
+                                            await _vm.RefreshLibraryStatusesAsync();
+
+                                            if (_currentResource != null && !string.IsNullOrEmpty(_currentResource.ResourceId))
+                                            {
+                                                var refreshed = _vm.Results?.FirstOrDefault(r =>
+                                                    string.Equals(r.ResourceId, _currentResource.ResourceId, StringComparison.OrdinalIgnoreCase));
+
+                                                if (refreshed != null)
+                                                {
+                                                    _currentResource.InLibrary = refreshed.InLibrary;
+                                                    _currentResource.UpdateAvailable = refreshed.UpdateAvailable;
+                                                    _currentResource.UpdateMessage = refreshed.UpdateMessage;
+                                                }
+
+                                                if (_currentDetail != null)
+                                                {
+                                                    _currentDetail.InLibrary = _currentResource.InLibrary;
+                                                    _currentDetail.UpdateAvailable = _currentResource.UpdateAvailable;
+                                                    _currentDetail.UpdateMessage = _currentResource.UpdateMessage;
+                                                    DetailInLibraryBadge.Visibility = _currentDetail.InLibrary ? Visibility.Visible : Visibility.Collapsed;
+                                                    DetailUpdateBadge.Visibility = _currentDetail.UpdateAvailable ? Visibility.Visible : Visibility.Collapsed;
+                                                }
+                                            }
+                                        }
+                                        catch (Exception ex)
+                                        {
+                                            Debug.WriteLine($"[HubBrowserWindow] Failed to refresh library statuses after download: {ex}");
+                                        }
+                                    }));
                                 }
 
                                 // Optional: Load the downloaded package + its dependencies into AddonPackages
