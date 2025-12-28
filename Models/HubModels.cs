@@ -31,6 +31,30 @@ namespace VPM.Models
         [JsonPropertyName("category")]
         public string Category { get; set; }  // "Free" or "Paid"
 
+        public string PayTypeNormalized
+        {
+            get
+            {
+                var v = Category;
+                if (string.IsNullOrWhiteSpace(v))
+                    return null;
+                return v.Trim();
+            }
+        }
+
+        public bool IsPayTypeFree => string.Equals(PayTypeNormalized, "Free", StringComparison.OrdinalIgnoreCase);
+        public bool IsPayTypePaid => string.Equals(PayTypeNormalized, "Paid", StringComparison.OrdinalIgnoreCase);
+
+        public string PayTypeDisplay
+        {
+            get
+            {
+                if (IsPayTypeFree) return "🎁 Free";
+                if (IsPayTypePaid) return "💰 Paid";
+                return PayTypeNormalized ?? "";
+            }
+        }
+
         [JsonPropertyName("type")]
         public string Type { get; set; }  // "Scenes", "Looks", "Assets", etc.
 

@@ -39,7 +39,13 @@ namespace VPM.Windows
             CreatorText.Text = $"by {_resource.Creator ?? "Unknown"}";
             TagLineText.Text = _resource.TagLine ?? "";
             TypeText.Text = _resource.Type ?? "Unknown";
-            CategoryText.Text = _resource.Category ?? "Free";
+            var category = _resource.Category ?? "Free";
+            CategoryText.Text = category switch
+            {
+                "Free" => "🎁 Free",
+                "Paid" => "💰 Paid",
+                _ => category
+            };
             DownloadCountRun.Text = _resource.DownloadCount.ToString("N0");
             RatingRun.Text = _resource.RatingAvg.ToString("F1");
 

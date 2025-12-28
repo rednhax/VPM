@@ -20,26 +20,24 @@
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
-        <!-- Header -->
+        <!--  Header  -->
         <Grid Grid.Row="0" Margin="0,0,0,16">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="150" />
                 <ColumnDefinition Width="*" />
             </Grid.ColumnDefinitions>
 
-            <!-- Thumbnail -->
+            <!--  Thumbnail  -->
             <Border
                 Grid.Column="0"
                 Width="140"
                 Height="100"
                 Background="#20808080"
                 CornerRadius="4">
-                <Image
-                    x:Name="ThumbnailImage"
-                    Stretch="UniformToFill" />
+                <Image x:Name="ThumbnailImage" Stretch="UniformToFill" />
             </Border>
 
-            <!-- Title & Info -->
+            <!--  Title & Info  -->
             <StackPanel Grid.Column="1" Margin="16,0,0,0">
                 <TextBlock
                     x:Name="TitleText"
@@ -61,7 +59,7 @@
                     Foreground="{DynamicResource {x:Static SystemColors.WindowTextBrushKey}}"
                     TextWrapping="Wrap" />
 
-                <!-- Stats -->
+                <!--  Stats  -->
                 <StackPanel Margin="0,8,0,0" Orientation="Horizontal">
                     <Border
                         Margin="0,0,8,0"
@@ -83,7 +81,7 @@
                             x:Name="CategoryText"
                             FontSize="11"
                             Foreground="White"
-                            Text="Free" />
+                            Text="🎁 Free" />
                     </Border>
                     <TextBlock
                         Margin="8,0,0,0"
@@ -99,10 +97,10 @@
             </StackPanel>
         </Grid>
 
-        <!-- Separator -->
+        <!--  Separator  -->
         <Separator Grid.Row="1" Margin="0,0,0,16" />
 
-        <!-- Files List -->
+        <!--  Files List  -->
         <Grid Grid.Row="2">
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto" />
@@ -138,7 +136,7 @@
                                         <ColumnDefinition Width="Auto" />
                                     </Grid.ColumnDefinitions>
 
-                                    <!-- File Info -->
+                                    <!--  File Info  -->
                                     <StackPanel Grid.Column="0">
                                         <TextBlock
                                             FontSize="13"
@@ -158,7 +156,7 @@
                                         </StackPanel>
                                     </StackPanel>
 
-                                    <!-- Status -->
+                                    <!--  Status  -->
                                     <StackPanel
                                         Grid.Column="1"
                                         Margin="8,0"
@@ -175,7 +173,7 @@
                                         </Border>
                                     </StackPanel>
 
-                                    <!-- Download Button -->
+                                    <!--  Download Button  -->
                                     <Button
                                         Grid.Column="2"
                                         Width="100"
@@ -192,14 +190,14 @@
             </ScrollViewer>
         </Grid>
 
-        <!-- Footer -->
+        <!--  Footer  -->
         <Grid Grid.Row="3" Margin="0,16,0,0">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
 
-            <!-- Status -->
+            <!--  Status  -->
             <TextBlock
                 x:Name="StatusText"
                 Grid.Column="0"
@@ -207,10 +205,8 @@
                 Foreground="{DynamicResource {x:Static SystemColors.WindowTextBrushKey}}"
                 Text="Ready" />
 
-            <!-- Buttons -->
-            <StackPanel
-                Grid.Column="1"
-                Orientation="Horizontal">
+            <!--  Buttons  -->
+            <StackPanel Grid.Column="1" Orientation="Horizontal">
                 <Button
                     x:Name="DownloadAllButton"
                     Width="120"

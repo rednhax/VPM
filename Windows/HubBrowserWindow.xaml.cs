@@ -1002,6 +1002,48 @@ namespace VPM.Windows
             TryOpenHubResourcePageInBrowser(sender, "ResourceLanding", "landing");
         }
 
+        private async void CopyResourceLandingLink_Click(object sender, RoutedEventArgs e)
+        {
+            if (sender is not FrameworkElement element)
+                return;
+
+            var resourceId = element.Tag as string;
+            if (string.IsNullOrWhiteSpace(resourceId))
+            {
+                try { StatusText.Text = "No Hub resource id available for this item."; } catch { }
+                return;
+            }
+
+            var url = $"https://hub.virtamate.com/resources/{resourceId}";
+            try
+            {
+                Clipboard.SetText(url);
+                try { StatusText.Text = "Copied Hub link."; } catch { }
+
+                if (DetailCopyHubLinkIcon != null && DetailCopyHubLinkButton != null)
+                {
+                    var oldIcon = DetailCopyHubLinkIcon.Text;
+                    var oldBg = DetailCopyHubLinkButton.Background;
+                    var oldBorder = DetailCopyHubLinkButton.BorderBrush;
+
+                    DetailCopyHubLinkIcon.Text = " ✓ ";
+                    DetailCopyHubLinkButton.Background = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#FF2E7D32"));
+                    DetailCopyHubLinkButton.BorderBrush = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#FF4CAF50"));
+
+                    await Task.Delay(900);
+
+                    DetailCopyHubLinkIcon.Text = oldIcon;
+                    DetailCopyHubLinkButton.Background = oldBg;
+                    DetailCopyHubLinkButton.BorderBrush = oldBorder;
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[HubBrowserWindow] Failed to copy Hub link: {ex}");
+                try { StatusText.Text = $"Failed to copy: {ex.GetType().Name}: {ex.Message}"; } catch { }
+            }
+        }
+
         private void OpenResourceDescriptionInBrowser_Click(object sender, RoutedEventArgs e)
         {
             TryOpenHubResourcePageInBrowser(sender, "ResourceDescription", "overview");
@@ -1856,6 +1898,15 @@ namespace VPM.Windows
         {
             // Set basic info
             DetailTitle.Text = detail.Title ?? "";
+            DetailOpenInBrowserButton.Tag = detail.ResourceId;
+            DetailOpenInBrowserButton.Visibility = !string.IsNullOrEmpty(detail.ResourceId)
+                ? Visibility.Visible
+                : Visibility.Collapsed;
+
+            DetailCopyHubLinkButton.Tag = detail.ResourceId;
+            DetailCopyHubLinkButton.Visibility = !string.IsNullOrEmpty(detail.ResourceId)
+                ? Visibility.Visible
+                : Visibility.Collapsed;
             DetailCreator.Text = detail.Creator ?? "Unknown";
             DetailCreator.Tag = detail.Creator;  // Store creator name for filter click
             
@@ -3658,6 +3709,10 @@ namespace VPM.Windows
                 
                 // Update UI
                 DetailTitle.Text = $"📦 Available Updates ({updatesAvailable.Count})";
+                DetailOpenInBrowserButton.Visibility = Visibility.Collapsed;
+                DetailOpenInBrowserButton.Tag = null;
+                DetailCopyHubLinkButton.Visibility = Visibility.Collapsed;
+                DetailCopyHubLinkButton.Tag = null;
                 DetailCreator.Text = $"Found {updatesAvailable.Count} updates available";
                 DetailCreator.Foreground = new SolidColorBrush(Colors.White);  // Normal text, not blue
                 DetailCreator.TextDecorations = null;  // Remove underline
@@ -3858,6 +3913,10 @@ namespace VPM.Windows
                 
                 // Update UI
                 DetailTitle.Text = $"🔗 Missing Dependencies ({foundCount} available, {notFoundCount} not found)";
+                DetailOpenInBrowserButton.Visibility = Visibility.Collapsed;
+                DetailOpenInBrowserButton.Tag = null;
+                DetailCopyHubLinkButton.Visibility = Visibility.Collapsed;
+                DetailCopyHubLinkButton.Tag = null;
                 DetailCreator.Text = $"Found {foundCount} of {missingDeps.Count} missing dependencies on Hub";
                 DetailCreator.Foreground = new SolidColorBrush(Colors.White);  // Normal text, not blue
                 DetailCreator.TextDecorations = null;  // Remove underline

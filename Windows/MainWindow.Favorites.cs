@@ -60,8 +60,19 @@ namespace VPM
         {
             if (_favoritesManager == null) return;
 
+            if (Packages == null) return;
+
             foreach (var package in Packages)
             {
+                if (package == null)
+                    continue;
+
+                if (string.IsNullOrEmpty(package.Name))
+                {
+                    package.IsFavorite = false;
+                    continue;
+                }
+
                 package.IsFavorite = _favoritesManager.IsFavorite(package.Name);
             }
         }

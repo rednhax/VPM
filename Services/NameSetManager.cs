@@ -20,6 +20,8 @@ namespace VPM.Services
         protected bool _isLoaded = false;
         protected DateTime _lastMainFileWriteTime = DateTime.MinValue;
         protected FileSystemWatcher _fileWatcher;
+        private bool _mainFileBackedUp;
+        private bool _shadowFileBackedUp;
 
         public event EventHandler Changed;
 
@@ -260,10 +262,40 @@ namespace VPM.Services
             }
         }
 
+        private void EnsureBackupIfNeeded(string filePath, ref bool hasBackedUp)
+        {
+            if (hasBackedUp)
+                return;
+
+            try
+            {
+                if (!File.Exists(filePath))
+                {
+                    hasBackedUp = true;
+                    return;
+                }
+
+                string directory = Path.GetDirectoryName(filePath);
+                string fileNameWithoutExtension = Path.GetFileNameWithoutExtension(filePath);
+                string extension = Path.GetExtension(filePath);
+
+                string timestamp = DateTime.Now.ToString("yyyyMMdd_HHmmss");
+                string backupPath = Path.Combine(directory, $"{fileNameWithoutExtension}.bak.{timestamp}{extension}");
+
+                File.Copy(filePath, backupPath, overwrite: false);
+                hasBackedUp = true;
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Failed to create backup for '{filePath}': {ex.Message}");
+            }
+        }
+
         private bool TryWriteToMainFile()
         {
             try
             {
+                EnsureBackupIfNeeded(_mainFilePath, ref _mainFileBackedUp);
                 var sortedNames = _names.OrderBy(n => n, StringComparer.OrdinalIgnoreCase).ToList();
                 string json = SerializeMainFile(sortedNames);
 
@@ -290,6 +322,7 @@ namespace VPM.Services
         {
             try
             {
+                EnsureBackupIfNeeded(_shadowFilePath, ref _shadowFileBackedUp);
                 var mainNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
                 if (File.Exists(_mainFilePath))
                 {
@@ -336,6 +369,7 @@ namespace VPM.Services
             {
                 if (File.Exists(_shadowFilePath))
                 {
+                    EnsureBackupIfNeeded(_shadowFilePath, ref _shadowFileBackedUp);
                     File.Delete(_shadowFilePath);
                     _shadowAdditions.Clear();
                     _shadowRemovals.Clear();
