@@ -6573,9 +6573,25 @@ namespace VPM
             }
 
             var packageItem = selectedPackages[0];
-            _packageManager.PackageMetadata.TryGetValue(packageItem.MetadataKey, out var metadata);
+            string filePath = null;
 
-            if (metadata == null || string.IsNullOrEmpty(metadata.FilePath) || !File.Exists(metadata.FilePath))
+            // First try metadata (fastest)
+            if (_packageManager.PackageMetadata.TryGetValue(packageItem.MetadataKey, out var metadata))
+            {
+                if (!string.IsNullOrEmpty(metadata.FilePath) && File.Exists(metadata.FilePath))
+                {
+                    filePath = metadata.FilePath;
+                }
+            }
+
+            // ROBUSTNESS FIX: Fallback to resolving path via PackageFileManager if metadata is stale
+            // This happens when packages are moved (Loaded/Unloaded) and metadata cache isn't fully refreshed yet
+            if (string.IsNullOrEmpty(filePath))
+            {
+                filePath = _packageFileManager.ResolveDependencyToFilePath(packageItem.Name);
+            }
+
+            if (string.IsNullOrEmpty(filePath) || !File.Exists(filePath))
             {
                 launchSceneInVamMenuItem.IsEnabled = false;
                 return false;
@@ -6584,14 +6600,14 @@ namespace VPM
             launchSceneInVamMenuItem.IsEnabled = true;
 
             // PackageId used by VaM for --vpb.vds.scene is the .var name without extension
-            var packageId = Path.GetFileNameWithoutExtension(metadata.FilePath);
+            var packageId = Path.GetFileNameWithoutExtension(filePath);
 
             List<SceneItem> scenes;
             try
             {
                 // Scan scenes inside the VAR (Saves/scene/*.json)
                 var scanner = _sceneScanner ?? new SceneScanner(_selectedFolder);
-                scenes = scanner.ScanVarScenes(metadata.FilePath)
+                scenes = scanner.ScanVarScenes(filePath)
                     .OrderBy(s => s.DisplayName, StringComparer.OrdinalIgnoreCase)
                     .ToList();
             }

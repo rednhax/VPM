@@ -58,10 +58,8 @@ namespace VPM.Services
         private DateTime _filterOptionsCacheTime = DateTime.MinValue;
         private readonly TimeSpan _filterOptionsCacheExpiry = TimeSpan.FromHours(1); // Filter options rarely change
         
-        // Resource detail cache (LRU-style with max size)
-        private readonly Dictionary<string, (HubResourceDetail Detail, DateTime CacheTime)> _resourceDetailCache = new();
-        private readonly int _resourceDetailCacheMaxSize = 100;
-        private readonly TimeSpan _resourceDetailCacheExpiry = TimeSpan.FromMinutes(10);
+        // Resource detail cache (Single binary file)
+        private readonly HubResourceDetailCache _detailCache;
         
         // Search result cache
         private readonly Dictionary<string, (HubSearchResponse Response, DateTime CacheTime)> _searchCache = new();
@@ -95,9 +93,6 @@ namespace VPM.Services
         public event EventHandler AllDownloadsCompleted;
 
         private readonly string _cacheDirectory;
-        private readonly string _resourceDetailCacheDirectory;
-        private readonly object _resourceDetailDiskCacheLock = new object();
-        private readonly TimeSpan _resourceDetailDiskCacheTtl = TimeSpan.FromDays(7);
         private static readonly JsonSerializerOptions _jsonOptions = new JsonSerializerOptions
         {
             PropertyNameCaseInsensitive = true
@@ -127,68 +122,26 @@ namespace VPM.Services
             _hubResourcesCache = new HubResourcesCache(_httpClient);
 
             _hubSearchCache = new HubSearchCache(ttl: TimeSpan.FromMinutes(10), maxEntries: 200);
+            
+            // Initialize detail cache
+            _detailCache = new HubResourceDetailCache();
+            Task.Run(() => _detailCache.LoadFromDisk());
 
             _cacheDirectory = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "VPM", "Cache");
-            _resourceDetailCacheDirectory = Path.Combine(_cacheDirectory, "HubResourceDetails");
-            try
+            
+            // Clean up legacy HubResourceDetails folder if it exists
+            Task.Run(() =>
             {
-                if (!Directory.Exists(_resourceDetailCacheDirectory))
-                    Directory.CreateDirectory(_resourceDetailCacheDirectory);
-            }
-            catch (Exception)
-            {
-            }
-        }
-
-        private string GetResourceDetailCachePath(string cacheKey)
-        {
-            if (string.IsNullOrWhiteSpace(cacheKey))
-                return null;
-
-            var safe = new string(cacheKey.Select(ch => Path.GetInvalidFileNameChars().Contains(ch) ? '_' : ch).ToArray());
-            return Path.Combine(_resourceDetailCacheDirectory, safe + ".json");
-        }
-
-        private async Task<HubResourceDetail> TryLoadResourceDetailFromDiskAsync(string cacheKey)
-        {
-            try
-            {
-                var path = GetResourceDetailCachePath(cacheKey);
-                if (string.IsNullOrEmpty(path) || !File.Exists(path))
-                    return null;
-
-                var lastWrite = File.GetLastWriteTimeUtc(path);
-                if (DateTime.UtcNow - lastWrite > _resourceDetailDiskCacheTtl)
-                    return null;
-
-                using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read);
-                return await JsonSerializer.DeserializeAsync<HubResourceDetail>(stream, _jsonOptions);
-            }
-            catch
-            {
-                return null;
-            }
-        }
-
-        private void SaveResourceDetailToDisk(string cacheKey, string json)
-        {
-            if (string.IsNullOrWhiteSpace(cacheKey) || string.IsNullOrWhiteSpace(json))
-                return;
-
-            try
-            {
-                var path = GetResourceDetailCachePath(cacheKey);
-                if (string.IsNullOrEmpty(path))
-                    return;
-
-                lock (_resourceDetailDiskCacheLock)
+                try
                 {
-                    File.WriteAllText(path, json, Encoding.UTF8);
+                    var legacyPath = Path.Combine(_cacheDirectory, "HubResourceDetails");
+                    if (Directory.Exists(legacyPath))
+                    {
+                        Directory.Delete(legacyPath, true);
+                    }
                 }
-            }
-            catch (Exception)
-            {
-            }
+                catch (Exception) { /* ignore cleanup errors */ }
+            });
         }
 
         #region Search & Browse
@@ -406,28 +359,14 @@ namespace VPM.Services
             // Create cache key
             var cacheKey = isPackageName ? $"pkg:{resourceId}" : $"id:{resourceId}";
             
-            // Check cache first
-            if (_resourceDetailCache.TryGetValue(cacheKey, out var cached) && 
-                DateTime.Now - cached.CacheTime < _resourceDetailCacheExpiry)
+            // Check cache
+            var cached = _detailCache.TryGet(cacheKey);
+            if (cached != null)
             {
                 PerformanceMonitor.RecordOperation("GetResourceDetailAsync", 0, $"Cached - {cacheKey}");
-                return cached.Detail;
+                return cached;
             }
 
-            try
-            {
-                var detailFromDisk = await TryLoadResourceDetailFromDiskAsync(cacheKey);
-                if (detailFromDisk != null)
-                {
-                    _resourceDetailCache[cacheKey] = (detailFromDisk, DateTime.Now);
-                    PerformanceMonitor.RecordOperation("GetResourceDetailAsync", 0, $"DiskCached - {cacheKey}");
-                    return detailFromDisk;
-                }
-            }
-            catch
-            {
-            }
-            
             using (var timer = PerformanceMonitor.StartOperation("GetResourceDetailAsync")
                 .WithDetails(isPackageName ? $"Package: {resourceId}" : $"ResourceId: {resourceId}"))
             {
@@ -461,24 +400,13 @@ namespace VPM.Services
                 // Cache the result
                 if (detail != null)
                 {
-                    SaveResourceDetailToDisk(cacheKey, jsonResponse);
-
-                    // Evict oldest entries if cache is full
-                    if (_resourceDetailCache.Count >= _resourceDetailCacheMaxSize)
-                    {
-                        var oldest = _resourceDetailCache.OrderBy(x => x.Value.CacheTime).First().Key;
-                        _resourceDetailCache.Remove(oldest);
-                    }
-                    _resourceDetailCache[cacheKey] = (detail, DateTime.Now);
+                    _detailCache.Store(cacheKey, detail);
                     
                     // Also cache by resource ID if we looked up by package name
                     if (isPackageName && !string.IsNullOrEmpty(detail.ResourceId))
                     {
                         var idKey = $"id:{detail.ResourceId}";
-                        if (!_resourceDetailCache.ContainsKey(idKey))
-                        {
-                            _resourceDetailCache[idKey] = (detail, DateTime.Now);
-                        }
+                        _detailCache.Store(idKey, detail);
                     }
                 }
 
@@ -1320,6 +1248,7 @@ namespace VPM.Services
                 _httpClient?.Dispose();
                 _requestThrottle?.Dispose();
                 _hubResourcesCache?.Dispose();
+                _detailCache?.Dispose();
                 _disposed = true;
             }
         }

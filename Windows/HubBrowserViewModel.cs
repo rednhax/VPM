@@ -95,15 +95,8 @@ namespace VPM.Windows
             if (Results == null || Results.Count == 0)
                 return;
 
-            foreach (var resource in Results)
-            {
-                cancellationToken.ThrowIfCancellationRequested();
-
-                var (inLibrary, updateAvailable) = await EvaluateLibraryStatusAsync(resource, cancellationToken);
-                resource.InLibrary = inLibrary;
-                resource.UpdateAvailable = updateAvailable;
-                resource.UpdateMessage = updateAvailable ? "Update available" : null;
-            }
+            // Use the background evaluator instead of sequential checks on UI thread
+            await EvaluateStatusesAsync(Results.ToList(), cancellationToken);
         }
 
         public bool IsNotLoading => !IsLoading;
@@ -658,7 +651,19 @@ namespace VPM.Windows
             if (resources == null || resources.Count == 0)
                 return;
 
-            var maxConcurrency = 6;
+            // Delay to allow initial UI rendering and high-priority image loading to start/finish
+            try 
+            {
+                await Task.Delay(1500, token);
+            }
+            catch (OperationCanceledException)
+            {
+                return;
+            }
+
+            // Reduced concurrency to avoid saturating the HubService throttle (limit 4)
+            // leaving slots for user actions like image loading or new searches.
+            var maxConcurrency = 2;
             try
             {
                 using (var gate = new SemaphoreSlim(maxConcurrency))

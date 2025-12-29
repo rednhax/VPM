@@ -419,6 +419,9 @@ namespace VPM
                         results.AddRange(regularResults);
                     }
 
+                    // Clear metadata cache to ensure new paths are picked up
+                    ClearPackageMetadataCache();
+
                     var statusUpdates = new List<(string packageName, string status, Color statusColor)>();
 
                     // PERFORMANCE FIX: Pre-build lookup dictionary for O(1) access instead of O(n) FirstOrDefault
