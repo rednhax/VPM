@@ -6811,7 +6811,113 @@ namespace VPM
             }
         }
 
-        private MenuItem CreateLaunchSceneMenuItem(string header, string modeName, string args, string toolTip)
+        private void CustomAtomContextMenu_Opened(object sender, RoutedEventArgs e)
+        {
+            if (sender is not ContextMenu contextMenu)
+                return;
+
+            MenuItem launchSceneMenuItem = null;
+            foreach (var item in contextMenu.Items)
+            {
+                if (item is MenuItem menuItem && menuItem.Header?.ToString().StartsWith("🚀 Launch Scene", StringComparison.OrdinalIgnoreCase) == true)
+                {
+                    launchSceneMenuItem = menuItem;
+                    break;
+                }
+            }
+
+            if (launchSceneMenuItem == null)
+                return;
+
+            var selected = CustomAtomDataGrid?.SelectedItems?.Cast<CustomAtomItem>().ToList();
+            if (selected == null || selected.Count != 1)
+            {
+                launchSceneMenuItem.Visibility = Visibility.Collapsed;
+                return;
+            }
+
+            var sceneItem = selected[0];
+            if (!string.Equals(sceneItem.ContentType, "Scene", StringComparison.OrdinalIgnoreCase) || string.IsNullOrEmpty(sceneItem.FilePath) || !File.Exists(sceneItem.FilePath) || !sceneItem.FilePath.EndsWith(".json", StringComparison.OrdinalIgnoreCase))
+            {
+                launchSceneMenuItem.Visibility = Visibility.Collapsed;
+                return;
+            }
+
+            launchSceneMenuItem.Visibility = Visibility.Visible;
+            launchSceneMenuItem.Items.Clear();
+
+            string relativePath = sceneItem.FilePath;
+            try
+            {
+                if (!string.IsNullOrEmpty(_selectedFolder))
+                    relativePath = Path.GetRelativePath(_selectedFolder, sceneItem.FilePath);
+            }
+            catch
+            {
+                relativePath = sceneItem.FilePath;
+            }
+
+            var vdsSceneValue = (relativePath ?? sceneItem.FilePath).Replace('\\', '/');
+            var toolTip = string.Empty;
+            var dependencies = sceneItem.Dependencies;
+
+            void AddModeItems(ItemsControl targetMenu, List<string> deps)
+            {
+                targetMenu.Items.Add(CreateLaunchSceneMenuItem(
+                    "Desktop",
+                    "Desktop",
+                    $"-vrmode None --vpb.vds.scene \"{vdsSceneValue}\"",
+                    toolTip,
+                    deps));
+
+                targetMenu.Items.Add(CreateLaunchSceneMenuItem(
+                    "VR",
+                    "VR",
+                    $"-vrmode OpenVR --vpb.vds.scene \"{vdsSceneValue}\"",
+                    toolTip,
+                    deps));
+
+                targetMenu.Items.Add(CreateLaunchSceneMenuItem(
+                    "Screen Selector",
+                    "Screen Selector",
+                    $"-show-screen-selector --vpb.vds.scene \"{vdsSceneValue}\"",
+                    toolTip,
+                    deps));
+
+                var logModeMenu = new MenuItem
+                {
+                    Header = "Log Mode",
+                    ToolTip = toolTip
+                };
+
+                logModeMenu.Items.Add(CreateLaunchSceneMenuItem(
+                    "Desktop (Log)",
+                    "Desktop (Log)",
+                    $"-vrmode None -logFile log.txt --vpb.vds.scene \"{vdsSceneValue}\"",
+                    toolTip,
+                    deps));
+
+                logModeMenu.Items.Add(CreateLaunchSceneMenuItem(
+                    "VR (Log)",
+                    "VR (Log)",
+                    $"-vrmode OpenVR -logFile log.txt --vpb.vds.scene \"{vdsSceneValue}\"",
+                    toolTip,
+                    deps));
+
+                logModeMenu.Items.Add(CreateLaunchSceneMenuItem(
+                    "Screen Selector (Log)",
+                    "Screen Selector (Log)",
+                    $"-show-screen-selector -logFile log.txt --vpb.vds.scene \"{vdsSceneValue}\"",
+                    toolTip,
+                    deps));
+
+                targetMenu.Items.Add(logModeMenu);
+            }
+
+            AddModeItems(launchSceneMenuItem, dependencies);
+        }
+
+        private MenuItem CreateLaunchSceneMenuItem(string header, string modeName, string args, string toolTip, List<string> dependencies = null)
         {
             var item = new MenuItem
             {
@@ -6819,6 +6925,12 @@ namespace VPM
                 ToolTip = toolTip,
                 Tag = args
             };
+
+            var dependencyList = dependencies?
+                .Where(d => !string.IsNullOrWhiteSpace(d))
+                .Select(d => d.Trim())
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
 
             item.Click += async (s, e) =>
             {
@@ -6846,6 +6958,48 @@ namespace VPM
                                 if (result != MessageBoxResult.Yes)
                                     return;
                             }
+                        }
+                    }
+
+                    if (dependencyList != null && dependencyList.Count > 0)
+                    {
+                        var resolvedDependencies = dependencyList
+                            .Select(dep =>
+                            {
+                                if (string.IsNullOrWhiteSpace(dep))
+                                    return null;
+
+                                if (_packageManager?.PackageMetadata?.ContainsKey(dep) == true)
+                                    return dep;
+
+                                var resolvedPath = _packageFileManager?.ResolveDependencyToFilePath(dep);
+                                if (!string.IsNullOrEmpty(resolvedPath))
+                                {
+                                    var resolvedName = Path.GetFileNameWithoutExtension(resolvedPath);
+                                    if (!string.IsNullOrEmpty(resolvedName))
+                                        return resolvedName;
+                                }
+
+                                return dep;
+                            })
+                            .Where(d => !string.IsNullOrEmpty(d))
+                            .Distinct(StringComparer.OrdinalIgnoreCase)
+                            .ToList();
+
+                        var (depsLoaded, missingDeps) = await LoadPackagesWithDependenciesAsync(resolvedDependencies, interactive: true, suppressEmptyMessage: true);
+                        
+                        if (!depsLoaded) return;
+
+                        if (missingDeps > 0)
+                        {
+                            var proceed = CustomMessageBox.Show(
+                                $"{missingDeps} dependencies are missing and could cause scene to not load correctly.\n\nWould you like to launch the scene?",
+                                "Missing Dependencies",
+                                MessageBoxButton.YesNo,
+                                MessageBoxImage.Warning);
+                            
+                            if (proceed != MessageBoxResult.Yes)
+                                return;
                         }
                     }
 
@@ -6911,204 +7065,245 @@ namespace VPM
                 if (button.DataContext is not ImagePreviewItem item)
                     return;
 
-                if (string.IsNullOrEmpty(item.VarFilePath) || string.IsNullOrEmpty(item.InternalPath))
+                if (string.IsNullOrEmpty(item.VarFilePath) && string.IsNullOrEmpty(item.LocalScenePath))
                     return;
-
-                var packageId = Path.GetFileNameWithoutExtension(item.VarFilePath);
-                if (string.IsNullOrEmpty(packageId))
-                    return;
-
-                var rawInternalPath = item.InternalPath.Replace('\\', '/').TrimStart('/');
-
-                // The image tile 'Scene' category items frequently point at preview images (.jpg/.png),
-                // but VaM requires the actual scene JSON under Saves/scene/*.json.
-                var scanner = _sceneScanner ?? new SceneScanner(_selectedFolder);
-                List<SceneItem> scenes;
-                try
-                {
-                    scenes = scanner.ScanVarScenes(item.VarFilePath)
-                        .OrderBy(s => s.DisplayName, StringComparer.OrdinalIgnoreCase)
-                        .ToList();
-                }
-                catch (Exception)
-                {
-                    scenes = new List<SceneItem>();
-                }
-
-                // Try to map the preview image path to a .json scene path.
-                var preferredInternalJsonCandidates = new List<string>();
-                try
-                {
-                    var ext = Path.GetExtension(rawInternalPath);
-                    if (!string.IsNullOrEmpty(ext))
-                    {
-                        var extLower = ext.ToLowerInvariant();
-                        if (extLower == ".jpg" || extLower == ".jpeg" || extLower == ".png" || extLower == ".webp" || extLower == ".gif" || extLower == ".bmp")
-                        {
-                            var folder = Path.GetDirectoryName(rawInternalPath)?.Replace('\\', '/');
-                            var rawName = Path.GetFileNameWithoutExtension(rawInternalPath);
-
-                            // Candidate 1: raw name (keep any dots)
-                            if (!string.IsNullOrEmpty(rawName))
-                            {
-                                var candidate = string.IsNullOrEmpty(folder)
-                                    ? $"{rawName}.json"
-                                    : $"{folder.TrimEnd('/')}/{rawName}.json";
-                                preferredInternalJsonCandidates.Add(candidate);
-                            }
-
-                            // Candidate 2: trim trailing dots (handles names like "Lilith..jpg")
-                            var trimmed = rawName;
-                            while (!string.IsNullOrEmpty(trimmed) && trimmed.EndsWith(".", StringComparison.Ordinal))
-                                trimmed = trimmed.Substring(0, trimmed.Length - 1);
-                            if (!string.IsNullOrEmpty(trimmed) && !string.Equals(trimmed, rawName, StringComparison.Ordinal))
-                            {
-                                var candidate = string.IsNullOrEmpty(folder)
-                                    ? $"{trimmed}.json"
-                                    : $"{folder.TrimEnd('/')}/{trimmed}.json";
-                                preferredInternalJsonCandidates.Add(candidate);
-                            }
-                        }
-                        else if (extLower == ".json")
-                        {
-                            preferredInternalJsonCandidates.Add(rawInternalPath);
-                        }
-                    }
-                }
-                catch
-                {
-                    preferredInternalJsonCandidates.Clear();
-                }
-
-                SceneItem matchedScene = null;
-                if (preferredInternalJsonCandidates.Count > 0 && scenes.Count > 0)
-                {
-                    foreach (var candidate in preferredInternalJsonCandidates)
-                    {
-                        if (string.IsNullOrEmpty(candidate))
-                            continue;
-
-                        matchedScene = scenes.FirstOrDefault(s =>
-                        {
-                            var ip = ExtractInternalVarPath(s?.FilePath);
-                            return !string.IsNullOrEmpty(ip) &&
-                                   string.Equals(ip.TrimStart('/'), candidate.TrimStart('/'), StringComparison.OrdinalIgnoreCase);
-                        });
-
-                        if (matchedScene != null)
-                            break;
-                    }
-                }
 
                 var menu = new ContextMenu();
 
-                void AddModeItems(ItemsControl targetMenu, string vdsSceneValue)
+                void AddModeItems(ItemsControl targetMenu, string vdsSceneValue, bool isVarScene, List<string> dependencies = null)
                 {
+                    var toolTip = isVarScene ? vdsSceneValue : string.Empty;
+                    var deps = dependencies;
+
                     targetMenu.Items.Add(CreateLaunchSceneMenuItem(
                         "Desktop",
                         "Desktop",
                         $"-vrmode None --vpb.vds.scene \"{vdsSceneValue}\"",
-                        vdsSceneValue));
+                        isVarScene ? vdsSceneValue : toolTip,
+                        deps));
 
                     targetMenu.Items.Add(CreateLaunchSceneMenuItem(
                         "VR",
                         "VR",
                         $"-vrmode OpenVR --vpb.vds.scene \"{vdsSceneValue}\"",
-                        vdsSceneValue));
+                        isVarScene ? vdsSceneValue : toolTip,
+                        deps));
 
                     targetMenu.Items.Add(CreateLaunchSceneMenuItem(
                         "Screen Selector",
                         "Screen Selector",
                         $"-show-screen-selector --vpb.vds.scene \"{vdsSceneValue}\"",
-                        vdsSceneValue));
+                        isVarScene ? vdsSceneValue : toolTip,
+                        deps));
 
                     var logModeMenu = new MenuItem
                     {
                         Header = "Log Mode",
-                        ToolTip = vdsSceneValue
+                        ToolTip = isVarScene ? vdsSceneValue : toolTip
                     };
 
                     logModeMenu.Items.Add(CreateLaunchSceneMenuItem(
                         "Desktop (Log)",
                         "Desktop (Log)",
                         $"-vrmode None -logFile log.txt --vpb.vds.scene \"{vdsSceneValue}\"",
-                        vdsSceneValue));
+                        isVarScene ? vdsSceneValue : toolTip,
+                        deps));
 
                     logModeMenu.Items.Add(CreateLaunchSceneMenuItem(
                         "VR (Log)",
                         "VR (Log)",
                         $"-vrmode OpenVR -logFile log.txt --vpb.vds.scene \"{vdsSceneValue}\"",
-                        vdsSceneValue));
+                        isVarScene ? vdsSceneValue : toolTip,
+                        deps));
 
                     logModeMenu.Items.Add(CreateLaunchSceneMenuItem(
                         "Screen Selector (Log)",
                         "Screen Selector (Log)",
                         $"-show-screen-selector -logFile log.txt --vpb.vds.scene \"{vdsSceneValue}\"",
-                        vdsSceneValue));
+                        isVarScene ? vdsSceneValue : toolTip,
+                        deps));
 
                     targetMenu.Items.Add(logModeMenu);
                 }
 
-                if (matchedScene != null)
+                if (!string.IsNullOrEmpty(item.LocalScenePath))
                 {
-                    var internalJson = ExtractInternalVarPath(matchedScene.FilePath)?.TrimStart('/');
-                    if (string.IsNullOrEmpty(internalJson) || !internalJson.EndsWith(".json", StringComparison.OrdinalIgnoreCase))
-                    {
-                        CustomMessageBox.Show(
-                            "Unable to resolve a valid scene .json path from this tile.",
-                            "Invalid Scene Path",
-                            MessageBoxButton.OK,
-                            MessageBoxImage.Warning);
+                    var scenePath = item.LocalScenePath;
+                    if (!File.Exists(scenePath) || !scenePath.EndsWith(".json", StringComparison.OrdinalIgnoreCase))
                         return;
-                    }
-                    var vdsSceneValue = $"{packageId}:/{internalJson}";
 
-                    AddModeItems(menu, vdsSceneValue);
-                }
-                else if (scenes.Count == 1)
-                {
-                    var internalJson = ExtractInternalVarPath(scenes[0].FilePath)?.TrimStart('/');
-                    if (!string.IsNullOrEmpty(internalJson) && internalJson.EndsWith(".json", StringComparison.OrdinalIgnoreCase))
+                    string relative = string.Empty;
+                    try
                     {
+                        relative = Path.GetRelativePath(_selectedFolder, scenePath).Replace('\\', '/');
+                    }
+                    catch
+                    {
+                        relative = scenePath;
+                    }
+
+                    if (string.IsNullOrEmpty(relative))
+                        relative = scenePath;
+
+                    relative = relative.Replace('\\', '/');
+
+                    var dependencies = item.Dependencies;
+                    AddModeItems(menu, relative, isVarScene: false, dependencies: dependencies);
+                }
+                else
+                {
+                    if (string.IsNullOrEmpty(item.VarFilePath) || string.IsNullOrEmpty(item.InternalPath))
+                        return;
+
+                    var packageId = Path.GetFileNameWithoutExtension(item.VarFilePath);
+                    if (string.IsNullOrEmpty(packageId))
+                        return;
+
+                    var rawInternalPath = item.InternalPath.Replace('\\', '/').TrimStart('/');
+
+                    var scanner = _sceneScanner ?? new SceneScanner(_selectedFolder);
+                    List<SceneItem> scenes;
+                    try
+                    {
+                        scenes = scanner.ScanVarScenes(item.VarFilePath)
+                            .OrderBy(s => s.DisplayName, StringComparer.OrdinalIgnoreCase)
+                            .ToList();
+                    }
+                    catch (Exception)
+                    {
+                        scenes = new List<SceneItem>();
+                    }
+
+                    var preferredInternalJsonCandidates = new List<string>();
+                    try
+                    {
+                        var ext = Path.GetExtension(rawInternalPath);
+                        if (!string.IsNullOrEmpty(ext))
+                        {
+                            var extLower = ext.ToLowerInvariant();
+                            if (extLower == ".jpg" || extLower == ".jpeg" || extLower == ".png" || extLower == ".webp" || extLower == ".gif" || extLower == ".bmp")
+                            {
+                                var folder = Path.GetDirectoryName(rawInternalPath)?.Replace('\\', '/');
+                                var rawName = Path.GetFileNameWithoutExtension(rawInternalPath);
+
+                                if (!string.IsNullOrEmpty(rawName))
+                                {
+                                    var candidate = string.IsNullOrEmpty(folder)
+                                        ? $"{rawName}.json"
+                                        : $"{folder.TrimEnd('/')}/{rawName}.json";
+                                    preferredInternalJsonCandidates.Add(candidate);
+                                }
+
+                                var trimmed = rawName;
+                                while (!string.IsNullOrEmpty(trimmed) && trimmed.EndsWith(".", StringComparison.Ordinal))
+                                    trimmed = trimmed.Substring(0, trimmed.Length - 1);
+                                if (!string.IsNullOrEmpty(trimmed) && !string.Equals(trimmed, rawName, StringComparison.Ordinal))
+                                {
+                                    var candidate = string.IsNullOrEmpty(folder)
+                                        ? $"{trimmed}.json"
+                                        : $"{folder.TrimEnd('/')}/{trimmed}.json";
+                                    preferredInternalJsonCandidates.Add(candidate);
+                                }
+                            }
+                            else if (extLower == ".json")
+                            {
+                                preferredInternalJsonCandidates.Add(rawInternalPath);
+                            }
+                        }
+                    }
+                    catch
+                    {
+                        preferredInternalJsonCandidates.Clear();
+                    }
+
+                    SceneItem matchedScene = null;
+                    if (preferredInternalJsonCandidates.Count > 0 && scenes.Count > 0)
+                    {
+                        foreach (var candidate in preferredInternalJsonCandidates)
+                        {
+                            if (string.IsNullOrEmpty(candidate))
+                                continue;
+
+                            matchedScene = scenes.FirstOrDefault(s =>
+                            {
+                                var ip = ExtractInternalVarPath(s?.FilePath);
+                                return !string.IsNullOrEmpty(ip) &&
+                                       string.Equals(ip.TrimStart('/'), candidate.TrimStart('/'), StringComparison.OrdinalIgnoreCase);
+                            });
+
+                            if (matchedScene != null)
+                                break;
+                        }
+                    }
+
+                    void AddVarModes(string vdsSceneValue)
+                    {
+                        AddModeItems(menu, vdsSceneValue, isVarScene: true);
+                    }
+
+                    if (matchedScene != null)
+                    {
+                        var internalJson = ExtractInternalVarPath(matchedScene.FilePath)?.TrimStart('/');
+                        if (string.IsNullOrEmpty(internalJson) || !internalJson.EndsWith(".json", StringComparison.OrdinalIgnoreCase))
+                        {
+                            CustomMessageBox.Show(
+                                "Unable to resolve a valid scene .json path from this tile.",
+                                "Invalid Scene Path",
+                                MessageBoxButton.OK,
+                                MessageBoxImage.Warning);
+                            return;
+                        }
                         var vdsSceneValue = $"{packageId}:/{internalJson}";
 
-                        AddModeItems(menu, vdsSceneValue);
+                        AddVarModes(vdsSceneValue);
+                    }
+                    else if (scenes.Count == 1)
+                    {
+                        var internalJson = ExtractInternalVarPath(scenes[0].FilePath)?.TrimStart('/');
+                        if (!string.IsNullOrEmpty(internalJson) && internalJson.EndsWith(".json", StringComparison.OrdinalIgnoreCase))
+                        {
+                            var vdsSceneValue = $"{packageId}:/{internalJson}";
+
+                            AddVarModes(vdsSceneValue);
+                        }
+                        else
+                        {
+                            CustomMessageBox.Show(
+                                "Unable to resolve a valid scene .json path from this package.",
+                                "Invalid Scene Path",
+                                MessageBoxButton.OK,
+                                MessageBoxImage.Warning);
+                            return;
+                        }
+                    }
+                    else if (scenes.Count > 1)
+                    {
+                        foreach (var scene in scenes)
+                        {
+                            var internalJson = ExtractInternalVarPath(scene.FilePath)?.TrimStart('/');
+                            if (string.IsNullOrEmpty(internalJson) || !internalJson.EndsWith(".json", StringComparison.OrdinalIgnoreCase))
+                                continue;
+
+                            var vdsSceneValue = $"{packageId}:/{internalJson}";
+                            var sceneMenu = new MenuItem { Header = scene.DisplayName, ToolTip = vdsSceneValue };
+                            AddModeItems(sceneMenu, vdsSceneValue, isVarScene: true);
+                            menu.Items.Add(sceneMenu);
+                        }
                     }
                     else
                     {
                         CustomMessageBox.Show(
-                            "Unable to resolve a valid scene .json path from this package.",
-                            "Invalid Scene Path",
+                            "No scene JSON files were found in this package under Saves/scene/*.json.\n\n" +
+                            "This tile appears to reference a preview image, not a scene file.",
+                            "No Scenes Found",
                             MessageBoxButton.OK,
-                            MessageBoxImage.Warning);
+                            MessageBoxImage.Information);
                         return;
                     }
                 }
-                else if (scenes.Count > 1)
-                {
-                    // Ambiguous: show scene list, each with mode options.
-                    foreach (var scene in scenes)
-                    {
-                        var internalJson = ExtractInternalVarPath(scene.FilePath)?.TrimStart('/');
-                        if (string.IsNullOrEmpty(internalJson) || !internalJson.EndsWith(".json", StringComparison.OrdinalIgnoreCase))
-                            continue;
 
-                        var vdsSceneValue = $"{packageId}:/{internalJson}";
-                        var sceneMenu = new MenuItem { Header = scene.DisplayName, ToolTip = vdsSceneValue };
-                        AddModeItems(sceneMenu, vdsSceneValue);
-                        menu.Items.Add(sceneMenu);
-                    }
-                }
-                else
-                {
-                    CustomMessageBox.Show(
-                        "No scene JSON files were found in this package under Saves/scene/*.json.\n\n" +
-                        "This tile appears to reference a preview image, not a scene file.",
-                        "No Scenes Found",
-                        MessageBoxButton.OK,
-                        MessageBoxImage.Information);
+                if (menu.Items.Count == 0)
                     return;
-                }
 
                 button.ContextMenu = menu;
                 menu.PlacementTarget = button;

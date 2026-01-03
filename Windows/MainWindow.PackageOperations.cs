@@ -990,6 +990,7 @@ namespace VPM
                 finally
                 {
                     HideDependenciesTableLoading();
+                    RefreshDependenciesUi();
 
                     // Re-enable UI
                     LoadDependenciesButton.IsEnabled = true;
@@ -1138,6 +1139,7 @@ namespace VPM
                 finally
                 {
                     HideDependenciesTableLoading();
+                    RefreshDependenciesUi();
 
                     // Re-enable UI
                     UnloadDependenciesButton.IsEnabled = true;
@@ -1149,6 +1151,31 @@ namespace VPM
             {
                 MessageBox.Show($"Error unloading dependencies: {ex.Message}", "Error",
                                MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
+        private void RefreshDependenciesUi()
+        {
+            try
+            {
+                if (_currentContentMode == "Custom")
+                {
+                    var selectedCustom = CustomAtomDataGrid?.SelectedItems?.Cast<CustomAtomItem>().ToList();
+                    if (selectedCustom != null && selectedCustom.Count > 0)
+                    {
+                        PopulatePresetDependencies(selectedCustom);
+                    }
+                }
+
+                DependenciesDataGrid?.Items.Refresh();
+                DependenciesDataGrid?.UpdateLayout();
+                PackageDataGrid?.Items.Refresh();
+                PackageDataGrid?.UpdateLayout();
+                CustomAtomDataGrid?.Items.Refresh();
+                CustomAtomDataGrid?.UpdateLayout();
+            }
+            catch
+            {
             }
         }
 
@@ -1283,8 +1310,8 @@ namespace VPM
                 // Enhanced confirmation dialog with better information
                 if (allAvailableDependencies.Count >= 100)
                 {
-                    var dependencyNames = allAvailableDependencies.Take(5).Select(d => d.Name).ToList();
-                    var displayNames = string.Join("\n", dependencyNames);
+                    var sampleDependencyNames = allAvailableDependencies.Take(5).Select(d => d.Name).ToList();
+                    var displayNames = string.Join("\n", sampleDependencyNames);
                     if (allAvailableDependencies.Count > 5)
                     {
                         displayNames += $"\n... and {allAvailableDependencies.Count - 5} more dependencies";
@@ -1303,15 +1330,18 @@ namespace VPM
                 // Disable UI during operation
                 LoadAllDependenciesButton.IsEnabled = false;
 
+                var dependencyNames = allAvailableDependencies.Select(d => d.Name).ToList();
+
+                ShowDependenciesTableLoading("Loading dependencies...", dependencyNames.Count);
+
                 try
                 {
                     // Use enhanced batch operation with progress reporting
-                    var dependencyNames = allAvailableDependencies.Select(d => d.Name).ToList();
-
                     await PrepareForPackageFileOperationsAsync(dependencyNames);
 
                     var progress = CreateStatusProgress(p =>
                     {
+                        UpdateDependenciesTableLoading(p.completed, p.total, p.currentPackage);
                         SetStatus(p.total > 1
                             ? $"Loading dependencies... {p.completed}/{p.total} ({p.completed * 100 / p.total}%)"
                             : $"Loading {p.currentPackage}...");
@@ -1393,6 +1423,9 @@ namespace VPM
                 }
                 finally
                 {
+                    HideDependenciesTableLoading();
+                    RefreshDependenciesUi();
+
                     // Re-enable UI
                     LoadAllDependenciesButton.IsEnabled = true;
                     UpdatePackageButtonBar();

@@ -239,11 +239,40 @@ namespace VPM
                     // Always add the item, even if thumbnail is missing
                     // This allows the grid to show a placeholder/loading state
                     
+                    var isScene = string.Equals(item.ContentType, "Scene", StringComparison.OrdinalIgnoreCase);
+                    var relativeScenePath = string.Empty;
+                    if (isScene && !string.IsNullOrEmpty(item.FilePath))
+                    {
+                        if (!string.IsNullOrEmpty(_selectedFolder))
+                        {
+                            try
+                            {
+                                relativeScenePath = Path.GetRelativePath(_selectedFolder, item.FilePath).Replace('\\', '/');
+                            }
+                            catch
+                            {
+                                relativeScenePath = string.Empty;
+                            }
+                        }
+
+                        if (string.IsNullOrEmpty(relativeScenePath))
+                        {
+                            var normalized = item.FilePath.Replace('\\', '/');
+                            var idx = normalized.IndexOf("Saves/scene/", StringComparison.OrdinalIgnoreCase);
+                            if (idx >= 0)
+                            {
+                                relativeScenePath = normalized.Substring(idx);
+                            }
+                        }
+                    }
+
                     var previewItem = new ImagePreviewItem
                     {
                         Image = null, // Load lazily via callback
                         PackageName = item.Name,
-                        InternalPath = item.ThumbnailPath ?? "",
+                        InternalPath = isScene && !string.IsNullOrEmpty(relativeScenePath) ? relativeScenePath : item.ThumbnailPath ?? "",
+                        LocalScenePath = isScene ? item.FilePath : null,
+                        Dependencies = isScene ? item.Dependencies?.ToList() : null,
                         StatusBrush = System.Windows.Media.Brushes.Transparent,
                         PackageItem = customItemsPackage,
                         ItemFileSize = item.FileSize, // Set individual item size for banner display

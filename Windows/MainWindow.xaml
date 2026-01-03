@@ -3256,7 +3256,8 @@
                         VirtualizingPanel.VirtualizationMode="Recycling"
                         Visibility="Collapsed">
                         <DataGrid.ContextMenu>
-                            <ContextMenu>
+                            <ContextMenu Opened="CustomAtomContextMenu_Opened">
+                                <MenuItem x:Name="LaunchCustomSceneMenuItem" Header="🚀 Launch Scene in VaM" />
                                 <MenuItem Click="DiscardSelectedCustomAtoms_Click" Header="🗑️ Discard Selected" />
                             </ContextMenu>
                         </DataGrid.ContextMenu>

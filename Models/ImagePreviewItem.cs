@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using System.Collections.Generic;
 using System.Runtime.CompilerServices;
 using System.Windows.Media;
 using VPM.Services;
@@ -114,6 +115,34 @@ namespace VPM.Models
                 if (_packageItem != value)
                 {
                     _packageItem = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
+        private string _localScenePath;
+        public string LocalScenePath
+        {
+            get => _localScenePath;
+            set
+            {
+                if (_localScenePath != value)
+                {
+                    _localScenePath = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
+        private List<string> _dependencies = new();
+        public List<string> Dependencies
+        {
+            get => _dependencies;
+            set
+            {
+                if (_dependencies != value)
+                {
+                    _dependencies = value;
                     OnPropertyChanged();
                 }
             }
