@@ -10,14 +10,9 @@ namespace VPM.Services
     public class SupporterItem
     {
         public string Name { get; set; }
-        public string Tier { get; set; }
         public string Since { get; set; }
-        public string IconColor { get; set; } = "#FFFFFF";
         public string Link { get; set; }
 
-        // Helper for display: "👑 SupporterXYZ 👑 - Supporting since 03/05/2025"
-        public string DisplayText => $"{Tier} {Name} {Tier} - Supporting since {Since}";
-        
         public string InfoText => $" - Supporting since {Since}";
     }
 
@@ -30,9 +25,7 @@ namespace VPM.Services
     public class SupporterJson
     {
         public string name { get; set; }
-        public string tier { get; set; }
         public string since { get; set; }
-        public string iconColor { get; set; }
         public string link { get; set; }
     }
 
@@ -71,15 +64,10 @@ namespace VPM.Services
                 {
                     foreach (var s in data.supporters)
                     {
-                        var color = Decode(s.iconColor);
-                        if (string.IsNullOrEmpty(color)) color = "#FFFFFF";
-
                         _cachedInfo.Supporters.Add(new SupporterItem
                         {
                             Name = Decode(s.name),
-                            Tier = Decode(s.tier),
                             Since = Decode(s.since),
-                            IconColor = color,
                             Link = Decode(s.link)
                         });
                     }
@@ -96,7 +84,7 @@ namespace VPM.Services
                     PatreonLink = "https://www.patreon.com/gicstin", // Fallback
                     Supporters = new List<SupporterItem> 
                     { 
-                        new SupporterItem { Name = "Failed to load supporters list.", Tier = "⚠️", Since = "Now", IconColor = "#FF5555" } 
+                        new SupporterItem { Name = "Failed to load supporters list.", Since = "Now" } 
                     }
                 };
             }

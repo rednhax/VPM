@@ -158,18 +158,11 @@
                         <ListBox.ItemTemplate>
                             <DataTemplate>
                                 <StackPanel Orientation="Horizontal">
-                                    <TextBlock Text="{Binding Tier}" 
-                                               FontSize="14" 
-                                               VerticalAlignment="Center" 
-                                               Margin="0,0,4,0"/>
                                     <TextBlock Text="{Binding Name}" 
-                                               FontSize="13" 
-                                               FontWeight="SemiBold"
-                                               VerticalAlignment="Center"/>
-                                    <TextBlock Text="{Binding Tier}" 
                                                FontSize="14" 
-                                               VerticalAlignment="Center" 
-                                               Margin="4,0,0,0"/>
+                                               FontWeight="SemiBold"
+                                               FontFamily="Segoe UI Emoji, Segoe UI Symbol, Segoe UI"
+                                               VerticalAlignment="Center"/>
                                     <TextBlock Text="{Binding InfoText}" 
                                                FontSize="13" 
                                                Opacity="0.8"
