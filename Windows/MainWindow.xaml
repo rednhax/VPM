@@ -367,6 +367,12 @@
                         </MenuItem.Icon>
                     </MenuItem>
 
+                    <MenuItem Click="SupportButton_Click" Header="❤️ _Support">
+                        <MenuItem.Icon>
+                            <TextBlock FontSize="12" Text="" />
+                        </MenuItem.Icon>
+                    </MenuItem>
+
                     <Separator />
                     <MenuItem Click="About_Click" Header="ℹ️ _About VPM" />
 

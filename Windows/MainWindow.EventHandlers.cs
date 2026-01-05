@@ -5072,6 +5072,15 @@ namespace VPM
                     MessageBoxImage.Error);
             }
         }
+
+        private void SupportButton_Click(object sender, RoutedEventArgs e)
+        {
+            var supportWindow = new SupportWindow
+            {
+                Owner = this
+            };
+            supportWindow.ShowDialog();
+        }
         
         /// <summary>
         /// Launches VirtAMate in Desktop mode
