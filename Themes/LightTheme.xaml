@@ -300,7 +300,6 @@
                         </Trigger>
                         
                         <Trigger Property="IsCheckable" Value="true">
-                            <Setter TargetName="Check" Property="Visibility" Value="Visible"/>
                             <Setter TargetName="Icon" Property="Visibility" Value="Hidden"/>
                         </Trigger>
                         

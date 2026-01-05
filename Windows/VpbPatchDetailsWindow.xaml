@@ -1,14 +1,15 @@
-<Window x:Class="VPM.Windows.VpbPatchDetailsWindow"
-        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="VPB Patch"
-        Width="980"
-        Height="720"
-        MinWidth="820"
-        MinHeight="520"
-        WindowStartupLocation="CenterOwner"
-        Background="{DynamicResource {x:Static SystemColors.WindowBrushKey}}"
-        ResizeMode="CanResize">
+<Window
+    x:Class="VPM.Windows.VpbPatchDetailsWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    Title="VPB Patch"
+    Width="980"
+    Height="720"
+    MinWidth="820"
+    MinHeight="520"
+    Background="{DynamicResource {x:Static SystemColors.WindowBrushKey}}"
+    ResizeMode="CanResize"
+    WindowStartupLocation="CenterOwner">
 
     <Window.Resources>
         <Style x:Key="VpbDataGridStyle" TargetType="DataGrid">
@@ -72,16 +73,16 @@
                     <ControlTemplate TargetType="TabItem">
                         <Border
                             x:Name="TabBorder"
+                            Margin="2,0,2,0"
+                            Padding="{TemplateBinding Padding}"
                             Background="{TemplateBinding Background}"
                             BorderBrush="{TemplateBinding BorderBrush}"
-                            BorderThickness="{TemplateBinding BorderThickness}"
-                            Margin="2,0,2,0"
-                            Padding="{TemplateBinding Padding}">
+                            BorderThickness="{TemplateBinding BorderThickness}">
                             <ContentPresenter
                                 x:Name="ContentSite"
-                                ContentSource="Header"
+                                HorizontalAlignment="Center"
                                 VerticalAlignment="Center"
-                                HorizontalAlignment="Center" />
+                                ContentSource="Header" />
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsSelected" Value="True">
@@ -138,17 +139,52 @@
                     <ColumnDefinition Width="*" />
                 </Grid.ColumnDefinitions>
 
-                <TextBlock Grid.Row="0" Grid.Column="0" Margin="0,0,10,0" FontWeight="SemiBold" Text="Folder" />
-                <TextBlock x:Name="FolderText" Grid.Row="0" Grid.Column="1" TextTrimming="CharacterEllipsis" />
+                <TextBlock
+                    Grid.Row="0"
+                    Grid.Column="0"
+                    Margin="0,0,10,0"
+                    FontWeight="SemiBold"
+                    Text="Folder" />
+                <TextBlock
+                    x:Name="FolderText"
+                    Grid.Row="0"
+                    Grid.Column="1"
+                    TextTrimming="CharacterEllipsis" />
 
-                <TextBlock Grid.Row="0" Grid.Column="2" Margin="24,0,10,0" FontWeight="SemiBold" Text="Git Ref" />
-                <TextBlock x:Name="GitRefText" Grid.Row="0" Grid.Column="3" />
+                <TextBlock
+                    Grid.Row="0"
+                    Grid.Column="2"
+                    Margin="24,0,10,0"
+                    FontWeight="SemiBold"
+                    Text="Git Ref" />
+                <TextBlock
+                    x:Name="GitRefText"
+                    Grid.Row="0"
+                    Grid.Column="3" />
 
-                <TextBlock Grid.Row="1" Grid.Column="0" Margin="0,6,10,0" FontWeight="SemiBold" Text="Patch Status" />
-                <TextBlock x:Name="PatchStatusText" Grid.Row="1" Grid.Column="1" Margin="0,6,0,0" />
+                <TextBlock
+                    Grid.Row="1"
+                    Grid.Column="0"
+                    Margin="0,6,10,0"
+                    FontWeight="SemiBold"
+                    Text="Patch Status" />
+                <TextBlock
+                    x:Name="PatchStatusText"
+                    Grid.Row="1"
+                    Grid.Column="1"
+                    Margin="0,6,0,0" />
 
-                <TextBlock Grid.Row="1" Grid.Column="2" Margin="24,6,10,0" FontWeight="SemiBold" Text="Files" />
-                <TextBlock x:Name="CountsText" Grid.Row="1" Grid.Column="3" Margin="0,6,0,0" />
+                <TextBlock
+                    Grid.Row="1"
+                    Grid.Column="2"
+                    Margin="24,6,10,0"
+                    FontWeight="SemiBold"
+                    Text="Files" />
+                <TextBlock
+                    x:Name="CountsText"
+                    Grid.Row="1"
+                    Grid.Column="3"
+                    Margin="0,6,0,0" />
 
                 <TextBlock
                     Grid.Row="2"
@@ -156,8 +192,8 @@
                     Grid.ColumnSpan="4"
                     Margin="0,10,0,0"
                     Foreground="{DynamicResource {x:Static SystemColors.GrayTextBrushKey}}"
-                    TextWrapping="Wrap"
-                    Text="Outdated means the local file exists but its Git blob checksum does not match the file in the VPB GitHub patch." />
+                    Text="Outdated means the local file exists but its Git blob checksum does not match the file in the VPB GitHub patch."
+                    TextWrapping="Wrap" />
             </Grid>
         </Border>
 
@@ -165,22 +201,37 @@
             <TabItem Header="Missing">
                 <DataGrid
                     x:Name="MissingGrid"
-                    Style="{StaticResource VpbDataGridStyle}"
-                    ColumnHeaderStyle="{StaticResource VpbDataGridColumnHeaderStyle}"
-                    RowStyle="{StaticResource VpbDataGridRowStyle}"
-                    CellStyle="{StaticResource VpbDataGridCellStyle}"
                     AutoGenerateColumns="False"
                     CanUserAddRows="False"
                     CanUserDeleteRows="False"
-                    IsReadOnly="True"
+                    CellStyle="{StaticResource VpbDataGridCellStyle}"
+                    ColumnHeaderStyle="{StaticResource VpbDataGridColumnHeaderStyle}"
+                    GridLinesVisibility="None"
                     HeadersVisibility="Column"
-                    GridLinesVisibility="None">
+                    IsReadOnly="True"
+                    RowStyle="{StaticResource VpbDataGridRowStyle}"
+                    Style="{StaticResource VpbDataGridStyle}">
                     <DataGrid.Columns>
-                        <DataGridTextColumn Header="Path" Binding="{Binding RelativePath}" Width="*" />
-                        <DataGridCheckBoxColumn Header="Required" Binding="{Binding IsRequired}" Width="90" />
-                        <DataGridCheckBoxColumn Header="Dir" Binding="{Binding IsDirectory}" Width="70" />
-                        <DataGridTextColumn Header="Reason" Binding="{Binding Reason}" Width="160" />
-                        <DataGridTextColumn Header="Expected SHA" Binding="{Binding ExpectedSha}" Width="260" />
+                        <DataGridTextColumn
+                            Width="*"
+                            Binding="{Binding RelativePath}"
+                            Header="Path" />
+                        <DataGridCheckBoxColumn
+                            Width="90"
+                            Binding="{Binding IsRequired}"
+                            Header="Required" />
+                        <DataGridCheckBoxColumn
+                            Width="70"
+                            Binding="{Binding IsDirectory}"
+                            Header="Dir" />
+                        <DataGridTextColumn
+                            Width="160"
+                            Binding="{Binding Reason}"
+                            Header="Reason" />
+                        <DataGridTextColumn
+                            Width="260"
+                            Binding="{Binding ExpectedSha}"
+                            Header="Expected SHA" />
                     </DataGrid.Columns>
                 </DataGrid>
             </TabItem>
@@ -188,22 +239,71 @@
             <TabItem Header="Outdated">
                 <DataGrid
                     x:Name="OutdatedGrid"
-                    Style="{StaticResource VpbDataGridStyle}"
-                    ColumnHeaderStyle="{StaticResource VpbDataGridColumnHeaderStyle}"
-                    RowStyle="{StaticResource VpbDataGridRowStyle}"
-                    CellStyle="{StaticResource VpbDataGridCellStyle}"
                     AutoGenerateColumns="False"
                     CanUserAddRows="False"
                     CanUserDeleteRows="False"
-                    IsReadOnly="True"
+                    CellStyle="{StaticResource VpbDataGridCellStyle}"
+                    ColumnHeaderStyle="{StaticResource VpbDataGridColumnHeaderStyle}"
+                    GridLinesVisibility="None"
                     HeadersVisibility="Column"
-                    GridLinesVisibility="None">
+                    IsReadOnly="True"
+                    RowStyle="{StaticResource VpbDataGridRowStyle}"
+                    Style="{StaticResource VpbDataGridStyle}">
                     <DataGrid.Columns>
-                        <DataGridTextColumn Header="Path" Binding="{Binding RelativePath}" Width="*" />
-                        <DataGridCheckBoxColumn Header="Required" Binding="{Binding IsRequired}" Width="90" />
-                        <DataGridTextColumn Header="Reason" Binding="{Binding Reason}" Width="160" />
-                        <DataGridTextColumn Header="Expected SHA" Binding="{Binding ExpectedSha}" Width="260" />
-                        <DataGridTextColumn Header="Local SHA" Binding="{Binding LocalSha}" Width="260" />
+                        <DataGridTextColumn
+                            Width="*"
+                            Binding="{Binding RelativePath}"
+                            Header="Path" />
+                        <DataGridCheckBoxColumn
+                            Width="90"
+                            Binding="{Binding IsRequired}"
+                            Header="Required" />
+                        <DataGridTextColumn
+                            Width="160"
+                            Binding="{Binding Reason}"
+                            Header="Reason" />
+                        <DataGridTextColumn
+                            Width="260"
+                            Binding="{Binding ExpectedSha}"
+                            Header="Expected SHA" />
+                        <DataGridTextColumn
+                            Width="260"
+                            Binding="{Binding LocalSha}"
+                            Header="Local SHA" />
+                    </DataGrid.Columns>
+                </DataGrid>
+            </TabItem>
+
+            <TabItem Header="Patched">
+                <DataGrid
+                    x:Name="PatchedGrid"
+                    AutoGenerateColumns="False"
+                    CanUserAddRows="False"
+                    CanUserDeleteRows="False"
+                    CellStyle="{StaticResource VpbDataGridCellStyle}"
+                    ColumnHeaderStyle="{StaticResource VpbDataGridColumnHeaderStyle}"
+                    GridLinesVisibility="None"
+                    HeadersVisibility="Column"
+                    IsReadOnly="True"
+                    RowStyle="{StaticResource VpbDataGridRowStyle}"
+                    Style="{StaticResource VpbDataGridStyle}">
+                    <DataGrid.Columns>
+                        <DataGridTextColumn
+                            Width="*"
+                            Binding="{Binding RelativePath}"
+                            Header="Path" />
+                        <DataGridCheckBoxColumn
+                            Width="90"
+                            Binding="{Binding IsRequired}"
+                            Header="Required" />
+                        <DataGridCheckBoxColumn
+                            Width="70"
+                            Binding="{Binding IsDirectory}"
+                            Header="Dir" />
+                        <DataGridTextColumn
+                            Width="260"
+                            Binding="{Binding LocalSha}"
+                            Header="Local SHA" />
                     </DataGrid.Columns>
                 </DataGrid>
             </TabItem>
@@ -230,46 +330,61 @@
                     VerticalAlignment="Center"
                     Content="Force reinstall (overwrite all patch files)" />
 
-                <StackPanel x:Name="ProgressPanel" Grid.Row="1" Margin="0,8,0,0" Visibility="Collapsed">
-                    <TextBlock x:Name="ProgressText" Foreground="{DynamicResource {x:Static SystemColors.GrayTextBrushKey}}" TextWrapping="Wrap" />
-                    <ProgressBar x:Name="ProgressBar" Height="8" Margin="0,6,0,0" IsIndeterminate="True" />
+                <StackPanel
+                    x:Name="ProgressPanel"
+                    Grid.Row="1"
+                    Margin="0,8,0,0"
+                    Visibility="Collapsed">
+                    <TextBlock
+                        x:Name="ProgressText"
+                        Foreground="{DynamicResource {x:Static SystemColors.GrayTextBrushKey}}"
+                        TextWrapping="Wrap" />
+                    <ProgressBar
+                        x:Name="ProgressBar"
+                        Height="8"
+                        Margin="0,6,0,0"
+                        IsIndeterminate="True" />
                 </StackPanel>
             </Grid>
 
             <Button
                 Grid.Column="1"
-                Margin="0,0,10,0"
-                Padding="12,6"
+                Height="32"
                 MinWidth="140"
-                Content="Copy Report"
-                Click="CopyReport_Click" />
+                Margin="0,0,10,0"
+                Padding="6,6"
+                Click="CopyReport_Click"
+                Content="Copy Report" />
 
             <Button
+                x:Name="PrimaryActionButton"
                 Grid.Column="2"
-                Margin="0,0,10,0"
-                Padding="12,6"
+                Height="32"
                 MinWidth="160"
-                Content="Install Patch"
+                Margin="0,0,10,0"
+                Padding="6,6"
                 Click="PrimaryAction_Click"
-                x:Name="PrimaryActionButton" />
+                Content="Install Patch" />
 
             <Button
-                Grid.Column="3"
-                Margin="0,0,10,0"
-                Padding="12,6"
-                MinWidth="160"
-                Content="Uninstall Patch"
-                Click="Uninstall_Click"
                 x:Name="UninstallButton"
+                Grid.Column="3"
+                Height="32"
+                MinWidth="160"
+                Margin="0,0,10,0"
+                Padding="6,6"
+                Click="Uninstall_Click"
+                Content="Uninstall Patch"
                 Visibility="Collapsed" />
 
             <Button
+                x:Name="CancelButton"
                 Grid.Column="4"
-                Padding="12,6"
+                Height="32"
                 MinWidth="120"
-                Content="Cancel"
+                Padding="6,6"
                 Click="Cancel_Click"
-                x:Name="CancelButton" />
+                Content="Cancel" />
         </Grid>
     </Grid>
 </Window>

@@ -1500,6 +1500,14 @@ namespace VPM
             }
         }
 
+        private void ToggleCheckForUpdates_Click(object sender, RoutedEventArgs e)
+        {
+            if (sender is MenuItem menuItem)
+            {
+                _settingsManager.Settings.CheckForAppUpdates = menuItem.IsChecked;
+            }
+        }
+
         private void About_Click(object sender, RoutedEventArgs e)
         {
             var aboutWindow = new AboutWindow
@@ -2232,6 +2240,9 @@ namespace VPM
             
             // Initialize button states
             UpdateLinkedFiltersButtonState();
+
+            // Check for app updates
+            _ = CheckForAppUpdatesAsync();
         }
         
         private async Task LoadCachesAndRefreshAsync(AppSettings settings)
@@ -5037,7 +5048,7 @@ namespace VPM
             HubBrowser_Click(sender, e);
         }
 
-        private async void VpbPatchButton_Click(object sender, RoutedEventArgs e)
+        public async void OpenVpbPatcher()
         {
             if (string.IsNullOrEmpty(_selectedFolder))
             {
@@ -5071,6 +5082,11 @@ namespace VPM
                     MessageBoxButton.OK,
                     MessageBoxImage.Error);
             }
+        }
+
+        private void VpbPatchButton_Click(object sender, RoutedEventArgs e)
+        {
+            OpenVpbPatcher();
         }
 
         private void SupportButton_Click(object sender, RoutedEventArgs e)

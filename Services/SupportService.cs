@@ -39,7 +39,18 @@ namespace VPM.Services
     {
         private const string DATA_URL = "https://raw.githubusercontent.com/gicstin/VPM/main/support_data.json";
         private static SupportInfo _cachedInfo;
-        private static readonly HttpClient _httpClient = new HttpClient();
+        private static readonly HttpClient _httpClient;
+
+        static SupportService()
+        {
+            _httpClient = new HttpClient();
+            _httpClient.DefaultRequestHeaders.UserAgent.ParseAdd("VPM/1.0");
+            _httpClient.DefaultRequestHeaders.CacheControl = new System.Net.Http.Headers.CacheControlHeaderValue 
+            { 
+                NoCache = true,
+                NoStore = true
+            };
+        }
 
         public static async Task<SupportInfo> GetSupportInfoAsync()
         {
@@ -48,10 +59,10 @@ namespace VPM.Services
 
             try
             {
-                // Add a cache buster or user agent if needed
-                _httpClient.DefaultRequestHeaders.UserAgent.ParseAdd("VPM/1.0");
+                // Add a random query parameter to bypass GitHub raw caching
+                string urlWithCacheBuster = $"{DATA_URL}?t={DateTime.UtcNow.Ticks}";
                 
-                var json = await _httpClient.GetStringAsync(DATA_URL);
+                var json = await _httpClient.GetStringAsync(urlWithCacheBuster);
                 var data = JsonSerializer.Deserialize<SupportDataJson>(json);
 
                 _cachedInfo = new SupportInfo

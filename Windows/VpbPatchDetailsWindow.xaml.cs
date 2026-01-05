@@ -47,10 +47,11 @@ namespace VPM.Windows
 
             FolderText.Text = _gameFolder;
             GitRefText.Text = _check.GitRef;
-            CountsText.Text = $"Patch files: {_check.TotalFiles}   Missing: {_check.MissingFiles}   Outdated: {_check.OutdatedFiles}";
+            CountsText.Text = $"Patch files: {_check.TotalFiles}   Missing: {_check.MissingFiles}   Outdated: {_check.OutdatedFiles}   Patched: {_check.PatchedFiles}";
 
             MissingGrid.ItemsSource = _check.MissingDetails ?? Array.Empty<VpbPatchFileIssue>();
             OutdatedGrid.ItemsSource = _check.OutdatedDetails ?? Array.Empty<VpbPatchFileIssue>();
+            PatchedGrid.ItemsSource = _check.PatchedDetails ?? Array.Empty<VpbPatchFileIssue>();
 
             var patchStatus = "Not installed";
             if (_check.Status == VpbPatchStatus.UpToDate)

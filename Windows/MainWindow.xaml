@@ -306,7 +306,7 @@
                     </MenuItem>
 
                     <!--  Display Settings Section  -->
-                    <Separator />
+
                     <MenuItem Header="🎨 _Display Settings">
                         <MenuItem Header="🧩 _Panels">
                             <MenuItem
@@ -363,7 +363,7 @@
                     </MenuItem>
 
                     <!--  Cache & Storage Section  -->
-                    <Separator />
+
                     <MenuItem Header="💾 _Cache &amp; Storage">
                         <MenuItem Click="OpenCacheFolder_Click" Header="📂 Open Cache _Folder..." />
                         <MenuItem Click="ClearAllMetadataCache_Click" Header="🗑️ Clear All _Metadata Cache" />
@@ -371,6 +371,17 @@
 
                     <!--  About  -->
                     <Separator />
+                    <MenuItem Header="⚙️ _Update Settings">
+                        <MenuItem Click="ForceCheckUpdates_Click" Header="🔄 _Check for Updates Now" />
+                        <Separator />
+                        <MenuItem
+                            x:Name="CheckForAppUpdatesMenuItem"
+                            Click="ToggleCheckForUpdates_Click"
+                            Header=" Check for _Updates on Startup"
+                            IsCheckable="True" />
+                    </MenuItem>
+
+
                     <MenuItem Click="VpbPatchButton_Click" Header="🧩 _Patch VPB">
                         <MenuItem.Icon>
                             <TextBlock FontSize="12" Text="" />
@@ -384,7 +395,7 @@
                         </MenuItem.Icon>
                     </MenuItem>
 
-                    <Separator />
+
                     <MenuItem Click="About_Click" Header="ℹ️ _About VPM" />
 
                     <!--  Exit at Bottom  -->

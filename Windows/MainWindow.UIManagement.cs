@@ -496,6 +496,12 @@ namespace VPM
             }
             // Update menu items to show current state
             UpdateHideArchivedMenuItems(settings.HideArchivedPackages);
+
+            // Update app update menu item
+            if (CheckForAppUpdatesMenuItem != null)
+            {
+                CheckForAppUpdatesMenuItem.IsChecked = settings.CheckForAppUpdates;
+            }
             
             // Set DataContext for filter grid to enable height bindings
             if (FilterGrid != null)

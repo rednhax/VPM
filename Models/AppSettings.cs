@@ -109,6 +109,9 @@ namespace VPM.Models
         
         // Package Downloader Settings
         private bool _enableAutoDownload = false;
+
+        // App Update Settings
+        private bool _checkForAppUpdates = true;
         
         // Hub Browser Settings
         private string _oldVersionHandling = "No Change";
@@ -643,6 +646,12 @@ namespace VPM.Models
         {
             get => _enableAutoDownload;
             set => SetProperty(ref _enableAutoDownload, value);
+        }
+
+        public bool CheckForAppUpdates
+        {
+            get => _checkForAppUpdates;
+            set => SetProperty(ref _checkForAppUpdates, value);
         }
         
         // Hub Browser Settings Properties
