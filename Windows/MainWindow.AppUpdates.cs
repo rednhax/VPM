@@ -58,6 +58,10 @@ namespace VPM
                         {
                             Owner = this
                         };
+
+                        // Bind overview UI to the same settings instance as the main window
+                        // so the checkbox stays in sync with Update Settings menu.
+                        overview.DataContext = _settingsManager?.Settings;
                         
                         overview.SetVpmStatus(vpmResult);
                         

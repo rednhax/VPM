@@ -50,6 +50,20 @@ namespace VPM.Services
             private long _originalFileSize;
             private long _archiveFileSize;
 
+            public long ArchiveFileSize
+            {
+                get => _archiveFileSize;
+                set
+                {
+                    if (_archiveFileSize == value) return;
+                    _archiveFileSize = value;
+                    OnPropertyChanged(nameof(ArchiveFileSize));
+                    OnPropertyChanged(nameof(OriginalFileSize));
+                    OnPropertyChanged(nameof(OriginalFileSizeFormatted));
+                    OnPropertyChanged(nameof(CompressionPercentage));
+                }
+            }
+
             public string OriginalResolution 
             { 
                 get 
@@ -84,8 +98,8 @@ namespace VPM.Services
                     
                     // Fall back to archive size if available but no metadata
                     // This was previously missing and caused optimized packages to show 0.0% saved
-                    if (HasArchiveSource && ArchiveMaxDimension > 0 && _archiveFileSize > 0)
-                        return _archiveFileSize;
+                    if (HasArchiveSource && ArchiveMaxDimension > 0 && ArchiveFileSize > 0)
+                        return ArchiveFileSize;
                     
                     // Fall back to current FileSize as base if no metadata or archive
                     return FileSize;
@@ -620,8 +634,7 @@ namespace VPM.Services
                 OriginalWidth = archiveWidth,
                 OriginalHeight = archiveHeight,
                 HasArchiveSource = hasArchiveSource && archiveMaxDim > 0,
-                ArchiveMaxDimension = archiveMaxDim,
-                _archiveFileSize = 0 // Will be set below
+                ArchiveMaxDimension = archiveMaxDim
             };
 
             // Set OriginalResolution and OriginalFileSize from archive if available
@@ -632,7 +645,7 @@ namespace VPM.Services
                 {
                     if (archiveFileSizes.TryGetValue(texturePath, out long archiveSize))
                     {
-                        textureInfo._archiveFileSize = archiveSize;
+                        textureInfo.ArchiveFileSize = archiveSize;
                     }
                     else
                     {
@@ -644,7 +657,7 @@ namespace VPM.Services
                         
                         if (match.Key != null)
                         {
-                            textureInfo._archiveFileSize = match.Value;
+                            textureInfo.ArchiveFileSize = match.Value;
                         }
                     }
                 }
@@ -763,7 +776,7 @@ namespace VPM.Services
                 OriginalHeight = archiveHeight,
                 HasArchiveSource = hasArchiveSource && archiveMaxDim > 0,
                 ArchiveMaxDimension = archiveMaxDim,
-                _archiveFileSize = 0 // Will be set below
+                ArchiveFileSize = 0
             };
 
             // Set OriginalResolution and OriginalFileSize from archive if available
@@ -774,7 +787,7 @@ namespace VPM.Services
                 {
                     if (archiveFileSizes.TryGetValue(texturePath, out long archiveSize))
                     {
-                        textureInfo._archiveFileSize = archiveSize;
+                        textureInfo.ArchiveFileSize = archiveSize;
                     }
                     else
                     {
@@ -791,7 +804,7 @@ namespace VPM.Services
                         
                         if (match.Key != null)
                         {
-                            textureInfo._archiveFileSize = match.Value;
+                            textureInfo.ArchiveFileSize = match.Value;
                         }
                     }
                 }

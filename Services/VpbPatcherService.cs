@@ -3,6 +3,7 @@ using System.Buffers;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
+using System.IO.Compression;
 using System.Linq;
 using System.Net;
 using System.Net.Http;
@@ -82,6 +83,7 @@ namespace VPM.Services
         private const string RepoOwner = "gicstin";
         private const string RepoName = "VPB";
         private const string PatchRoot = "vam_patch/";
+        private const string BackupFileName = "vpb_backup.zip";
 
         private class PatchManifestItem
         {
@@ -252,8 +254,9 @@ namespace VPM.Services
                 }
             }
 
+            var backupPath = Path.Combine(gameFolder, BackupFileName);
             var status = VpbPatchStatus.UpToDate;
-            if (missing.Count > 0)
+            if (!File.Exists(backupPath) || missing.Count > 0)
                 status = VpbPatchStatus.NeedsInstall;
             else if (outdated.Count > 0)
                 status = VpbPatchStatus.NeedsUpdate;
@@ -297,6 +300,12 @@ namespace VPM.Services
 
             var manifest = await GetManifestAsync(gitRef, cancellationToken).ConfigureAwait(false);
             var usedGitRef = manifest.Count > 0 ? manifest[0].GitRef : gitRef;
+
+            var backupPath = Path.Combine(gameFolder, BackupFileName);
+            if (!File.Exists(backupPath))
+            {
+                await CreateBackupAsync(gameFolder, manifest, backupPath, progress, cancellationToken).ConfigureAwait(false);
+            }
 
             var updated = 0;
             var skipped = 0;
@@ -455,15 +464,76 @@ namespace VPM.Services
             var manifest = await GetManifestAsync(gitRef, cancellationToken).ConfigureAwait(false);
             var usedGitRef = manifest.Count > 0 ? manifest[0].GitRef : gitRef;
 
+            var restoredFiles = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var removed = 0;
             var skipped = 0;
 
+            // 1. Restore from backup if it exists
+            var backupPath = Path.Combine(gameFolder, BackupFileName);
+            if (File.Exists(backupPath))
+            {
+                try
+                {
+                    await Task.Run(() =>
+                    {
+                        using var archive = ZipFile.OpenRead(backupPath);
+                        var totalEntries = archive.Entries.Count;
+                        for (int i = 0; i < totalEntries; i++)
+                        {
+                            cancellationToken.ThrowIfCancellationRequested();
+                            var entry = archive.Entries[i];
+                            if (string.IsNullOrEmpty(entry.Name)) continue; // Skip directories
+
+                            var relPath = NormalizeRelativePath(entry.FullName);
+                            progress?.Report(new VpbPatcherProgress
+                            {
+                                Index = i + 1,
+                                Total = totalEntries,
+                                RelativePath = relPath,
+                                Message = "Restoring"
+                            });
+
+                            var destPath = Path.Combine(gameFolder, entry.FullName.Replace('/', Path.DirectorySeparatorChar));
+                            try
+                            {
+                                var dir = Path.GetDirectoryName(destPath);
+                                if (!string.IsNullOrEmpty(dir)) Directory.CreateDirectory(dir);
+                                entry.ExtractToFile(destPath, overwrite: true);
+                                restoredFiles.Add(relPath);
+                            }
+                            catch
+                            {
+                                // Skip locked or inaccessible files during restore
+                            }
+                        }
+                    }, cancellationToken).ConfigureAwait(false);
+                }
+                catch
+                {
+                    // Backup open failed or critical error
+                }
+            }
+
+            // 2. Remove files from manifest that were NOT in the backup (i.e., new files added by the patch)
             for (var i = 0; i < manifest.Count; i++)
             {
                 cancellationToken.ThrowIfCancellationRequested();
 
                 var entry = manifest[i];
+                if (entry.IsDirectory) continue;
+
+                var relPath = NormalizeRelativePath(entry.RelativePath);
+                if (restoredFiles.Contains(relPath))
+                {
+                    // Already restored to original state (or tried to)
+                    continue;
+                }
+
                 var destPath = GetDestinationPath(gameFolder, entry.RelativePath);
+                if (!File.Exists(destPath))
+                {
+                    continue;
+                }
 
                 progress?.Report(new VpbPatcherProgress
                 {
@@ -473,47 +543,14 @@ namespace VPM.Services
                     Message = "Removing"
                 });
 
-                if (entry.IsDirectory)
-                {
-                    continue;
-                }
-
-                if (!File.Exists(destPath))
-                {
-                    skipped++;
-                    progress?.Report(new VpbPatcherProgress
-                    {
-                        Index = i + 1,
-                        Total = manifest.Count,
-                        RelativePath = entry.RelativePath,
-                        Message = "Not found"
-                    });
-                    continue;
-                }
-
                 try
                 {
                     File.Delete(destPath);
                     removed++;
-
-                    progress?.Report(new VpbPatcherProgress
-                    {
-                        Index = i + 1,
-                        Total = manifest.Count,
-                        RelativePath = entry.RelativePath,
-                        Message = "Removed"
-                    });
                 }
                 catch
                 {
                     skipped++;
-                    progress?.Report(new VpbPatcherProgress
-                    {
-                        Index = i + 1,
-                        Total = manifest.Count,
-                        RelativePath = entry.RelativePath,
-                        Message = "Failed"
-                    });
                 }
             }
 
@@ -566,6 +603,52 @@ namespace VPM.Services
         private string GetRawUrl(string gitRef, string relativePath)
         {
             return $"https://raw.githubusercontent.com/{RepoOwner}/{RepoName}/{gitRef}/{PatchRoot}{NormalizeRelativePath(relativePath)}";
+        }
+
+        private async Task CreateBackupAsync(string gameFolder, List<ManifestEntry> manifest, string backupPath, IProgress<VpbPatcherProgress> progress, CancellationToken cancellationToken)
+        {
+            progress?.Report(new VpbPatcherProgress
+            {
+                Index = 0,
+                Total = manifest.Count,
+                Message = "Creating backup..."
+            });
+
+            try
+            {
+                await Task.Run(() =>
+                {
+                    using var fs = new FileStream(backupPath, FileMode.Create, FileAccess.Write, FileShare.None);
+                    using var archive = new ZipArchive(fs, ZipArchiveMode.Create);
+                    
+                    foreach (var entry in manifest)
+                    {
+                        cancellationToken.ThrowIfCancellationRequested();
+                        if (entry.IsDirectory) continue;
+
+                        var destPath = GetDestinationPath(gameFolder, entry.RelativePath);
+                        if (File.Exists(destPath))
+                        {
+                            try
+                            {
+                                var zipEntryPath = entry.RelativePath.Replace('\\', '/');
+                                archive.CreateEntryFromFile(destPath, zipEntryPath);
+                            }
+                            catch
+                            {
+                                // Skip files that cannot be read (e.g. locked)
+                                // If we can't read them for backup, we likely can't overwrite them anyway
+                            }
+                        }
+                    }
+                }, cancellationToken).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                // If backup fails, we should probably delete the partial zip
+                try { if (File.Exists(backupPath)) File.Delete(backupPath); } catch { }
+                throw new IOException($"Failed to create backup: {ex.Message}", ex);
+            }
         }
 
         private async Task DownloadFileAsync(string url, string destinationPath, CancellationToken cancellationToken)

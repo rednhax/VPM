@@ -4,7 +4,7 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     Title="Updates Overview"
     Width="500"
-    Height="350"
+    Height="400"
     Background="{DynamicResource {x:Static SystemColors.WindowBrushKey}}"
     Foreground="{DynamicResource {x:Static SystemColors.WindowTextBrushKey}}"
     ResizeMode="NoResize"
@@ -18,15 +18,17 @@
 
     <Grid Margin="15">
         <Grid.RowDefinitions>
-            <RowDefinition Height="Auto" /> 
+            <RowDefinition Height="Auto" />
             <!--  Header  -->
-            <RowDefinition Height="Auto" /> 
+            <RowDefinition Height="Auto" />
             <!--  VPM Status  -->
-            <RowDefinition Height="Auto" /> 
+            <RowDefinition Height="Auto" />
             <!--  VPB Status  -->
-            <RowDefinition Height="*" />    
+            <RowDefinition Height="*" />
             <!--  Spacer  -->
-            <RowDefinition Height="Auto" /> 
+            <RowDefinition Height="Auto" />
+            <!--  Update Settings  -->
+            <RowDefinition Height="Auto" />
             <!--  Footer  -->
         </Grid.RowDefinitions>
 
@@ -119,8 +121,16 @@
             </Grid>
         </Border>
 
-        <Button
+        <CheckBox
+            x:Name="CheckForUpdatesOnStartupCheckBox"
             Grid.Row="4"
+            Margin="0,0,0,8"
+            HorizontalAlignment="Center"
+            Content="Check for updates on startup"
+            IsChecked="{Binding CheckForAppUpdates, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+
+        <Button
+            Grid.Row="5"
             Width="100"
             Height="32"
             HorizontalAlignment="Center"

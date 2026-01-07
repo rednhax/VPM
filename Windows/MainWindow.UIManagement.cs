@@ -20,6 +20,7 @@ namespace VPM
     /// </summary>
     public partial class MainWindow
     {
+        private bool _settingsPropertyChangedHooked;
         private string _selectedFolder = "";
         private string _currentTheme = "System";
         
@@ -109,6 +110,28 @@ namespace VPM
             {
                 _filterManager.PlaylistTagsCache = _playlistTagsCache;
             }
+        }
+
+        private void Settings_PropertyChanged(object sender, System.ComponentModel.PropertyChangedEventArgs e)
+        {
+            if (e?.PropertyName != nameof(AppSettings.CheckForAppUpdates))
+            {
+                return;
+            }
+
+            var settings = _settingsManager?.Settings;
+            if (settings == null)
+            {
+                return;
+            }
+
+            Dispatcher.Invoke(() =>
+            {
+                if (CheckForAppUpdatesMenuItem != null)
+                {
+                    CheckForAppUpdatesMenuItem.IsChecked = settings.CheckForAppUpdates;
+                }
+            });
         }
 
         private int _packageItemCacheVersion = -1;
@@ -501,6 +524,12 @@ namespace VPM
             if (CheckForAppUpdatesMenuItem != null)
             {
                 CheckForAppUpdatesMenuItem.IsChecked = settings.CheckForAppUpdates;
+            }
+
+            if (!_settingsPropertyChangedHooked && settings != null)
+            {
+                settings.PropertyChanged += Settings_PropertyChanged;
+                _settingsPropertyChangedHooked = true;
             }
             
             // Set DataContext for filter grid to enable height bindings

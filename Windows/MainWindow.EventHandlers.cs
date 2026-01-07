@@ -272,6 +272,10 @@ namespace VPM
             
             if (_suppressSelectionEvents) return;
 
+            // If user is currently viewing Hub Overview, show an immediate loading state
+            // while the new selection's Hub page lookup/navigation is running.
+            ShowHubOverviewLoadingForSelectionChangeIfNeeded();
+
             if (PackageDataGrid?.SelectedItems?.Count == 0)
             {
                 Dependencies.Clear();

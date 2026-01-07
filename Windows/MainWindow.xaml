@@ -204,7 +204,7 @@
                 shell:WindowChrome.IsHitTestVisibleInChrome="True"
                 DockPanel.Dock="Right"
                 Orientation="Horizontal">
-                <Button
+                <!--<Button
                     Width="Auto"
                     Height="32"
                     Margin="0,0,12,0"
@@ -213,7 +213,7 @@
                     Content=" ❤️ Support "
                     FontFamily="Segoe UI"
                     Style="{StaticResource TitleBarButtonStyle}"
-                    ToolTip="Support VPM" />
+                    ToolTip="Support VPM" />-->
                 <Button
                     Width="46"
                     Height="32"
@@ -389,11 +389,11 @@
                     </MenuItem>
 
                     <Separator />
-                    <MenuItem Click="SupportButton_Click" Header="❤️ _Support">
+                    <!--<MenuItem Click="SupportButton_Click" Header="❤️ _Support">
                         <MenuItem.Icon>
                             <TextBlock FontSize="12" Text="" />
                         </MenuItem.Icon>
-                    </MenuItem>
+                    </MenuItem>-->
 
 
                     <MenuItem Click="About_Click" Header="ℹ️ _About VPM" />
@@ -5772,32 +5772,53 @@
                             Header="🌐 Hub Overview"
                             Visibility="Collapsed">
                             <Grid>
-                                <!--  Loading Overlay  -->
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="*" />
+                                </Grid.RowDefinitions>
+
+                                <!--  Loading Banner  -->
                                 <Border
-                                    x:Name="HubOverviewLoadingOverlay"
-                                    Panel.ZIndex="10"
-                                    Background="#AA000000"
+                                    x:Name="HubOverviewLoadingBanner"
+                                    Grid.Row="0"
+                                    Panel.ZIndex="20"
+                                    Padding="12,10"
+                                    Background="{DynamicResource {x:Static SystemColors.ControlDarkDarkBrushKey}}"
+                                    BorderBrush="{DynamicResource {x:Static SystemColors.ActiveBorderBrushKey}}"
+                                    BorderThickness="0,0,0,1"
                                     Visibility="Collapsed">
-                                    <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
                                         <TextBlock
-                                            HorizontalAlignment="Center"
-                                            FontSize="14"
+                                            x:Name="HubOverviewLoadingBannerText"
+                                            Grid.Column="0"
+                                            VerticalAlignment="Center"
+                                            FontSize="12"
                                             Foreground="{DynamicResource {x:Static SystemColors.ControlTextBrushKey}}"
-                                            Text="Loading Hub overview..." />
+                                            Text="Loading Hub Overview..." />
                                         <ProgressBar
-                                            Width="200"
+                                            Grid.Column="1"
+                                            Width="120"
                                             Height="4"
-                                            Margin="0,12,0,0"
+                                            Margin="12,0,0,0"
+                                            VerticalAlignment="Center"
                                             IsIndeterminate="True" />
-                                    </StackPanel>
+                                    </Grid>
                                 </Border>
 
                                 <!--  WebView2 Browser  -->
-                                <wv2:WebView2 x:Name="HubOverviewWebView" DefaultBackgroundColor="#1E1E1E" />
+                                <wv2:WebView2
+                                    x:Name="HubOverviewWebView"
+                                    Grid.Row="1"
+                                    DefaultBackgroundColor="#1E1E1E" />
 
                                 <!--  Placeholder when no resource found  -->
                                 <Border
                                     x:Name="HubOverviewPlaceholder"
+                                    Grid.Row="1"
                                     Background="{DynamicResource {x:Static SystemColors.WindowBrushKey}}"
                                     Visibility="Visible">
                                     <StackPanel
@@ -5824,6 +5845,7 @@
                                 <!--  Error Panel  -->
                                 <Border
                                     x:Name="HubOverviewErrorPanel"
+                                    Grid.Row="1"
                                     Background="{DynamicResource {x:Static SystemColors.WindowBrushKey}}"
                                     Visibility="Collapsed">
                                     <StackPanel
@@ -5845,8 +5867,14 @@
                                             TextAlignment="Center"
                                             TextWrapping="Wrap" />
                                         <Button
-                                            x:Name="HubOverviewOpenInBrowserButton"
+                                            x:Name="HubOverviewRetryButton"
                                             Margin="0,16,0,0"
+                                            Padding="16,8"
+                                            Click="HubOverviewRetry_Click"
+                                            Content="🔄 Retry" />
+                                        <Button
+                                            x:Name="HubOverviewOpenInBrowserButton"
+                                            Margin="0,10,0,0"
                                             Padding="16,8"
                                             Click="HubOverviewOpenInBrowser_Click"
                                             Content="🔗 Open in Browser" />

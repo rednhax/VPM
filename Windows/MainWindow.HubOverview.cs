@@ -21,9 +21,9 @@ namespace VPM
         private bool _hubOverviewWebViewInitialized = false;
         private string _currentHubResourceId = null;
         private string _currentHubPackageName = null;
+        private string _currentHubSelectionKey = null;
         private string _currentHubOverviewUrl = null;
         private CancellationTokenSource _hubOverviewCts;
-        private bool _isClearing = false; // Track when we're intentionally clearing the WebView
         // Note: _hubService is defined in MainWindow.PackageUpdates.cs and shared across partial classes
         
         #endregion
@@ -85,29 +85,33 @@ namespace VPM
         
         private void HubOverviewWebView_NavigationStarting(object sender, CoreWebView2NavigationStartingEventArgs e)
         {
-            HubOverviewLoadingOverlay.Visibility = Visibility.Visible;
+            if (HubOverviewLoadingBanner != null)
+            {
+                HubOverviewLoadingBanner.Visibility = Visibility.Visible;
+            }
             HubOverviewErrorPanel.Visibility = Visibility.Collapsed;
+            HubOverviewPlaceholder.Visibility = Visibility.Collapsed;
+            HubOverviewWebView.Visibility = Visibility.Collapsed;
         }
 
         private void HubOverviewWebView_DOMContentLoaded(object sender, CoreWebView2DOMContentLoadedEventArgs e)
         {
-            // Hide loading overlay as soon as DOM is ready (text is visible)
+            // Hide loading banner as soon as DOM is ready (text is visible)
             // No need to wait for all images to load
-            HubOverviewLoadingOverlay.Visibility = Visibility.Collapsed;
+            if (HubOverviewLoadingBanner != null)
+            {
+                HubOverviewLoadingBanner.Visibility = Visibility.Collapsed;
+            }
         }
         
         private void HubOverviewWebView_NavigationCompleted(object sender, CoreWebView2NavigationCompletedEventArgs e)
         {
 
             
-            // Always hide loading overlay (fallback)
-            HubOverviewLoadingOverlay.Visibility = Visibility.Collapsed;
-            
-            // Ignore navigation events when we're intentionally clearing the WebView
-            if (_isClearing)
+            // Always hide loading banner (fallback)
+            if (HubOverviewLoadingBanner != null)
             {
-                _isClearing = false;
-                return;
+                HubOverviewLoadingBanner.Visibility = Visibility.Collapsed;
             }
             
             if (!e.IsSuccess)
@@ -118,6 +122,7 @@ namespace VPM
             {
                 HubOverviewErrorPanel.Visibility = Visibility.Collapsed;
                 HubOverviewPlaceholder.Visibility = Visibility.Collapsed;
+                HubOverviewWebView.Visibility = Visibility.Visible;
             }
         }
         
@@ -240,7 +245,7 @@ namespace VPM
         /// <summary>
         /// Load Hub overview for the currently selected package
         /// </summary>
-        private async Task LoadHubOverviewForSelectedPackageAsync()
+        private async Task LoadHubOverviewForSelectedPackageAsync(bool forceReload = false)
         {
             // Cancel any pending operation
             _hubOverviewCts?.Cancel();
@@ -261,12 +266,14 @@ namespace VPM
                 ShowHubOverviewPlaceholder("Select a single package to view Hub overview");
                 return;
             }
+
+            var selectionKey = selectedPackage.Name;
             
             // Extract package group name (without version and .var extension)
             var packageGroupName = GetPackageGroupName(selectedPackage.Name);
             
-            // Skip if same package is already loaded AND we have a valid resource
-            if (_currentHubPackageName == packageGroupName && _currentHubResourceId != null)
+            // Skip only if the exact same selection is already loaded AND we have a valid resource
+            if (!forceReload && _currentHubSelectionKey == selectionKey && _currentHubResourceId != null)
             {
 
                 return;
@@ -276,10 +283,11 @@ namespace VPM
             
             // Clear previous state when switching packages
             _currentHubPackageName = packageGroupName;
+            _currentHubSelectionKey = selectionKey;
             _currentHubResourceId = null;
             
             // Show loading state
-            ShowHubOverviewLoading();
+            ShowHubOverviewLoading($"Loading Hub Overview for:\n{packageGroupName}");
             
             try
             {
@@ -317,7 +325,7 @@ namespace VPM
             {
                 if (!token.IsCancellationRequested)
                 {
-                    ShowHubOverviewError($"Failed to load Hub info:\n{ex.Message}");
+                    ShowHubOverviewError($"Can't load Hub page. Check your connection and try Retry.\n\nDetails: {ex.Message}");
                 }
             }
         }
@@ -475,7 +483,6 @@ namespace VPM
             // Initialize WebView2 if needed
             if (!_hubOverviewWebViewInitialized)
             {
-                HubOverviewLoadingOverlay.Visibility = Visibility.Visible;
                 await InitializeHubOverviewWebViewAsync();
                 
                 if (!_hubOverviewWebViewInitialized)
@@ -485,21 +492,52 @@ namespace VPM
                 }
             }
             
-            // Build the URL
-            var url = $"https://hub.virtamate.com/resources/{resourceId}/overview-panel";
-            _currentHubOverviewUrl = url;
+            // Build the URL (store base URL; append a cache-busting query for navigation reliability)
+            var baseUrl = $"https://hub.virtamate.com/resources/{resourceId}/overview-panel";
+            var isSameUrl = string.Equals(_currentHubOverviewUrl, baseUrl, StringComparison.OrdinalIgnoreCase);
+            _currentHubOverviewUrl = baseUrl;
+            var navigateUrl = $"{baseUrl}?vpm_ts={DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()}";
             
             try
             {
                 // Hide placeholder, show loading
                 HubOverviewPlaceholder.Visibility = Visibility.Collapsed;
-                HubOverviewLoadingOverlay.Visibility = Visibility.Visible;
+                if (HubOverviewLoadingBannerText != null)
+                {
+                    HubOverviewLoadingBannerText.Text = $"Loading Hub Overview for:\n{_currentHubPackageName}";
+                }
+                if (HubOverviewLoadingBanner != null)
+                {
+                    HubOverviewLoadingBanner.Visibility = Visibility.Visible;
+                }
                 HubOverviewErrorPanel.Visibility = Visibility.Collapsed;
-                HubOverviewWebView.CoreWebView2.Navigate(url);
+                HubOverviewWebView.Visibility = Visibility.Collapsed;
+
+                // Cancel any in-flight navigation before starting a new one.
+                // This reduces intermittent blank states when switching between different Hub pages.
+                try
+                {
+                    HubOverviewWebView.CoreWebView2.Stop();
+                }
+                catch (Exception)
+                {
+                    // Ignore Stop() failures
+                }
+
+                // WebView2 can sometimes end up blank when navigating to the same URL repeatedly.
+                // If we're already on the same URL, force a reload to avoid a no-op/cached blank.
+                if (isSameUrl)
+                {
+                    HubOverviewWebView.CoreWebView2.Reload();
+                }
+                else
+                {
+                    HubOverviewWebView.CoreWebView2.Navigate(navigateUrl);
+                }
             }
             catch (Exception ex)
             {
-                ShowHubOverviewError($"Navigation failed: {ex.Message}");
+                ShowHubOverviewError($"Can't load Hub page. Check your connection and try Retry.\n\nDetails: {ex.Message}");
             }
         }
         
@@ -509,57 +547,77 @@ namespace VPM
         
         private void ShowHubOverviewPlaceholder(string message)
         {
-            HubOverviewLoadingOverlay.Visibility = Visibility.Collapsed;
+            if (HubOverviewLoadingBanner != null)
+            {
+                HubOverviewLoadingBanner.Visibility = Visibility.Collapsed;
+            }
             HubOverviewErrorPanel.Visibility = Visibility.Collapsed;
             HubOverviewPlaceholderText.Text = message;
             HubOverviewPlaceholder.Visibility = Visibility.Visible;
-            
-            // Clear the WebView content so old page doesn't show behind placeholder
-            ClearHubOverviewWebView();
+            HubOverviewWebView.Visibility = Visibility.Collapsed;
         }
         
         private void ShowHubOverviewError(string message)
         {
-            HubOverviewLoadingOverlay.Visibility = Visibility.Collapsed;
+            if (HubOverviewLoadingBanner != null)
+            {
+                HubOverviewLoadingBanner.Visibility = Visibility.Collapsed;
+            }
             HubOverviewPlaceholder.Visibility = Visibility.Collapsed;
             HubOverviewErrorText.Text = message;
             HubOverviewErrorPanel.Visibility = Visibility.Visible;
-            
-            // Clear the WebView content so old page doesn't show behind error
-            ClearHubOverviewWebView();
+            HubOverviewWebView.Visibility = Visibility.Collapsed;
         }
         
-        private void ShowHubOverviewLoading()
+        private void ShowHubOverviewLoading(string message)
         {
-            HubOverviewLoadingOverlay.Visibility = Visibility.Visible;
+            if (HubOverviewLoadingBannerText != null)
+            {
+                HubOverviewLoadingBannerText.Text = message;
+            }
+            if (HubOverviewLoadingBanner != null)
+            {
+                HubOverviewLoadingBanner.Visibility = Visibility.Visible;
+            }
+
             HubOverviewPlaceholder.Visibility = Visibility.Collapsed;
             HubOverviewErrorPanel.Visibility = Visibility.Collapsed;
+            HubOverviewWebView.Visibility = Visibility.Collapsed;
         }
-        
-        /// <summary>
-        /// Clear the WebView content by navigating to a blank page
-        /// </summary>
-        private void ClearHubOverviewWebView()
+
+        private void ShowHubOverviewLoadingForSelectionChangeIfNeeded()
         {
-            try
+            if (ImageAreaTabControl?.SelectedItem != HubOverviewTab)
             {
-                if (_hubOverviewWebViewInitialized && HubOverviewWebView?.CoreWebView2 != null)
+                return;
+            }
+
+            if (HubOverviewTab?.Visibility != Visibility.Visible)
+            {
+                return;
+            }
+
+            var selectedPackage = PackageDataGrid?.SelectedItem as PackageItem;
+            if (selectedPackage != null)
+            {
+                var packageGroupName = GetPackageGroupName(selectedPackage.Name);
+                if (!string.IsNullOrEmpty(packageGroupName))
                 {
-                    // Mark that we're clearing so we can ignore the navigation completion event
-                    _isClearing = true;
-                    // Use a data URL instead of NavigateToString to avoid connection issues
-                    HubOverviewWebView.CoreWebView2.Navigate("data:text/html,<html><body style='background-color:#1E1E1E;'></body></html>");
+                    ShowHubOverviewLoading($"Loading Hub Overview for:\n{packageGroupName}");
+                    return;
                 }
             }
-            catch (Exception)
-            {
-                _isClearing = false;
-                // Ignore errors when clearing WebView
-            }
-            
-            _currentHubOverviewUrl = null;
-            // Note: Don't clear _currentHubResourceId here - it's managed by LoadHubOverviewForSelectedPackageAsync
+
+            // Fallback: still keep it package-oriented (selection should almost always yield a group name)
+            ShowHubOverviewLoading("Loading Hub Overview for:\n(Unknown package)");
         }
+
+        private async void HubOverviewRetry_Click(object sender, RoutedEventArgs e)
+        {
+            await LoadHubOverviewForSelectedPackageAsync(forceReload: true);
+        }
+        
+        
         
         private void HubOverviewOpenInBrowser_Click(object sender, RoutedEventArgs e)
         {
